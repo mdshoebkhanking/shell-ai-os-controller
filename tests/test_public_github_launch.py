@@ -26,6 +26,9 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/showcase/settings-panel.png",
         "screenshots/showcase/tools-catalog.png",
         "screenshots/showcase/windows-chat-acceptance.png",
+        "gifs/shell-realtime-demo.svg",
+        "gifs/shell-install-flow.svg",
+        "videos/shell-launch-trailer.svg",
     ]
 
     for path in required:
@@ -38,7 +41,12 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     assert "assets/brand/shell-official-logo.png" in readme
     assert "screenshots/showcase/chat-interface.png" in readme
     assert "screenshots/showcase/voice-interface.png" in readme
+    assert "gifs/shell-realtime-demo.svg" in readme
+    assert "gifs/shell-install-flow.svg" in readme
+    assert "videos/shell-launch-trailer.svg" in readme
     assert "Replace these placeholders" not in readme
+    assert "Add setup GIF here" not in readme
+    assert "Add video demo here" not in readme
 
 
 def test_public_github_launch_audit_has_no_high_findings():

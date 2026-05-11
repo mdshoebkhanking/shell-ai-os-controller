@@ -1,8 +1,16 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# GIFs
+# Demo GIF-Style Media
 
-Add short public demo GIFs here.
+This folder contains lightweight launch demo media for GitHub. The current
+assets are animated SVGs instead of heavy binary GIFs, so they stay fast,
+diffable, and safe for the repository.
+
+## Current Assets
+
+- `shell-realtime-demo.svg`: realtime chat, tool routing, and voice-on-demand preview.
+- `shell-install-flow.svg`: beginner one-click install flow.
+- `add-setup-demo.svg`: compact setup storyboard backup.
 
 Recommended:
 

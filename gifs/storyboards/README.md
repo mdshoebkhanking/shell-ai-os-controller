@@ -19,3 +19,8 @@ Create short public GIFs from real app usage after final launch testing.
 - No private file paths.
 - Smooth cursor movement.
 - Subtle captions only when needed.
+
+## Included Launch Visuals
+
+- `../shell-realtime-demo.svg`
+- `../shell-install-flow.svg`

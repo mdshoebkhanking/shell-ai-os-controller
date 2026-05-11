@@ -2,6 +2,8 @@
 
 # Launch Video Storyboards
 
+Primary storyboard visual: `../shell-launch-trailer.svg`
+
 ## 60-Second Launch Teaser
 
 1. Official Shell logo on black.

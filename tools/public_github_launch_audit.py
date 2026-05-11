@@ -35,6 +35,12 @@ REQUIRED_SHOWCASE = [
     "screenshots/showcase/windows-chat-acceptance.png",
 ]
 
+REQUIRED_DEMO_MEDIA = [
+    "gifs/shell-realtime-demo.svg",
+    "gifs/shell-install-flow.svg",
+    "videos/shell-launch-trailer.svg",
+]
+
 REQUIRED_PUBLIC_FILES = [
     "README.md",
     "LICENSE",
@@ -96,6 +102,17 @@ def check_showcase(findings: list[Finding]) -> None:
         findings.append(Finding("medium", "screenshots", "README still contains placeholder screenshot language.", "Replace placeholder language with real launch media.", "README.md"))
 
 
+def check_demo_media(findings: list[Finding]) -> None:
+    readme = read_text("README.md")
+    for path in REQUIRED_DEMO_MEDIA:
+        if not exists(path):
+            findings.append(Finding("high", "demo_media", f"Missing demo media asset: {path}", "Add lightweight public demo media before launch.", path))
+        if path not in readme:
+            findings.append(Finding("medium", "demo_media", f"README does not reference demo media asset: {path}", "Show demo media directly in README.", "README.md"))
+    if "Add setup GIF here" in readme or "Add video demo here" in readme:
+        findings.append(Finding("medium", "demo_media", "README still contains demo media placeholder labels.", "Replace placeholder demo labels with real launch media.", "README.md"))
+
+
 def check_public_files(findings: list[Finding]) -> None:
     for path in REQUIRED_PUBLIC_FILES:
         if not exists(path):
@@ -139,6 +156,7 @@ def build_report() -> dict[str, object]:
     findings: list[Finding] = []
     check_brand(findings)
     check_showcase(findings)
+    check_demo_media(findings)
     check_public_files(findings)
     check_gitignore(findings)
     check_git(findings)
@@ -147,7 +165,7 @@ def build_report() -> dict[str, object]:
         "status": "pass" if not high else "attention",
         "summary": {
             "github_readiness_score": score(findings, {"github", "open_source"}, base=92),
-            "visual_presentation_score": score(findings, {"branding", "screenshots"}, base=96),
+            "visual_presentation_score": score(findings, {"branding", "screenshots", "demo_media"}, base=97),
             "screenshot_quality_score": score(findings, "screenshots", base=94),
             "readme_quality_score": 94 if "assets/brand/shell-official-logo.png" in read_text("README.md") else 80,
             "beginner_onboarding_score": 88,
@@ -156,8 +174,8 @@ def build_report() -> dict[str, object]:
             "ecosystem_maturity_score": 90,
             "public_launch_readiness_score": 86,
             "open_source_professionalism_score": score(findings, "open_source", base=100),
-            "cinematic_presentation_score": score(findings, {"branding", "screenshots"}, base=92),
-            "first_impression_score": score(findings, {"branding", "screenshots", "open_source"}, base=94),
+            "cinematic_presentation_score": score(findings, {"branding", "screenshots", "demo_media"}, base=94),
+            "first_impression_score": score(findings, {"branding", "screenshots", "demo_media", "open_source"}, base=95),
         },
         "finding_count": len(findings),
         "findings": [asdict(item) for item in findings],

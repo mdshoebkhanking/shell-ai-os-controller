@@ -10,7 +10,7 @@ GitHub publicly.
 - Official logo is used from `assets/brand/shell-official-logo.png`.
 - README hero shows the official logo and banner.
 - Showcase screenshots are real UI captures from `screenshots/showcase/`.
-- Demo GIF/video placeholders have storyboards.
+- Demo GIF/video sections include lightweight animated SVG launch media plus storyboards.
 - Branding stays metallic, dark, minimal, premium, and realistic.
 
 ## Security Gate

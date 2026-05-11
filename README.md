@@ -110,10 +110,11 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 ## Demo Media
 
-| Media | Placeholder |
+| Media | Preview |
 | --- | --- |
-| Setup GIF | <img src="gifs/add-setup-demo.svg" alt="Add setup GIF here" width="420"> |
-| Voice Demo | <img src="videos/add-video-demo.svg" alt="Add video demo here" width="420"> |
+| Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
+| One-Click Install Flow | <img src="gifs/shell-install-flow.svg" alt="Animated Shell one-click installation flow" width="420"> |
+| Launch Trailer Storyboard | <img src="videos/shell-launch-trailer.svg" alt="Shell public launch trailer storyboard" width="420"> |
 
 Recommended launch media:
 
@@ -124,6 +125,9 @@ Recommended launch media:
 
 Storyboards:
 
+- [Realtime demo visual](gifs/shell-realtime-demo.svg)
+- [One-click install visual](gifs/shell-install-flow.svg)
+- [Launch trailer visual](videos/shell-launch-trailer.svg)
 - [GIF demo storyboards](gifs/storyboards/README.md)
 - [Launch video storyboards](videos/storyboards/README.md)
 
@@ -159,8 +163,8 @@ User
 ├── docs/                            # Architecture and rollout documents
 ├── assets/brand/                    # Official Shell logo and brand rules
 ├── screenshots/                     # Public screenshots and showcase captures
-├── gifs/                            # GIF placeholders and storyboards
-├── videos/                          # Video placeholders and storyboards
+├── gifs/                            # Lightweight demo visuals and storyboards
+├── videos/                          # Launch video storyboards and preview media
 ├── banners/                         # Public banner and social assets
 ├── .github/                         # Issue and pull request templates
 ├── LICENSE                          # Apache-2.0 license
