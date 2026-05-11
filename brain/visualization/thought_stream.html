@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shell AI - Thought Stream Visualizer</title>
+    <style>
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background: #0b0e13;
+            color: #f5f6fe;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow-x: hidden;
+        }
+
+        /* Background */
+        .bg-orb {
+            position: fixed;
+            border-radius: 50%;
+            filter: blur(100px);
+            opacity: 0.12;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .bg-orb-1 {
+            width: 400px; height: 400px;
+            background: radial-gradient(circle, #8ff5ff, transparent 70%);
+            top: -100px; left: -100px;
+            animation: orbMove 18s ease-in-out infinite;
+        }
+
+        .bg-orb-2 {
+            width: 350px; height: 350px;
+            background: radial-gradient(circle, #ac89ff, transparent 70%);
+            bottom: -80px; right: -80px;
+            animation: orbMove 22s ease-in-out infinite reverse;
+        }
+
+        @keyframes orbMove {
+            0%, 100% { transform: translate(0, 0); }
+            50% { transform: translate(60px, 40px); }
+        }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 28px;
+            background: rgba(11, 14, 19, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(143, 245, 255, 0.06);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-logo {
+            width: 28px;
+            height: 28px;
+            filter: drop-shadow(0 0 6px rgba(143, 245, 255, 0.4));
+        }
+
+        .header-title {
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            background: linear-gradient(135deg, #8ff5ff, #ac89ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-transform: uppercase;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Status Indicator */
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border: 1px solid;
+        }
+
+        .status-badge.active {
+            background: rgba(143, 245, 255, 0.08);
+            border-color: rgba(143, 245, 255, 0.2);
+            color: #8ff5ff;
+        }
+
+        .status-badge.idle {
+            background: rgba(169, 171, 178, 0.08);
+            border-color: rgba(169, 171, 178, 0.15);
+            color: #a9abb2;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+        }
+
+        .status-badge.active .status-dot {
+            background: #8ff5ff;
+            box-shadow: 0 0 8px rgba(143, 245, 255, 0.6);
+            animation: dotBlink 1.5s ease-in-out infinite;
+        }
+
+        .status-badge.idle .status-dot {
+            background: #a9abb2;
+        }
+
+        @keyframes dotBlink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: 1px solid rgba(143, 245, 255, 0.15);
+            background: rgba(143, 245, 255, 0.05);
+            color: #a9abb2;
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+
+        .btn:hover {
+            background: rgba(143, 245, 255, 0.1);
+            border-color: rgba(143, 245, 255, 0.3);
+            color: #8ff5ff;
+        }
+
+        .btn-danger {
+            border-color: rgba(255, 89, 227, 0.15);
+            background: rgba(255, 89, 227, 0.05);
+        }
+
+        .btn-danger:hover {
+            background: rgba(255, 89, 227, 0.1);
+            border-color: rgba(255, 89, 227, 0.3);
+            color: #ff59e3;
+        }
+
+        /* Stream Container */
+        .stream-container {
+            position: relative;
+            z-index: 10;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 24px 20px 80px;
+        }
+
+        /* Connection Line */
+        .connection-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(
+                180deg,
+                transparent 0%,
+                rgba(143, 245, 255, 0.08) 5%,
+                rgba(143, 245, 255, 0.08) 95%,
+                transparent 100%
+            );
+            transform: translateX(-50%);
+            z-index: 0;
+        }
+
+        /* Thought Node */
+        .thought-node {
+            position: relative;
+            z-index: 1;
+            margin-bottom: 16px;
+            animation: nodeSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            opacity: 0;
+        }
+
+        @keyframes nodeSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px) scale(0.97);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .node-card {
+            background: rgba(15, 20, 35, 0.5);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(143, 245, 255, 0.06);
+            border-radius: 14px;
+            padding: 18px 22px;
+            transition: all 0.3s ease;
+        }
+
+        .node-card:hover {
+            border-color: rgba(143, 245, 255, 0.15);
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Node connector dot */
+        .node-connector {
+            position: absolute;
+            left: 50%;
+            top: -8px;
+            transform: translateX(-50%);
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            z-index: 2;
+        }
+
+        .type-REASONING .node-connector { background: #8ff5ff; box-shadow: 0 0 8px rgba(143,245,255,0.4); }
+        .type-TOOL_CALL .node-connector { background: #ac89ff; box-shadow: 0 0 8px rgba(172,137,255,0.4); }
+        .type-MEMORY .node-connector { background: #ff59e3; box-shadow: 0 0 8px rgba(255,89,227,0.4); }
+        .type-DECISION .node-connector { background: #00F0FF; box-shadow: 0 0 8px rgba(0,240,255,0.4); }
+
+        /* Type-specific border accents */
+        .type-REASONING .node-card { border-left: 2px solid rgba(143, 245, 255, 0.3); }
+        .type-TOOL_CALL .node-card { border-left: 2px solid rgba(172, 137, 255, 0.3); }
+        .type-MEMORY .node-card { border-left: 2px solid rgba(255, 89, 227, 0.3); }
+        .type-DECISION .node-card { border-left: 2px solid rgba(0, 240, 255, 0.3); }
+
+        /* Node Header */
+        .node-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .node-type {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 3px 10px;
+            border-radius: 6px;
+        }
+
+        .type-REASONING .node-type { background: rgba(143,245,255,0.1); color: #8ff5ff; }
+        .type-TOOL_CALL .node-type { background: rgba(172,137,255,0.1); color: #ac89ff; }
+        .type-MEMORY .node-type { background: rgba(255,89,227,0.1); color: #ff59e3; }
+        .type-DECISION .node-type { background: rgba(0,240,255,0.1); color: #00F0FF; }
+
+        .node-timestamp {
+            font-size: 11px;
+            color: rgba(169, 171, 178, 0.6);
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Node Content */
+        .node-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: rgba(245, 246, 254, 0.85);
+        }
+
+        /* Node counter */
+        .node-count {
+            font-size: 11px;
+            color: #a9abb2;
+            text-align: center;
+            padding: 12px;
+            letter-spacing: 1px;
+        }
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 80px 20px;
+            color: #a9abb2;
+        }
+
+        .empty-state-icon {
+            width: 48px;
+            height: 48px;
+            margin: 0 auto 16px;
+            border-radius: 50%;
+            background: rgba(143, 245, 255, 0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+        }
+
+        .empty-state-text {
+            font-size: 14px;
+            letter-spacing: 1px;
+        }
+
+        /* Removing animation */
+        .thought-node.removing {
+            animation: nodeRemove 0.3s ease forwards;
+        }
+
+        @keyframes nodeRemove {
+            to {
+                opacity: 0;
+                transform: translateY(-10px) scale(0.95);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+            .header {
+                padding: 12px 16px;
+            }
+            .stream-container {
+                padding: 16px 12px 60px;
+            }
+            .node-card {
+                padding: 14px 16px;
+            }
+            .connection-line {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+
+    <header class="header">
+        <div class="header-left">
+            <svg class="header-logo" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="50" cy="50" r="40" stroke="#8ff5ff" stroke-width="2" opacity="0.5"/>
+                <circle cx="50" cy="50" r="28" stroke="#ac89ff" stroke-width="1.5" opacity="0.4"/>
+                <circle cx="50" cy="50" r="8" fill="#8ff5ff" opacity="0.8"/>
+                <circle cx="50" cy="50" r="4" fill="#fff"/>
+            </svg>
+            <span class="header-title">Thought Stream</span>
+        </div>
+        <div class="header-right">
+            <div class="status-badge active" id="statusBadge">
+                <span class="status-dot"></span>
+                <span id="statusText">ACTIVE</span>
+            </div>
+            <button class="btn" id="toggleDemo">Demo Mode</button>
+            <button class="btn btn-danger" id="clearBtn">Clear</button>
+        </div>
+    </header>
+
+    <div class="stream-container" id="streamContainer">
+        <div class="connection-line"></div>
+        <div id="nodeList"></div>
+        <div class="node-count" id="nodeCount"></div>
+    </div>
+
+    <script>
+        const MAX_NODES = 50;
+        let nodes = [];
+        let demoInterval = null;
+        let nodeIdCounter = 0;
+
+        const nodeList = document.getElementById('nodeList');
+        const nodeCount = document.getElementById('nodeCount');
+        const statusBadge = document.getElementById('statusBadge');
+        const statusText = document.getElementById('statusText');
+        const clearBtn = document.getElementById('clearBtn');
+        const toggleDemo = document.getElementById('toggleDemo');
+        const streamContainer = document.getElementById('streamContainer');
+
+        const thoughtTypes = ['REASONING', 'TOOL_CALL', 'MEMORY', 'DECISION'];
+
+        const demoThoughts = [
+            { type: 'REASONING', content: 'Analyzing user query for intent classification. Detected pattern: information retrieval with contextual constraints.' },
+            { type: 'TOOL_CALL', content: 'Invoking web_search(query="latest neural architecture advances", limit=5). Awaiting response from search provider.' },
+            { type: 'MEMORY', content: 'Retrieved relevant context from long-term memory store. Found 3 matching embeddings with cosine similarity > 0.87.' },
+            { type: 'DECISION', content: 'Selected response strategy: synthesize search results with stored knowledge. Confidence: 0.94. Proceeding with generation.' },
+            { type: 'REASONING', content: 'Cross-referencing temporal data points. User preference model suggests concise technical summary format.' },
+            { type: 'TOOL_CALL', content: 'Executing code_interpreter(lang="python", task="data_analysis"). Processing 2.4MB dataset for statistical validation.' },
+            { type: 'MEMORY', content: 'Updating session context buffer. Active tokens: 12,847. Compression ratio: 3.2x. No overflow detected.' },
+            { type: 'DECISION', content: 'Finalizing output structure. Applying formatting template: technical_brief. Including 2 code examples and 1 diagram reference.' },
+            { type: 'REASONING', content: 'Evaluating response coherence score: 0.96. Checking for factual consistency against knowledge base.' },
+            { type: 'TOOL_CALL', content: 'Calling vision_engine.analyze(image_url, mode="detailed"). Extracting structural features and text overlays.' },
+            { type: 'MEMORY', content: 'Persisting conversation summary to episodic memory. Key entities: [user_project, deadline, tech_stack]. Priority: HIGH.' },
+            { type: 'DECISION', content: 'Routing to multi-modal pipeline. Combining text generation with visual output. Estimated completion: 1.2s.' },
+            { type: 'REASONING', content: 'Decomposing complex query into 4 sub-tasks. Parallelization possible for tasks 2 and 3. Optimizing execution graph.' },
+            { type: 'TOOL_CALL', content: 'Spawning agent_subprocess(task="research", depth=2). Delegating background information gathering.' },
+            { type: 'DECISION', content: 'Confidence threshold met (0.91 > 0.85). Committing to response path. No fallback required.' },
+        ];
+
+        function formatTimestamp() {
+            const now = new Date();
+            return now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' }) +
+                '.' + String(now.getMilliseconds()).padStart(3, '0');
+        }
+
+        function addNode(type, content) {
+            const id = ++nodeIdCounter;
+            const timestamp = formatTimestamp();
+
+            const node = { id, type, content, timestamp };
+            nodes.push(node);
+
+            // Remove oldest if exceeded
+            if (nodes.length > MAX_NODES) {
+                const oldest = nodes.shift();
+                const oldEl = document.getElementById('node-' + oldest.id);
+                if (oldEl) {
+                    oldEl.classList.add('removing');
+                    setTimeout(() => oldEl.remove(), 300);
+                }
+            }
+
+            // Create DOM element
+            const el = document.createElement('div');
+            el.className = `thought-node type-${type}`;
+            el.id = 'node-' + id;
+            el.innerHTML = `
+                <div class="node-connector"></div>
+                <div class="node-card">
+                    <div class="node-header">
+                        <span class="node-type">${type.replace('_', ' ')}</span>
+                        <span class="node-timestamp">${timestamp}</span>
+                    </div>
+                    <div class="node-content">${content}</div>
+                </div>
+            `;
+
+            nodeList.appendChild(el);
+            updateCount();
+
+            // Auto-scroll
+            setTimeout(() => {
+                el.scrollIntoView({ behavior: 'smooth', block: 'end' });
+            }, 50);
+        }
+
+        function updateCount() {
+            nodeCount.textContent = nodes.length + ' / ' + MAX_NODES + ' nodes';
+        }
+
+        function clearAll() {
+            nodes = [];
+            nodeList.innerHTML = '';
+            updateCount();
+        }
+
+        function setStatus(status) {
+            statusBadge.className = 'status-badge ' + status;
+            statusText.textContent = status.toUpperCase();
+        }
+
+        // Demo mode
+        let demoIndex = 0;
+        let demoRunning = false;
+
+        function startDemo() {
+            if (demoRunning) return;
+            demoRunning = true;
+            setStatus('active');
+            toggleDemo.textContent = 'Stop Demo';
+            toggleDemo.classList.add('btn-danger');
+
+            function addNext() {
+                if (!demoRunning) return;
+                const thought = demoThoughts[demoIndex % demoThoughts.length];
+                addNode(thought.type, thought.content);
+                demoIndex++;
+                const delay = 800 + Math.random() * 2200;
+                demoInterval = setTimeout(addNext, delay);
+            }
+
+            addNext();
+        }
+
+        function stopDemo() {
+            demoRunning = false;
+            clearTimeout(demoInterval);
+            setStatus('idle');
+            toggleDemo.textContent = 'Demo Mode';
+            toggleDemo.classList.remove('btn-danger');
+        }
+
+        toggleDemo.addEventListener('click', () => {
+            if (demoRunning) {
+                stopDemo();
+            } else {
+                startDemo();
+            }
+        });
+
+        clearBtn.addEventListener('click', clearAll);
+
+        // Start demo on load
+        updateCount();
+        startDemo();
+    </script>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">Shell AI social preview concept</title>
+  <desc id="desc">Social preview concept for Shell AI OS Controller.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#071014"/>
+      <stop offset="55%" stop-color="#0D1B22"/>
+      <stop offset="100%" stop-color="#132934"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="120" y1="120" x2="1080" y2="510">
+      <stop offset="0%" stop-color="#18D7F3"/>
+      <stop offset="55%" stop-color="#4F8CFF"/>
+      <stop offset="100%" stop-color="#38D996"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect x="52" y="52" width="1096" height="526" rx="36" fill="none" stroke="#244250" stroke-width="2"/>
+  <circle cx="920" cy="315" r="128" fill="none" stroke="url(#accent)" stroke-width="8" stroke-dasharray="110 36"/>
+  <circle cx="920" cy="315" r="62" fill="#18D7F3" opacity="0.92"/>
+  <path d="M872 294 L902 315 L872 336" fill="none" stroke="#071014" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M926 348 H982" stroke="#071014" stroke-width="12" stroke-linecap="round"/>
+  <text x="110" y="206" fill="#EAF7FB" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="70" font-weight="800">Shell AI OS Controller</text>
+  <text x="112" y="284" fill="#91A8B3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34">AI desktop control layer for chat, voice, tools, and automation.</text>
+  <text x="112" y="380" fill="#18D7F3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Open source · Human-controlled · Observable</text>
+  <text x="112" y="486" fill="#EAF7FB" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24">Built by mdshoebking · Version 1.0.0</text>
+</svg>

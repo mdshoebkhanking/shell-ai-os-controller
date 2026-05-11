@@ -1,0 +1,35 @@
+name: Repository Audit
+
+on:
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    - cron: "33 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Repo audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Run repository audit
+        run: python tools/repo_audit.py --fail-on-high
+
+      - name: Upload audit report
+        uses: actions/upload-artifact@v7
+        with:
+          name: repo-audit-report
+          path: .shell_runtime/repo_audit_report.json
+          if-no-files-found: error

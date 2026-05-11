@@ -1,0 +1,42 @@
+name: Voice/UI bug
+description: Report a voice, audio, orb, theme, or PyQt UI issue.
+title: "ui/voice: "
+labels: ["ui", "voice"]
+body:
+  - type: textarea
+    id: issue
+    attributes:
+      label: What is wrong?
+      placeholder: Voice does not play, orb moves to the side, theme colors mismatch...
+    validations:
+      required: true
+  - type: dropdown
+    id: page
+    attributes:
+      label: Page or area
+      options:
+        - Chat
+        - Voice
+        - Tools
+        - Settings
+        - System
+        - Startup
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Audio/device details
+      placeholder: Input device, output device, OS volume, headphones/speakers...
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot or screen recording
+      description: Attach safe media with secrets hidden.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Safe logs
+      render: text
+      description: Redact keys/tokens before pasting.

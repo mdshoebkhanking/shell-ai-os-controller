@@ -1,0 +1,36 @@
+- name: bug
+  color: d73a4a
+  description: Something is broken
+- name: feature
+  color: 0e8a16
+  description: New feature or capability
+- name: docs
+  color: 0075ca
+  description: Documentation update
+- name: security
+  color: b60205
+  description: Security or safety work
+- name: installer
+  color: 5319e7
+  description: Install, bootstrap, or repair scripts
+- name: ui
+  color: 1d76db
+  description: PyQt UI work
+- name: voice
+  color: 0e8a16
+  description: Voice, TTS, STT, or audio
+- name: telegram
+  color: 26a5e4
+  description: Telegram bot integration
+- name: automation
+  color: fbca04
+  description: Desktop/browser/tool automation
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates
+- name: good first issue
+  color: 7057ff
+  description: Good for first-time contributors
+- name: help wanted
+  color: 008672
+  description: Maintainer wants community help

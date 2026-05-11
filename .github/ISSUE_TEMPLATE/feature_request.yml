@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+title: "feat: "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+      placeholder: I want Shell to...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What should Shell do?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - UI
+        - Voice
+        - Tools
+        - Telegram
+        - Installer
+        - Security
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Safety and permissions
+      description: Does this feature touch files, shell commands, browser automation, Telegram, email, or desktop control?
+      placeholder: It should require confirmation before...

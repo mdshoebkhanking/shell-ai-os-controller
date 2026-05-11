@@ -1,0 +1,16 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Shell AI OS Controller
+Upstream-Contact: mdshoebking
+Source: https://github.com/mdshoebking/shell-ai-os-controller
+
+Files: *
+Copyright: 2026 mdshoebking
+License: Apache-2.0
+
+Files: integrations/external/agent-browser/*
+Copyright: Vercel Labs and contributors
+License: Apache-2.0
+
+Files: integrations/external/awesome-openclaw-skills/*
+Copyright: 2026 VoltAgent and contributors
+License: MIT

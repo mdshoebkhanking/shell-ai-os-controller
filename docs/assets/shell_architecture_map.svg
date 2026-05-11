@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="560" viewBox="0 0 1100 560">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#07131f"/>
+      <stop offset="1" stop-color="#0d2534"/>
+    </linearGradient>
+    <linearGradient id="cyan" x1="0" x2="1">
+      <stop offset="0" stop-color="#00d4ff"/>
+      <stop offset="1" stop-color="#43f3c7"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#000000" flood-opacity="0.35"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#43f3c7"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="560" rx="28" fill="url(#bg)"/>
+  <text x="50" y="58" fill="#f3fbff" font-family="Arial, sans-serif" font-size="34" font-weight="700">Shell AI Project Map</text>
+  <text x="50" y="92" fill="#9db6c5" font-family="Arial, sans-serif" font-size="18">Simple flow: user command goes through UI, hub, agent brain, and real tools.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="55" y="160" width="160" height="92" rx="18" fill="#102235" stroke="#22445b"/>
+    <text x="135" y="198" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">User</text>
+    <text x="135" y="226" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">type or speak</text>
+
+    <rect x="280" y="145" width="185" height="122" rx="18" fill="#102235" stroke="#00d4ff"/>
+    <text x="372" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">PyQt UI</text>
+    <text x="372" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Chat, Voice, Tools</text>
+    <text x="372" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Settings, System</text>
+
+    <rect x="530" y="145" width="175" height="122" rx="18" fill="#102235" stroke="#43f3c7"/>
+    <text x="618" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Hub</text>
+    <text x="618" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Socket.IO + API</text>
+    <text x="618" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">tokens, settings</text>
+
+    <rect x="770" y="145" width="250" height="122" rx="18" fill="#102235" stroke="#7cc7ff"/>
+    <text x="895" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Agent + Router</text>
+    <text x="895" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Gemini/brain picks</text>
+    <text x="895" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">tool or agent</text>
+  </g>
+
+  <line x1="215" y1="206" x2="270" y2="206" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="465" y1="206" x2="520" y2="206" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
+  <line x1="705" y1="206" x2="760" y2="206" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <g filter="url(#shadow)">
+    <rect x="90" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
+    <text x="195" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Local Tools</text>
+    <text x="195" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">calculator, files, QR</text>
+
+    <rect x="350" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
+    <text x="455" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">API Tools</text>
+    <text x="455" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">search, image, email</text>
+
+    <rect x="610" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
+    <text x="715" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Windows-MCP</text>
+    <text x="715" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">click, type, app, shell</text>
+
+    <rect x="870" y="355" width="170" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
+    <text x="955" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Result</text>
+    <text x="955" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">chat reply / action</text>
+  </g>
+  <line x1="895" y1="268" x2="195" y2="346" stroke="#43f3c7" stroke-width="3" marker-end="url(#arrow)" opacity="0.7"/>
+  <line x1="895" y1="268" x2="455" y2="346" stroke="#43f3c7" stroke-width="3" marker-end="url(#arrow)" opacity="0.7"/>
+  <line x1="895" y1="268" x2="715" y2="346" stroke="#43f3c7" stroke-width="3" marker-end="url(#arrow)" opacity="0.7"/>
+  <line x1="820" y1="405" x2="860" y2="405" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <rect x="50" y="495" width="1000" height="1" fill="#1e3c4e"/>
+  <text x="50" y="525" fill="#9db6c5" font-family="Arial, sans-serif" font-size="15">Important: some boxes need API keys, Windows, browser drivers, mic drivers, or safety flags before they can really run.</text>
+</svg>

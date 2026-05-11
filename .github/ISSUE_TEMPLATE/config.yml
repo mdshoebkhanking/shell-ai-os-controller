@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mdshoebking/shell-ai-os-controller/security/policy
+    about: Please report security issues privately. Do not open a public issue.
+  - name: Beginner install help
+    url: https://github.com/mdshoebking/shell-ai-os-controller/blob/main/docs/INSTALL_BEGINNER.md
+    about: Check the beginner install guide before opening an issue.

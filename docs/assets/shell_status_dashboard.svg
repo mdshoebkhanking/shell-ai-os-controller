@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="500" viewBox="0 0 1100 500">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="1" stop-color="#edf6fb"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#21404f" flood-opacity="0.16"/>
+    </filter>
+  </defs>
+  <rect width="1100" height="500" rx="24" fill="url(#bg)"/>
+  <text x="48" y="58" fill="#102235" font-family="Arial, sans-serif" font-size="32" font-weight="700">Capability Status Dashboard</text>
+  <text x="48" y="90" fill="#496172" font-family="Arial, sans-serif" font-size="17">Green means directly verified or local. Yellow means setup/API/platform needed. Red means not usable in this Mac test environment.</text>
+
+  <g filter="url(#shadow)">
+    <rect x="55" y="135" width="300" height="275" rx="20" fill="#ffffff" stroke="#d4e4ec"/>
+    <circle cx="105" cy="182" r="22" fill="#1fbf75"/>
+    <text x="145" y="190" fill="#102235" font-family="Arial, sans-serif" font-size="24" font-weight="700">GREEN</text>
+    <text x="84" y="235" fill="#102235" font-family="Arial, sans-serif" font-size="17">Verified pieces</text>
+    <text x="84" y="266" fill="#496172" font-family="Arial, sans-serif" font-size="15">30 tests passed</text>
+    <text x="84" y="294" fill="#496172" font-family="Arial, sans-serif" font-size="15">Tool catalog loads</text>
+    <text x="84" y="322" fill="#496172" font-family="Arial, sans-serif" font-size="15">Chat text-only policy</text>
+    <text x="84" y="350" fill="#496172" font-family="Arial, sans-serif" font-size="15">Voice layout stable</text>
+    <text x="84" y="378" fill="#496172" font-family="Arial, sans-serif" font-size="15">API key/settings backend</text>
+
+    <rect x="400" y="135" width="300" height="275" rx="20" fill="#ffffff" stroke="#d4e4ec"/>
+    <circle cx="450" cy="182" r="22" fill="#f0b429"/>
+    <text x="490" y="190" fill="#102235" font-family="Arial, sans-serif" font-size="24" font-weight="700">YELLOW</text>
+    <text x="429" y="235" fill="#102235" font-family="Arial, sans-serif" font-size="17">Works after setup</text>
+    <text x="429" y="266" fill="#496172" font-family="Arial, sans-serif" font-size="15">Gemini + LiveKit voice</text>
+    <text x="429" y="294" fill="#496172" font-family="Arial, sans-serif" font-size="15">Search/weather/image APIs</text>
+    <text x="429" y="322" fill="#496172" font-family="Arial, sans-serif" font-size="15">Browser drivers</text>
+    <text x="429" y="350" fill="#496172" font-family="Arial, sans-serif" font-size="15">WhatsApp/social logins</text>
+    <text x="429" y="378" fill="#496172" font-family="Arial, sans-serif" font-size="15">OCR/TTS native deps</text>
+
+    <rect x="745" y="135" width="300" height="275" rx="20" fill="#ffffff" stroke="#d4e4ec"/>
+    <circle cx="795" cy="182" r="22" fill="#e05252"/>
+    <text x="835" y="190" fill="#102235" font-family="Arial, sans-serif" font-size="24" font-weight="700">RED HERE</text>
+    <text x="774" y="235" fill="#102235" font-family="Arial, sans-serif" font-size="17">Not usable on this Mac</text>
+    <text x="774" y="266" fill="#496172" font-family="Arial, sans-serif" font-size="15">Real Windows-MCP actions</text>
+    <text x="774" y="294" fill="#496172" font-family="Arial, sans-serif" font-size="15">Mic flow without sounddevice</text>
+    <text x="774" y="322" fill="#496172" font-family="Arial, sans-serif" font-size="15">Legacy custom MCP as "real MCP"</text>
+    <text x="774" y="350" fill="#496172" font-family="Arial, sans-serif" font-size="15">Ungated self-writing tools</text>
+    <text x="774" y="378" fill="#496172" font-family="Arial, sans-serif" font-size="15">Untested external accounts</text>
+  </g>
+
+  <text x="48" y="455" fill="#496172" font-family="Arial, sans-serif" font-size="16">Best reading: project is a strong desktop AI controller, but many powerful features depend on environment and keys.</text>
+</svg>

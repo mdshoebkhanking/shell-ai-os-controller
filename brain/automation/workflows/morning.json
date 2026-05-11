@@ -1,0 +1,36 @@
+{
+    "name": "Morning Routine",
+    "description": "Opens news and weather for the day.",
+    "trigger": "voice:morning",
+    "steps": [
+        {
+            "id": "1",
+            "action": "open_browser",
+            "params": {
+                "url": "https://news.google.com"
+            }
+        },
+        {
+            "id": "2",
+            "action": "wait",
+            "params": {
+                "seconds": 2
+            }
+        },
+        {
+            "id": "3",
+            "action": "open_browser",
+            "params": {
+                "url": "https://weather.com"
+            }
+        },
+        {
+            "id": "4",
+            "action": "write_file",
+            "params": {
+                "content": "Good morning! News and Weather are open.",
+                "filename": "morning_status.txt"
+            }
+        }
+    ]
+}

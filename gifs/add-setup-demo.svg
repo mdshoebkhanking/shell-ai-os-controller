@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420">
+  <rect width="900" height="420" rx="22" fill="#082f49"/>
+  <text x="450" y="190" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui" font-size="34" fill="#e0f2fe" font-weight="800">Add setup GIF here</text>
+  <text x="450" y="238" text-anchor="middle" font-family="Inter, ui-sans-serif, system-ui" font-size="20" fill="#bae6fd">Recommended: one-click installer -> first launch -> chat works.</text>
+</svg>

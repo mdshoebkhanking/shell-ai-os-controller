@@ -1,0 +1,12 @@
+{
+  "name": "shell-ai-os-controller",
+  "version": "1.0.0",
+  "description": "AI-native desktop control layer for voice, tools, automation, agents, and local workflows.",
+  "private": true,
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "python -m pytest -q",
+    "audit:repo": "python tools/repo_audit.py",
+    "package": "python tools/package_public_release.py"
+  }
+}

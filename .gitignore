@@ -1,0 +1,93 @@
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+venv/
+env/
+.venv/
+.codex_ui_venv/
+.shellai_venv/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# Node
+node_modules/
+
+# Sessions & Data
+brain/data/instagram_session.json
+brain/data/*.json
+brain/data/*.json.bak
+*.session
+.phoenix_analytics.json
+.shell_chat_history/
+.shell_full_smoke_report.json
+.shell_hub_port
+.shell_theme.json
+.shell_runtime/
+.shell_image_cache/
+.shell_settings.json
+.telegram_state.json
+.telegram_log.json
+.telegram_users.json
+test_results*.txt
+*_run.log
+_agent_test.log
+_agent_test.err
+shell_ai.log.prev*
+hub_error.log
+token_error.log
+control_log.txt
+shell_brain.json
+shell_browser_history.json
+shell_image_history.json
+shell_telegram_stats.json
+
+# Build artifacts
+*.spec
+.gstack/
+_backups_/
+Desktop/
+integrations/external/
+shell.v1.0-main-main/
+shell_downloads/
+shell_projects/
+shell_workspace/
+swarm/
+
+# Local UI/probe captures and scratch artifacts
+_ui_cyber/
+ui_screenshots/
+smoke/
+glass_*.png
+shot_*.png
+screenshot_*.png
+smoke_test_output*.png
+qr_test.png
+*.tmp
+*.pdf

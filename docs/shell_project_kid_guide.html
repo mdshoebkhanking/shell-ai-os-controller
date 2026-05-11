@@ -1,0 +1,614 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Shell AI Project Guide - Hinglish</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #12202b;
+      line-height: 1.45;
+      font-size: 13.4pt;
+      margin: 0;
+      background: #ffffff;
+    }
+    h1 {
+      font-size: 34pt;
+      line-height: 1.05;
+      margin: 0 0 12px 0;
+      color: #07131f;
+    }
+    h2 {
+      font-size: 22pt;
+      margin: 28px 0 10px 0;
+      color: #0b2535;
+      border-bottom: 2px solid #d8e8ef;
+      padding-bottom: 5px;
+    }
+    h3 {
+      font-size: 16pt;
+      margin: 18px 0 7px 0;
+      color: #123247;
+    }
+    p { margin: 7px 0 10px 0; }
+    .cover {
+      padding: 44px 48px 26px 48px;
+      background: #eef8fb;
+      border: 1px solid #d2e7ef;
+      border-radius: 16px;
+    }
+    .subtitle {
+      font-size: 17pt;
+      color: #486272;
+      margin-top: 8px;
+    }
+    .meta {
+      color: #486272;
+      font-size: 11pt;
+      margin-top: 18px;
+    }
+    .big-number {
+      font-size: 24pt;
+      font-weight: 700;
+      color: #0b7285;
+    }
+    .card {
+      border: 1px solid #d9e8ee;
+      background: #fbfdff;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin: 10px 0;
+    }
+    .note {
+      border-left: 5px solid #0bbbd6;
+      background: #effbff;
+      padding: 10px 12px;
+      margin: 12px 0;
+    }
+    .warn {
+      border-left: 5px solid #f0b429;
+      background: #fff8e6;
+      padding: 10px 12px;
+      margin: 12px 0;
+    }
+    .red {
+      border-left: 5px solid #e05252;
+      background: #fff0f0;
+      padding: 10px 12px;
+      margin: 12px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 10px 0 16px 0;
+      font-size: 11.2pt;
+    }
+    th {
+      background: #0e2a3d;
+      color: white;
+      text-align: left;
+      padding: 8px;
+    }
+    td {
+      border: 1px solid #d9e8ee;
+      padding: 8px;
+      vertical-align: top;
+    }
+    tr:nth-child(even) td { background: #f7fbfd; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 10pt;
+    }
+    .green { background: #dff7ea; color: #0b7040; }
+    .yellow { background: #fff1c2; color: #8a5a00; }
+    .bad { background: #ffe0e0; color: #9b2424; }
+    .blue { background: #dff4ff; color: #075f7a; }
+    .flow {
+      font-family: "Courier New", monospace;
+      white-space: pre;
+      background: #07131f;
+      color: #dff9ff;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 10.8pt;
+      overflow: hidden;
+    }
+    .screenshot {
+      width: 100%;
+      border: 1px solid #d7e5ec;
+      border-radius: 12px;
+      margin: 8px 0 14px 0;
+    }
+    .svg {
+      width: 100%;
+      margin: 8px 0 14px 0;
+    }
+    .small { font-size: 10.7pt; color: #516a79; }
+    .page-break { page-break-before: always; }
+    code {
+      font-family: "Courier New", monospace;
+      background: #f1f5f8;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="cover">
+    <h1>Shell AI Project<br>Kid-Friendly Guide</h1>
+    <div class="subtitle">Hinglish explanation for a 12-13 saal ka student: yeh project kya hai, kaise kaam karta hai, kaunse tools/agents real me ready hain, aur kaunse setup maangte hain.</div>
+    <p class="meta">Prepared from local project scan on May 10, 2026. Test proof: <b>30 passed, 1 warning</b>.</p>
+  </div>
+
+  <h2>1. Sabse Simple Explanation</h2>
+  <div class="note">
+    <b>Shell AI ek desktop AI assistant hai.</b> Tum usko chat ya voice se command dete ho. Phir woh decide karta hai ki kaunsa tool chalana hai: calculator, browser, file tool, Windows-MCP desktop control, agent, ya API service.
+  </div>
+  <p>Isko ek smart control room samjho. User command bhejta hai, UI screen par aata hai, backend hub message pass karta hai, agent/brain decide karta hai, tool kaam karta hai, aur result wapas UI me reply ban kar dikhta hai.</p>
+
+  <table>
+    <tr>
+      <th>Part</th>
+      <th>Kid example</th>
+      <th>Real file / system</th>
+    </tr>
+    <tr>
+      <td>UI</td>
+      <td>Remote control jahan buttons aur chat box hain.</td>
+      <td><code>shell_ui/shell_cinematic_full.py</code></td>
+    </tr>
+    <tr>
+      <td>Hub</td>
+      <td>Post office jo messages bhejta aur lata hai.</td>
+      <td><code>shell_hub.py</code> with Socket.IO and HTTP APIs</td>
+    </tr>
+    <tr>
+      <td>Agent brain</td>
+      <td>Class monitor jo decide karta hai kis helper ko bulana hai.</td>
+      <td><code>agent.py</code>, <code>brain/core.py</code>, <code>shell_agents.py</code></td>
+    </tr>
+    <tr>
+      <td>Tools</td>
+      <td>Toolbox: calculator, file, browser, screenshot, API, etc.</td>
+      <td>Many <code>shell_*.py</code> files</td>
+    </tr>
+    <tr>
+      <td>Windows-MCP</td>
+      <td>Robot hand jo Windows PC me click/type/screenshot kar sakta hai.</td>
+      <td><code>shell_windows_mcp.py</code>, source package <code>windows-mcp</code></td>
+    </tr>
+  </table>
+
+  <img class="svg" src="assets/shell_architecture_map.svg" alt="Shell architecture map">
+
+  <h2>2. Project Ka Actual Size</h2>
+  <table>
+    <tr>
+      <th>Thing</th>
+      <th>Count</th>
+      <th>Meaning</th>
+    </tr>
+    <tr>
+      <td>Shell backend tools</td>
+      <td class="big-number">378</td>
+      <td>Python functions jo UI/agent se chal sakte hain.</td>
+    </tr>
+    <tr>
+      <td>Windows-MCP tools</td>
+      <td class="big-number">17</td>
+      <td>Real MCP desktop tools like Click, Type, Screenshot, App, Shell.</td>
+    </tr>
+    <tr>
+      <td>Agents</td>
+      <td class="big-number">38</td>
+      <td>Specialist wrappers like Developer, Research, Security, Finance, Study.</td>
+    </tr>
+    <tr>
+      <td>Total catalog</td>
+      <td class="big-number">433</td>
+      <td>UI Tools page ke liye visible capabilities.</td>
+    </tr>
+  </table>
+
+  <p>Categories me system, communication, browser, files, AI, productivity, developer, media, finance, games, general aur windows tools aate hain.</p>
+
+  <h2>3. Command Ka Safar</h2>
+  <div class="flow">User types/speaks
+    -> PyQt UI receives it
+    -> shell_hub.py sends it to backend
+    -> natural router or AI brain picks a tool/agent
+    -> shell_tool_gateway.py or Windows-MCP runs it
+    -> result returns to UI
+    -> chat bubble shows text
+    -> voice plays only when voice mode/manual listen is used</div>
+
+  <div class="note">
+    Chat mode ka rule ab sahi hai: agar user text se chat karta hai, reply text me hi aata hai. Voice automatically nahi bajti. Bubble me "Listen to this reply" option se manually sun sakte ho.
+  </div>
+
+  <h2>4. UI Ka Matlab</h2>
+  <table>
+    <tr>
+      <th>UI page</th>
+      <th>Kya karta hai</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>Chat</td>
+      <td>Text commands, tool commands, agents, streamed reply, manual listen button.</td>
+      <td><span class="pill green">GREEN</span> text-only policy tested</td>
+    </tr>
+    <tr>
+      <td>Voice</td>
+      <td>AI assistant style voice page, orb, transcript, mute, visual toggle, start/pause.</td>
+      <td><span class="pill yellow">YELLOW</span> UI tested, mic dependency needed</td>
+    </tr>
+    <tr>
+      <td>System</td>
+      <td>CPU/RAM/process stats and unavailable-state handling.</td>
+      <td><span class="pill green">GREEN</span> fake/random stats removed in tests</td>
+    </tr>
+    <tr>
+      <td>Tools</td>
+      <td>433 capabilities ka catalog; run tool/agent/MCP from UI.</td>
+      <td><span class="pill green">GREEN</span> catalog and routing tested</td>
+    </tr>
+    <tr>
+      <td>Settings</td>
+      <td>API keys add/remove, language, safety toggles, backend-backed settings.</td>
+      <td><span class="pill green">GREEN</span> settings save tested</td>
+    </tr>
+  </table>
+
+  <img class="screenshot" src="../glass_chat.png" alt="Shell chat UI screenshot">
+
+  <h2>5. Tools: Kaunse Kaam Karte Hain?</h2>
+  <img class="svg" src="assets/shell_status_dashboard.svg" alt="Shell status dashboard">
+
+  <h3>GREEN: Local ya tested pieces</h3>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Examples</th>
+      <th>Why green?</th>
+    </tr>
+    <tr>
+      <td>Catalog + UI discovery</td>
+      <td>List tools, list agents, show Windows-MCP tools.</td>
+      <td>Catalog command returned 433 items; tests verify Windows-MCP replaces old fake MCP actions.</td>
+    </tr>
+    <tr>
+      <td>Natural command router</td>
+      <td>"what is 2 + 3 * 4", "count words", "developer agent", "click 120 340".</td>
+      <td>Tests verify these route to correct tool IDs and args.</td>
+    </tr>
+    <tr>
+      <td>Chat speech policy</td>
+      <td>Text chat reply stays text; manual listen button can speak it.</td>
+      <td>Tests verify typed handlers do not auto-call TTS.</td>
+    </tr>
+    <tr>
+      <td>Voice page layout</td>
+      <td>Start/Pause, Mic On/Muted, Visual On/Off, transcript, error state.</td>
+      <td>Tests verify orb stays embedded and visual toggle does not move it away.</td>
+    </tr>
+    <tr>
+      <td>Settings/API key backend</td>
+      <td><code>/api-keys</code>, <code>/settings</code>, .env update, .shell_settings.json.</td>
+      <td>Tests verify settings write to backend store; README documents real endpoints.</td>
+    </tr>
+    <tr>
+      <td>Simple local utilities</td>
+      <td>calculator, text count, JSON/regex/hash/zip/QR-style utilities.</td>
+      <td>Mostly local Python code; lower risk than external APIs. Not every one is individually integration-tested.</td>
+    </tr>
+  </table>
+
+  <h3>YELLOW: Kaam kar sakta hai, par setup chahiye</h3>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Needs</th>
+      <th>Notes</th>
+    </tr>
+    <tr>
+      <td>Full realtime voice</td>
+      <td><code>GOOGLE_API_KEY</code>, LiveKit keys, mic, <code>sounddevice</code>, network.</td>
+      <td>UI exists, but full voice loop depends on external services and audio driver.</td>
+    </tr>
+    <tr>
+      <td>Windows-MCP real desktop actions</td>
+      <td>Windows 10/11, Python 3.13+, uv/uvx, <code>uvx windows-mcp</code>.</td>
+      <td>On Mac it correctly refuses with a "requires Windows" message.</td>
+    </tr>
+    <tr>
+      <td>Browser automation</td>
+      <td>Selenium/Playwright browser installed and allowed.</td>
+      <td>Can open/search/control browser once drivers are present.</td>
+    </tr>
+    <tr>
+      <td>Search, weather, news, stocks</td>
+      <td>Provider API keys and network.</td>
+      <td>Keys are managed from UI settings and backend <code>/api-keys</code>.</td>
+    </tr>
+    <tr>
+      <td>Image generation</td>
+      <td>Gemini/OpenAI/HuggingFace/Replicate/Stability/etc keys or public fallback.</td>
+      <td>Powerful, but result depends on provider availability.</td>
+    </tr>
+    <tr>
+      <td>WhatsApp, Instagram, Telegram, Email</td>
+      <td>Login/session/token/SMTP, sometimes browser UI permission.</td>
+      <td>These are real integrations but cannot be marked fully working without account setup.</td>
+    </tr>
+    <tr>
+      <td>OCR, audio/video, PDF/PPT</td>
+      <td>Tesseract, ffmpeg, office libraries, file permissions depending on tool.</td>
+      <td>Useful feature families, but native deps matter.</td>
+    </tr>
+  </table>
+
+  <h3>RED HERE: Is Mac test environment me real kaam nahi karega</h3>
+  <table>
+    <tr>
+      <th>Thing</th>
+      <th>Reason</th>
+      <th>Correct action</th>
+    </tr>
+    <tr>
+      <td>Real Windows-MCP Click/Type/App/Shell</td>
+      <td>Windows-MCP is for Windows; current machine is Mac.</td>
+      <td>Test on Windows machine with Python 3.13+ and uvx.</td>
+    </tr>
+    <tr>
+      <td>Voice mic flow</td>
+      <td>UI reported <code>sounddevice not installed</code> earlier.</td>
+      <td>Install audio dependency and grant mic permission.</td>
+    </tr>
+    <tr>
+      <td>Old <code>mcp_server.py</code> as "real MCP"</td>
+      <td>It is legacy JSON-over-HTTP dispatcher, not the current MCP surface.</td>
+      <td>Use <code>shell_windows_mcp.py</code> and <code>windows-mcp:*</code> tools.</td>
+    </tr>
+    <tr>
+      <td>Self-writing/evolution tools by default</td>
+      <td>Dangerous writes are intentionally blocked by safety flags.</td>
+      <td>Use only after enabling <code>SHELL_ALLOW_CODE_WRITE</code> or <code>SHELL_ALLOW_AGENT_PATCH</code>.</td>
+    </tr>
+  </table>
+
+  <div class="page-break"></div>
+  <h2>6. Windows-MCP Tools List</h2>
+  <p>Project me user ne CursorTouch Windows-MCP use karne ko bola tha. Current catalog me yeh 17 MCP tools exposed hain:</p>
+  <table>
+    <tr>
+      <th>Tool</th>
+      <th>Simple meaning</th>
+      <th>Status</th>
+    </tr>
+    <tr><td>Click</td><td>Screen coordinate par mouse click.</td><td><span class="pill yellow">Windows required</span></td></tr>
+    <tr><td>Type</td><td>Focused field me text type.</td><td><span class="pill yellow">Windows required</span></td></tr>
+    <tr><td>Scroll / Move / Shortcut / Wait</td><td>Mouse scroll, pointer move, keyboard shortcut, wait.</td><td><span class="pill yellow">Windows required</span></td></tr>
+    <tr><td>Screenshot / Snapshot</td><td>Desktop image and UI state capture.</td><td><span class="pill yellow">Windows required</span></td></tr>
+    <tr><td>App</td><td>Windows app launch/switch/control.</td><td><span class="pill yellow">Windows required</span></td></tr>
+    <tr><td>Shell</td><td>PowerShell command through MCP.</td><td><span class="pill yellow">Windows + safety</span></td></tr>
+    <tr><td>Scrape</td><td>Current/requested webpage text scrape.</td><td><span class="pill yellow">MCP runtime</span></td></tr>
+    <tr><td>Clipboard / Process / Notification / Registry</td><td>Clipboard, processes, toast notifications, registry.</td><td><span class="pill yellow">Windows + safety</span></td></tr>
+    <tr><td>MultiSelect / MultiEdit</td><td>Batch select or fill fields.</td><td><span class="pill yellow">Windows required</span></td></tr>
+  </table>
+
+  <div class="warn">
+    Test result: fake Windows-MCP JSON-RPC server ke saath tool call success path tested hai. Real Windows desktop action yahan Mac par intentionally blocked hai.
+  </div>
+
+  <h2>7. Agents: Kaun Kaun Se Hain?</h2>
+  <p>Agents ko chhote specialist teachers samjho. Developer agent coding me help karta hai, Research agent internet/research style tasks me, Security agent safety me, etc. Important: yeh mostly wrappers hain; inke andar AI brain/provider key chahiye hoti hai. Har agent separate magic robot nahi hai.</p>
+
+  <table>
+    <tr>
+      <th>Agent group</th>
+      <th>Examples</th>
+      <th>Status</th>
+    </tr>
+    <tr>
+      <td>Core build agents</td>
+      <td>Developer, Website Builder, App Builder, API, Database, DevOps, Testing.</td>
+      <td><span class="pill yellow">AI provider needed</span></td>
+    </tr>
+    <tr>
+      <td>System/productivity agents</td>
+      <td>System, File, Browser, Network, Automation, Productivity, Communication.</td>
+      <td><span class="pill yellow">Tools and permissions needed</span></td>
+    </tr>
+    <tr>
+      <td>Thinking/content agents</td>
+      <td>Creative, Research, Learning, Data, Security, Social.</td>
+      <td><span class="pill yellow">AI provider needed</span></td>
+    </tr>
+    <tr>
+      <td>Extra life agents</td>
+      <td>Finance, Legal, Health, Cooking, Travel, Study, Tutor, Resume, Interview, Marketing, SEO, Game Design, Storyteller, Philosophy, Debate.</td>
+      <td><span class="pill yellow">Advice only; critical domains need human expert</span></td>
+    </tr>
+    <tr>
+      <td>Swarm</td>
+      <td><code>deploy_swarm_tool</code> with planner/coder/reviewer/debugger-style files.</td>
+      <td><span class="pill yellow">Experimental orchestration</span></td>
+    </tr>
+  </table>
+
+  <h3>Agent health reading</h3>
+  <table>
+    <tr>
+      <th>Status</th>
+      <th>Meaning</th>
+    </tr>
+    <tr>
+      <td><span class="pill green">GREEN</span></td>
+      <td>Agent list/catalog is discoverable and UI can route agent command like "developer agent fix the login bug".</td>
+    </tr>
+    <tr>
+      <td><span class="pill yellow">YELLOW</span></td>
+      <td>Real answer quality depends on MultiAIBrain/provider keys and tool registry.</td>
+    </tr>
+    <tr>
+      <td><span class="pill bad">RED for claims</span></td>
+      <td>Do not claim agents are fully autonomous humans. They are planner/executor wrappers around AI calls and tools.</td>
+    </tr>
+  </table>
+
+  <h2>8. API Keys UI Se Real Me Add/Remove</h2>
+  <p>Settings page me API keys add/remove karna sirf UI decoration nahi hai. Backend endpoints exist:</p>
+  <table>
+    <tr>
+      <th>Endpoint</th>
+      <th>Use</th>
+    </tr>
+    <tr>
+      <td><code>GET /api-keys</code></td>
+      <td>List: kaunsi keys required/optional hain aur set hain ya nahi. Secret value wapas nahi bheji jati.</td>
+    </tr>
+    <tr>
+      <td><code>POST /api-keys</code></td>
+      <td>Key set/update karta hai. Backend <code>.env</code> atomically rewrite karta hai.</td>
+    </tr>
+    <tr>
+      <td><code>DELETE /api-keys/{key}</code></td>
+      <td>Key remove karta hai and process environment refresh hota hai.</td>
+    </tr>
+    <tr>
+      <td><code>GET/POST /settings</code></td>
+      <td>General settings save hote hain in <code>.shell_settings.json</code> and env mirror hota hai.</td>
+    </tr>
+  </table>
+  <p>Supported provider names include Gemini/Google, OpenAI, Groq, Mistral, Perplexity, SambaNova, DeepSeek, Blackbox, OpenRouter, HuggingFace/HF, Bytez, OpenWeather, NewsData, AlphaVantage. Anthropic provider current catalog/API manager me listed nahi mila.</p>
+
+  <img class="screenshot" src="../glass_settings.png" alt="Shell settings UI screenshot">
+
+  <h2>9. Safety: Dangerous Tools Locked Hain</h2>
+  <p>Project me kuch tools aise hain jo code likh sakte hain, terminal command chala sakte hain, ya workflow se file read/write kar sakte hain. Yeh by default locked rahne chahiye.</p>
+  <table>
+    <tr>
+      <th>Flag</th>
+      <th>Meaning</th>
+    </tr>
+    <tr>
+      <td><code>SHELL_ALLOW_CODE_WRITE</code></td>
+      <td>New code/tool files write karne ki permission.</td>
+    </tr>
+    <tr>
+      <td><code>SHELL_ALLOW_AGENT_PATCH</code></td>
+      <td><code>agent.py</code> patch/hotpatch karne ki permission.</td>
+    </tr>
+    <tr>
+      <td><code>SHELL_ALLOW_TERMINAL_EXEC</code></td>
+      <td>Terminal/PowerShell/Python execution tools ko allow karta hai.</td>
+    </tr>
+    <tr>
+      <td><code>SHELL_ALLOW_WORKFLOW_COMMANDS</code></td>
+      <td>Workflow se shell commands allow karta hai.</td>
+    </tr>
+  </table>
+  <div class="warn">Simple rule for kid demo: dangerous toggles off rakho. Demo me calculator, chat, catalog, settings, and safe local tools dikhana best hai.</div>
+
+  <h2>10. Voice Page Ka Current Truth</h2>
+  <p>Voice UI modern assistant page jaisa bana hai: orb center me, transcript side me, Start Voice/Pause Voice, Mic On/Muted, Visual On/Off. Test ne verify kiya ki Visual On/Off karne se orb side me jump nahi karta.</p>
+  <p>But full mic voice loop ke liye dependency chahiye. Current Mac screenshot/error me <code>sounddevice not installed</code> tha. Isliye UI green, real mic flow yellow/red until dependency install hoti hai.</p>
+  <img class="screenshot" src="../glass_voice.png" alt="Shell voice UI screenshot">
+
+  <h2>11. Demo Script For 12-13 Saal Ka Student</h2>
+  <div class="card">
+    <p><b>Step 1:</b> "Yeh Shell AI hai. Isko hum command dete hain."</p>
+    <p><b>Step 2:</b> Chat page dikhao. Type karo: <code>what is 2 + 3 * 4</code>. Explain: AI ne calculator tool choose kiya.</p>
+    <p><b>Step 3:</b> Tools page dikhao. Explain: iske paas 433 capabilities ki list hai, par sab ek jaise ready nahi hain.</p>
+    <p><b>Step 4:</b> Settings page dikhao. Explain: API keys yahan se add/remove hoti hain, backend me real <code>.env</code> update hota hai.</p>
+    <p><b>Step 5:</b> Voice page dikhao. Explain: UI ready hai, but mic dependency/API setup ke bina voice full run nahi karega.</p>
+    <p><b>Step 6:</b> Windows-MCP explain karo. "Windows PC par yeh Click/Type/Screenshot kar sakta hai; Mac par safe error deta hai."</p>
+  </div>
+
+  <h2>12. AI Ke Liye Technical Cheat Sheet</h2>
+  <table>
+    <tr>
+      <th>Need</th>
+      <th>Where to look</th>
+    </tr>
+    <tr>
+      <td>Desktop UI</td>
+      <td><code>shell_ui/shell_cinematic_full.py</code></td>
+    </tr>
+    <tr>
+      <td>Hub/API/events</td>
+      <td><code>shell_hub.py</code></td>
+    </tr>
+    <tr>
+      <td>Tool catalog</td>
+      <td><code>shell_tool_catalog.py</code></td>
+    </tr>
+    <tr>
+      <td>Tool runner/gateway</td>
+      <td><code>shell_tool_gateway.py</code></td>
+    </tr>
+    <tr>
+      <td>Windows-MCP adapter</td>
+      <td><code>shell_windows_mcp.py</code></td>
+    </tr>
+    <tr>
+      <td>Agents</td>
+      <td><code>shell_agents.py</code>, <code>shell_extra_agents.py</code>, <code>shell_agent_tools.py</code></td>
+    </tr>
+    <tr>
+      <td>API key backend</td>
+      <td><code>shell_api_manager.py</code></td>
+    </tr>
+    <tr>
+      <td>Settings persistence</td>
+      <td><code>shell_settings_manager.py</code></td>
+    </tr>
+    <tr>
+      <td>Tests</td>
+      <td><code>tests/test_*.py</code></td>
+    </tr>
+  </table>
+
+  <h2>13. Final Honest Rating</h2>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Rating</th>
+      <th>Reason</th>
+    </tr>
+    <tr>
+      <td>Idea</td>
+      <td>Strong</td>
+      <td>Desktop assistant with tools, UI, voice, MCP, settings, and agents is a useful direction.</td>
+    </tr>
+    <tr>
+      <td>UI</td>
+      <td>Improved but large</td>
+      <td>Main UI file is huge; visually better, but needs more modular cleanup.</td>
+    </tr>
+    <tr>
+      <td>Backend</td>
+      <td>Feature-rich</td>
+      <td>Many tools and safety gates exist; needs more integration tests for external tools.</td>
+    </tr>
+    <tr>
+      <td>Reliability</td>
+      <td>Mixed</td>
+      <td>30 tests pass, but APIs, Windows tools, mic, browser, social apps all depend on setup.</td>
+    </tr>
+    <tr>
+      <td>Best next work</td>
+      <td>Test matrix</td>
+      <td>Make a UI health dashboard that checks each tool family: Ready, Needs key, Needs Windows, Missing dependency, or Blocked by safety.</td>
+    </tr>
+  </table>
+
+  <div class="note">
+    Bottom line: Shell AI is not fake, but it is not "everything works everywhere" either. It is a serious desktop AI control project where the local UI/backend pieces are now testable, and the powerful external features become real when their keys, OS, drivers, and permissions are correctly set.
+  </div>
+</body>
+</html>

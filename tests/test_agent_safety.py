@@ -1,0 +1,101 @@
+import asyncio
+
+
+class FakeBrain:
+    async def generate_response(self, *args, **kwargs):
+        return "```python\nprint('hello from swarm')\n```"
+
+
+def test_swarm_coder_file_write_blocked_by_default(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SHELL_ALLOW_SWARM_FILE_WRITE", raising=False)
+
+    from swarm.agents.coder import CoderAgent
+    from swarm.base import SwarmState
+
+    state = SwarmState(task_id="test", original_request="write code")
+    result = asyncio.run(CoderAgent(FakeBrain()).execute("write code", state))
+
+    assert "File write blocked by policy" in result
+    assert not (tmp_path / "swarm_output.py").exists()
+    assert "code_preview" in state.artifacts
+
+
+def test_swarm_coder_file_write_requires_explicit_env(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("SHELL_ALLOW_SWARM_FILE_WRITE", "1")
+
+    from swarm.agents.coder import CoderAgent
+    from swarm.base import SwarmState
+
+    state = SwarmState(task_id="test", original_request="write code")
+    result = asyncio.run(CoderAgent(FakeBrain()).execute("write code", state))
+
+    assert "Code generated and saved to swarm_output.py" in result
+    assert (tmp_path / "swarm_output.py").read_text(encoding="utf-8").strip() == "print('hello from swarm')"
+
+
+def test_agent_provider_failure_is_human_readable(monkeypatch):
+    from shell_agents import ShellAgent
+
+    class BrokenBrain:
+        async def generate_response(self, *args, **kwargs):
+            return "All Brains Failed. Errors: provider quota raw details"
+
+    class ProbeAgent(ShellAgent):
+        pass
+
+    ProbeAgent._brain = BrokenBrain()
+    ProbeAgent._brain_unavailable_until = 0.0
+    agent = ProbeAgent("ProbeAgent", "tester", "testing", [])
+
+    result = asyncio.run(agent._ai_think("hello"))
+
+    assert "All Brains Failed" not in result
+    assert "degraded mode" in result
+
+
+def test_extra_agent_provider_failure_is_human_readable(monkeypatch):
+    import shell_extra_agents
+
+    class BrokenBrain:
+        async def generate_response(self, *args, **kwargs):
+            return "All Brains Failed. Errors: provider quota raw details"
+
+    class FakeMultiAIBrain:
+        @staticmethod
+        def get_instance():
+            return BrokenBrain()
+
+    monkeypatch.setattr(shell_extra_agents, "_BRAIN_UNAVAILABLE_UNTIL", 0.0)
+    monkeypatch.setitem(__import__("sys").modules, "brain.core", type("M", (), {"MultiAIBrain": FakeMultiAIBrain}))
+
+    result = asyncio.run(shell_extra_agents._ask_brain("hello", "system"))
+
+    assert "All Brains Failed" not in result
+    assert "degraded mode" in result
+
+
+def test_swarm_smoke_and_no_write_requests_route_to_reviewer():
+    from swarm.orchestrator import Orchestrator
+
+    orch = object.__new__(Orchestrator)
+
+    assert orch._route_step("UI smoke test only: produce a one-line readiness report") == "reviewer"
+    assert orch._route_step("Do not create files; just inspect status") == "reviewer"
+
+
+def test_swarm_agent_provider_failure_is_human_readable():
+    from swarm.agents.reviewer import ReviewerAgent
+    from swarm.base import BaseAgent, SwarmState
+
+    class BrokenBrain:
+        async def generate_response(self, *args, **kwargs):
+            return "All Brains Failed. Errors: provider quota raw details"
+
+    BaseAgent._provider_unavailable_until = 0.0
+    state = SwarmState(task_id="test", original_request="review")
+    result = asyncio.run(ReviewerAgent(BrokenBrain()).execute("review status", state))
+
+    assert "All Brains Failed" not in result
+    assert "degraded mode" in result
