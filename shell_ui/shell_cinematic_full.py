@@ -74,26 +74,31 @@ except Exception: psutil = None
 try: import GPUtil
 except Exception: GPUtil = None
 
-import socketio
-from shell_realtime_audio_runtime import LIVEKIT_AVAILABLE, LiveKitAudioClient
+from shell_ai_runtime import (
+    brain_has_providers,
+    brain_provider_names,
+    get_brain,
+    has_configured_ai_key,
+    reload_brain_providers,
+)
+from shell_realtime_audio_runtime import LiveKitAudioClient
 
-# --- AI Brain import ---
-_BRAIN = None
-try:
-    _parent_dir = os.path.dirname(_ui_dir)
-    if _parent_dir not in sys.path:
-        sys.path.insert(0, _parent_dir)
-    from brain.core import MultiAIBrain
-    _BRAIN = MultiAIBrain.get_instance()
-    logging.info(f"AI Brain loaded: {len(_BRAIN.providers)} providers")
-except Exception as _brain_err:
-    logging.warning(f"AI Brain not available: {_brain_err}")
 
-def _silent_engineio_logger():
-    lg = logging.getLogger("shell.ui.engineio")
-    lg.setLevel(logging.CRITICAL); lg.propagate = False
-    if not lg.handlers: lg.addHandler(logging.NullHandler())
-    return lg
+def _load_socketio_client_class():
+    from shell_network_runtime import SocketIOClient
+
+    return SocketIOClient
+
+
+def _create_socketio_client(*args, **kwargs):
+    return _load_socketio_client_class()(*args, **kwargs)
+
+
+def __getattr__(name):
+    if name == "SocketIOClient":
+        return _load_socketio_client_class()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 def _hub_base_url_candidates(default_url="http://localhost:5000"):
     candidates = []
@@ -222,93 +227,6 @@ def _post_mcp_action(payload, timeout=20):
 #  Backend Clients (unchanged)
 # =====================================================================
 
-class SocketIOClient(QThread):
-    connection_status = pyqtSignal(bool)
-    agent_speaking = pyqtSignal(bool, str)
-    agent_thinking = pyqtSignal(bool)
-    user_speaking = pyqtSignal(str)
-    system_stats = pyqtSignal(dict)
-    voice_amplitude = pyqtSignal(float)
-    deep_research = pyqtSignal(dict)
-    # New Phase-22 signals that expose the backend's richer event stream
-    # to the UI. agent_reply = actual LLM response text (used to fill the
-    # chat bubble), user_message = text echo of the user's turn (from the
-    # text chat path), tool_event = live tool-call telemetry, and
-    # api_key_update fires when the Settings page flips a key set/unset.
-    agent_reply = pyqtSignal(str)
-    user_message = pyqtSignal(str)
-    tool_event = pyqtSignal(dict)
-    api_key_update = pyqtSignal(dict)
-    safety_warning = pyqtSignal(str)
-
-    def __init__(self, hub_url=None):
-        super().__init__()
-        self.sio = socketio.Client(
-            logger=False, engineio_logger=_silent_engineio_logger(),
-            reconnection=True, reconnection_attempts=0,
-            reconnection_delay=1, reconnection_delay_max=5)
-        self.is_connected = False; self.running = True
-        self.hub_url = hub_url or _resolve_hub_base_url()
-        self._retry_ms = int(os.environ.get("UI_HUB_RETRY_MS", "1500"))
-        @self.sio.event
-        def connect(): self.is_connected = True; self.connection_status.emit(True)
-        @self.sio.event
-        def disconnect(): self.is_connected = False; self.connection_status.emit(False)
-        @self.sio.event
-        def shell_response(data):
-            t = data.get("type"); txt = data.get("text", "")
-            if t == "agent_speech_start": self.agent_speaking.emit(True, txt)
-            elif t == "agent_speech_stop": self.agent_speaking.emit(False, txt); self.agent_thinking.emit(False)
-            elif t == "agent_thinking": self.agent_thinking.emit(True); self.agent_speaking.emit(False, txt)
-            elif t == "user_speech": self.user_speaking.emit(txt)
-            elif t == "agent_reply": self.agent_reply.emit(txt)
-            elif t == "user_message": self.user_message.emit(txt)
-            elif t == "safety_warning": self.safety_warning.emit(txt)
-        @self.sio.event
-        def system_stats(data): self.system_stats.emit(data)
-        @self.sio.event
-        def voice_data(data):
-            amp = data.get("amplitude", 0.0) if isinstance(data, dict) else 0.0
-            if amp > 0.01: self.voice_amplitude.emit(float(amp))
-        @self.sio.event
-        def research_update(data):
-            if isinstance(data, dict): self.deep_research.emit(data)
-        # Phase-22 — live tool telemetry + settings sync channels.
-        @self.sio.event
-        def tool_event(data):
-            if isinstance(data, dict): self.tool_event.emit(data)
-        @self.sio.event
-        def api_key_update(data):
-            if isinstance(data, dict): self.api_key_update.emit(data)
-
-    def run(self):
-        while self.running:
-            ok = False
-            for url in _hub_base_url_candidates(self.hub_url):
-                try:
-                    self.hub_url = url
-                    auth = _hub_socket_auth()
-                    if auth:
-                        self.sio.connect(url, wait_timeout=5, auth=auth)
-                    else:
-                        self.sio.connect(url, wait_timeout=5)
-                    ok = True
-                    while self.running and self.sio.connected: self.msleep(250)
-                    if not self.running: break
-                except Exception: self.connection_status.emit(False)
-            if not self.running: break
-            self.msleep(max(300, self._retry_ms) if not ok else 250)
-
-    def stop(self):
-        self.running = False
-        try:
-            if self.sio.connected:
-                self.sio.disconnect()
-        except Exception as _e:
-            logger.debug("socketio disconnect failed: %s", _e)
-        try: self.sio.shutdown()
-        except Exception as _e:
-            logger.debug("ignored Exception: %s", _e)
 class ShellActionExecutor:
     """Detects actionable commands in user text and executes matching shell tools."""
 
@@ -5709,7 +5627,7 @@ class ChatPage(QWidget):
         status_row.setAlignment(Qt.AlignmentFlag.AlignCenter)
         status_row.setSpacing(20)
         # AI Brain status
-        ai_available = _BRAIN and _BRAIN.providers
+        ai_available = brain_has_providers(load=False) or has_configured_ai_key()
         ai_label = "AI CONNECTED" if ai_available else "LOCAL MODE"
         ai_color = C_SUCCESS if ai_available else C_WARNING
         dot = QLabel()
@@ -9354,8 +9272,7 @@ class SettingsPage(QWidget):
 
     def _refresh_brain_providers(self):
         try:
-            if _BRAIN is not None and hasattr(_BRAIN, "reload_providers"):
-                _BRAIN.reload_providers()
+            reload_brain_providers()
         except Exception as _e:
             logger.debug("brain provider reload failed: %s", _e)
 
@@ -9468,9 +9385,9 @@ class SettingsPage(QWidget):
         try:
             active_provider_keys = {
                 f"{name.upper()}_API_KEY"
-                for name in (getattr(_BRAIN, "providers", {}) or {}).keys()
+                for name in brain_provider_names(load=False)
             }
-            if "gemini" in (getattr(_BRAIN, "providers", {}) or {}):
+            if "gemini" in brain_provider_names(load=False):
                 active_provider_keys.add("GOOGLE_API_KEY")
         except Exception:
             active_provider_keys = set()
@@ -10372,7 +10289,12 @@ class ShellHoloUI(QMainWindow):
         # Toast notification overlay
         self._toast = ToastNotification(self)
 
-        QTimer.singleShot(3000, self._start_backend)
+        if self._socketio_auto_start_enabled():
+            QTimer.singleShot(3000, self._start_backend)
+        else:
+            logger.info("Socket.IO UI client deferred; use reconnect when hub events are needed.")
+        if self._livekit_audio_enabled():
+            QTimer.singleShot(3000, self._start_livekit_audio_client)
         QTimer.singleShot(1000, self._start_telemetry)
         QTimer.singleShot(250, self._warmup_low_latency_runtime)
 
@@ -10913,28 +10835,36 @@ class ShellHoloUI(QMainWindow):
         client.safety_warning.connect(self._on_safety_warning)
         client.deep_research.connect(self._on_research_update)
 
+    def _socketio_auto_start_enabled(self):
+        raw = os.environ.get("SHELL_AUTO_START_SOCKETIO", os.environ.get("SHELL_HUB_AUTOCONNECT", "0"))
+        return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _livekit_audio_enabled(self):
+        return os.environ.get("SHELL_ENABLE_LIVEKIT_AUDIO_CLIENT", "0").strip().lower() in {"1", "true", "yes"}
+
     def _start_backend(self):
         try:
             if self._sio is not None and self._sio.isRunning():
                 return
-            self._sio = SocketIOClient()
+            self._sio = _create_socketio_client()
             self._connect_socketio_signals(self._sio)
             self._sio.start()
         except Exception as e:
             logging.warning(f"SocketIO start failed: {e}")
             self._sio = None
 
-        if os.environ.get("SHELL_ENABLE_LIVEKIT_AUDIO_CLIENT", "0").strip().lower() in {"1", "true", "yes"}:
-            try:
-                self._lk = LiveKitAudioClient()
-                self._lk.audio_amplitude.connect(self._on_voice)
-                self._lk.start()
-            except Exception as e:
-                logging.warning(f"LiveKit start failed: {e}")
-                self._lk = None
-        else:
+    def _start_livekit_audio_client(self):
+        if not self._livekit_audio_enabled():
             self._lk = None
             logger.info("LiveKit UI audio bridge disabled; local TTS remains active.")
+            return
+        try:
+            self._lk = LiveKitAudioClient()
+            self._lk.audio_amplitude.connect(self._on_voice)
+            self._lk.start()
+        except Exception as e:
+            logging.warning(f"LiveKit start failed: {e}")
+            self._lk = None
 
     def _restart_socketio_client(self):
         old = getattr(self, "_sio", None)
@@ -10947,7 +10877,7 @@ class ShellHoloUI(QMainWindow):
         self._sio = None
 
         try:
-            self._sio = SocketIOClient()
+            self._sio = _create_socketio_client()
             self._connect_socketio_signals(self._sio)
             self._sio.start()
             if hasattr(self, "toasts") and self.toasts is not None:
@@ -11303,7 +11233,7 @@ class ShellHoloUI(QMainWindow):
         # Notify SocketIO backend
         if hasattr(self, "_sio") and self._sio and self._sio.is_connected:
             try:
-                self._sio.sio.emit("gui_input", {"type": "mute_toggle", "muted": muted})
+                self._sio.emit_gui_input({"type": "mute_toggle", "muted": muted})
             except Exception as _e:
                 logger.debug("ignored Exception: %s", _e)
         self.system_page.add_log_entry("Voice Mute", "MUTED" if muted else "UNMUTED",
@@ -11774,7 +11704,8 @@ class ShellHoloUI(QMainWindow):
         self.top_bar.add_tokens(max(1, len(text) // 4))
 
         # Send to AI (same pipeline as chat)
-        if _BRAIN and _BRAIN.providers:
+        brain = get_brain()
+        if brain and getattr(brain, "providers", None):
             if hasattr(self, '_voice_worker') and self._voice_worker and self._voice_worker.isRunning():
                 try: self._voice_worker.reply_ready.disconnect()
                 except Exception as _e:
@@ -11790,7 +11721,7 @@ class ShellHoloUI(QMainWindow):
                     logger.debug("ignored Exception: %s", _e)
             self._voice_streaming_text = ""
             self._voice_stream_spoken_upto = 0
-            self._voice_worker = AIChatWorker(_BRAIN, text, history=self._chat_history, parent=self)
+            self._voice_worker = AIChatWorker(brain, text, history=self._chat_history, parent=self)
             self._voice_worker.reply_ready.connect(self._on_voice_ai_reply)
             self._voice_worker.reply_error.connect(self._on_voice_ai_error)
             self._voice_worker.chunk_received.connect(self._on_voice_stream_chunk)
@@ -11927,7 +11858,7 @@ class ShellHoloUI(QMainWindow):
                 files = list(getattr(self.chat_page, "_last_sent_files", []) or [])
                 if files:
                     payload["files"] = files
-                self._sio.sio.emit("gui_input", payload)
+                self._sio.emit_gui_input(payload)
             except Exception as _e:
                 logger.debug("ignored Exception: %s", _e)
 
@@ -12063,7 +11994,8 @@ class ShellHoloUI(QMainWindow):
         self._deliver_local_ai_fallback(error)
 
     def _start_inprocess_ai_fallback(self, error):
-        if not (_BRAIN and getattr(_BRAIN, "providers", None)):
+        brain = get_brain()
+        if not (brain and getattr(brain, "providers", None)):
             return False
         if getattr(self, "_stream_bubble", None) is not None:
             return False
@@ -12077,7 +12009,7 @@ class ShellHoloUI(QMainWindow):
             self._stream_bubble = None
             text = getattr(self, "_last_user_text", "hello")
             self.system_page.add_log_entry("AI Fallback", "Shell-v2 down, using local brain", "PROCESSING")
-            self._inprocess_ai_worker = AIChatWorker(_BRAIN, text, history=self._chat_history, parent=self)
+            self._inprocess_ai_worker = AIChatWorker(brain, text, history=self._chat_history, parent=self)
             self._inprocess_ai_worker.reply_ready.connect(self._on_ai_reply)
             self._inprocess_ai_worker.reply_error.connect(self._on_inprocess_ai_error)
             self._inprocess_ai_worker.chunk_received.connect(self._on_stream_chunk)

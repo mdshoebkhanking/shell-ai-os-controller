@@ -57,3 +57,30 @@ def test_memory_probe_realtime_thread_cleanup() -> None:
     assert realtime["thread_cleaned_up"] is True
     assert realtime["thread_count_after"] <= realtime["thread_count_before"]
     assert realtime["modules_after"]["livekit_rtc"] is False
+
+
+def test_memory_probe_network_thread_cleanup() -> None:
+    from tools.memory_probe import build_report
+
+    report = build_report(include_ui=False, include_tts=False, include_network=True, stress_iterations=1)
+    network_snapshot = next(item for item in report["snapshots"] if item["name"] == "after_network_probe")
+    network = network_snapshot["network"]
+
+    assert network["connected_before_stop"] is True
+    assert network["final_connected"] is False
+    assert network["emit_ok"] is True
+    assert network["thread_cleaned_up"] is True
+    assert network["thread_count_after"] <= network["thread_count_before"]
+    assert network["modules_after"] == network["modules_before"]
+
+
+def test_memory_probe_ai_runtime_stays_lazy() -> None:
+    from tools.memory_probe import build_report
+
+    report = build_report(include_ui=False, include_tts=False, include_ai_runtime=True, stress_iterations=1)
+    ai_snapshot = next(item for item in report["snapshots"] if item["name"] == "after_ai_runtime_probe")
+    ai_runtime = ai_snapshot["ai_runtime"]
+
+    assert ai_runtime["providers_loaded"] is False
+    assert ai_runtime["metrics"]["loaded"] is False
+    assert ai_runtime["modules_after"] == ai_runtime["modules_before"]

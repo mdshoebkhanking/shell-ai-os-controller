@@ -41,12 +41,6 @@ from PyQt6.QtWidgets import (
 )
 
 try:
-    import socketio  # type: ignore
-except Exception as _e:
-    socketio = None
-    logger.warning("python-socketio not available: %s", _e)
-
-try:
     from shell_ui.design_tokens import T, text_for_fill
 except Exception:
     class _FallbackType:
@@ -196,10 +190,8 @@ class QuickLauncher(QWidget):
         self._wire()
         # Hidden at start.
         self.hide()
-        # Spin up the Socket.IO client in a worker thread so init is fast.
-        self._connect_thread = threading.Thread(
-            target=self._connect_socketio, daemon=True)
-        self._connect_thread.start()
+        # Socket.IO is intentionally demand-loaded. Creating the hidden
+        # launcher during UI first paint must not hydrate engineio/aiohttp.
         # Auto-close after 12s of inactivity.
         self._auto_close = QTimer(self)
         self._auto_close.setSingleShot(True)
@@ -364,6 +356,14 @@ class QuickLauncher(QWidget):
             except Exception: pass
 
     # ----- Socket.IO -----
+    def _ensure_connecting(self):
+        if self._connected:
+            return
+        if self._connect_thread is not None and self._connect_thread.is_alive():
+            return
+        self._connect_thread = threading.Thread(target=self._connect_socketio, daemon=True)
+        self._connect_thread.start()
+
     def _hub_urls(self):
         urls = []
         env = os.environ.get("SHELL_HUB_URL")
@@ -385,8 +385,13 @@ class QuickLauncher(QWidget):
         return urls
 
     def _connect_socketio(self):
+        try:
+            from shell_network_runtime import _load_socketio_module
+            socketio, error = _load_socketio_module()
+        except Exception as exc:
+            socketio, error = None, f"python-socketio unavailable: {exc}"
         if socketio is None:
-            self._set_status_from_thread("python-socketio missing — install it")
+            self._set_status_from_thread(error or "python-socketio missing — install it")
             return
         self._sio = socketio.Client(reconnection=True, reconnection_attempts=0)
 
@@ -452,6 +457,7 @@ class QuickLauncher(QWidget):
         if not text:
             return
         if self._sio is None or not self._connected:
+            self._ensure_connecting()
             self.status.setText("Hub offline — message not sent")
             return
         try:
@@ -489,6 +495,7 @@ class QuickLauncher(QWidget):
             self._position_centre()
             self.setWindowState(Qt.WindowState.WindowActive)
             self.show()
+            self._ensure_connecting()
             self.raise_()
             self.activateWindow()
             QTimer.singleShot(50, self._focus_input)
