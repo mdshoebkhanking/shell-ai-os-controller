@@ -1,6 +1,5 @@
 
 import os
-import aiohttp
 from .base import ModelProvider
 
 class GroqProvider(ModelProvider):
@@ -19,6 +18,7 @@ class GroqProvider(ModelProvider):
     async def generate_response_async(self, messages, model="llama-3.3-70b-versatile", **kwargs):
         if not self.api_key:
             raise Exception("Groq API Key missing")
+        import aiohttp
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

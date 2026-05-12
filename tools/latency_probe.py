@@ -79,11 +79,44 @@ def _tts_playback_probe(text: str, timeout_s: float = 10.0):
     }
 
 
+def _provider_runtime_probe():
+    modules_before = {
+        "brain_core": "brain.core" in sys.modules,
+        "openai": "openai" in sys.modules,
+        "google_genai": "google.genai" in sys.modules,
+        "aiohttp": "aiohttp" in sys.modules,
+        "openai_provider": "brain.providers.openai_p" in sys.modules,
+        "gemini_provider": "brain.providers.gemini_p" in sys.modules,
+        "groq_provider": "brain.providers.groq_p" in sys.modules,
+    }
+    started = time.perf_counter()
+    from brain.core import MultiAIBrain
+
+    brain = MultiAIBrain.get_instance()
+    init_ms = round((time.perf_counter() - started) * 1000.0, 3)
+    return {
+        "provider_count": len(brain.providers),
+        "provider_names": sorted(brain.providers.keys()),
+        "init_ms": init_ms,
+        "modules_before": modules_before,
+        "modules_after": {
+            "brain_core": "brain.core" in sys.modules,
+            "openai": "openai" in sys.modules,
+            "google_genai": "google.genai" in sys.modules,
+            "aiohttp": "aiohttp" in sys.modules,
+            "openai_provider": "brain.providers.openai_p" in sys.modules,
+            "gemini_provider": "brain.providers.gemini_p" in sys.modules,
+            "groq_provider": "brain.providers.groq_p" in sys.modules,
+        },
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure Shell low-latency hot paths.")
     parser.add_argument("--ui", action="store_true", help="Also instantiate the PyQt UI offscreen.")
     parser.add_argument("--tts-playback", action="store_true", help="Play a short audible TTS sample and measure playback start.")
     parser.add_argument("--tts-text", default="Shell voice test. Awaaz aa rahi hai?")
+    parser.add_argument("--provider-runtime", action="store_true", help="Measure lazy AI provider runtime initialization.")
     parser.add_argument("--json-out", default="")
     args = parser.parse_args()
 
@@ -135,6 +168,9 @@ def main() -> int:
             return {"pages": window.pages.count()}
 
         samples.append(_measure("ui.init_first_paint", _ui_init))
+
+    if args.provider_runtime:
+        samples.append(_measure("ai.provider_runtime_init", _provider_runtime_probe))
 
     report = {
         "ok": all(sample["ok"] for sample in samples if sample["name"] != "shell_v2.connect_1s"),

@@ -267,6 +267,42 @@ def _ai_runtime_probe() -> dict[str, Any]:
     }
 
 
+def _provider_runtime_probe() -> dict[str, Any]:
+    modules_before = {
+        "brain_core": "brain.core" in sys.modules,
+        "openai": "openai" in sys.modules,
+        "google_genai": "google.genai" in sys.modules,
+        "google_generativeai": "google.generativeai" in sys.modules,
+        "aiohttp": "aiohttp" in sys.modules,
+        "mistral": "mistralai.client" in sys.modules,
+        "openai_provider": "brain.providers.openai_p" in sys.modules,
+        "gemini_provider": "brain.providers.gemini_p" in sys.modules,
+        "groq_provider": "brain.providers.groq_p" in sys.modules,
+    }
+    from brain.core import MultiAIBrain
+
+    brain = MultiAIBrain.get_instance()
+    diagnostics = brain.get_provider_runtime_diagnostics()
+    modules_after = {
+        "brain_core": "brain.core" in sys.modules,
+        "openai": "openai" in sys.modules,
+        "google_genai": "google.genai" in sys.modules,
+        "google_generativeai": "google.generativeai" in sys.modules,
+        "aiohttp": "aiohttp" in sys.modules,
+        "mistral": "mistralai.client" in sys.modules,
+        "openai_provider": "brain.providers.openai_p" in sys.modules,
+        "gemini_provider": "brain.providers.gemini_p" in sys.modules,
+        "groq_provider": "brain.providers.groq_p" in sys.modules,
+    }
+    return {
+        "provider_count": len(brain.providers),
+        "provider_names": sorted(brain.providers.keys()),
+        "diagnostics": diagnostics,
+        "modules_before": modules_before,
+        "modules_after": modules_after,
+    }
+
+
 def build_report(
     *,
     include_ui: bool,
@@ -275,6 +311,7 @@ def build_report(
     include_realtime: bool = False,
     include_network: bool = False,
     include_ai_runtime: bool = False,
+    include_provider_runtime: bool = False,
     stress_iterations: int = 10,
 ) -> dict[str, Any]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -342,6 +379,11 @@ def build_report(
         ui = _ui_probe()
         snapshots.append(_snapshot("after_ui_first_paint", started, ui=ui))
 
+    if include_provider_runtime:
+        started = time.perf_counter()
+        provider_runtime = _provider_runtime_probe()
+        snapshots.append(_snapshot("after_provider_runtime_probe", started, provider_runtime=provider_runtime))
+
     previous = snapshots[0]["rss_mb"]
     for item in snapshots:
         current = item["rss_mb"]
@@ -359,6 +401,7 @@ def build_report(
         "include_realtime": include_realtime,
         "include_network": include_network,
         "include_ai_runtime": include_ai_runtime,
+        "include_provider_runtime": include_provider_runtime,
         "peak_rss_mb": peak,
         "snapshots": snapshots,
     }
@@ -372,6 +415,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--realtime", action="store_true", help="Run a synthetic realtime audio thread cleanup probe.")
     parser.add_argument("--network", action="store_true", help="Run a synthetic Socket.IO runtime cleanup probe.")
     parser.add_argument("--ai-runtime", action="store_true", help="Verify the AI brain lazy runtime stays unloaded.")
+    parser.add_argument("--provider-runtime", action="store_true", help="Verify brain provider SDKs stay lazy after brain initialization.")
     parser.add_argument("--stress-iterations", type=int, default=10, help="Repeated catalog/tool iterations for retention checks.")
     parser.add_argument("--json-out", default="", help="Optional JSON output path.")
     args = parser.parse_args(argv)
@@ -383,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
         include_realtime=args.realtime,
         include_network=args.network,
         include_ai_runtime=args.ai_runtime,
+        include_provider_runtime=args.provider_runtime,
         stress_iterations=args.stress_iterations,
     )
     text = json.dumps(report, indent=2, sort_keys=True)

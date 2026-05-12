@@ -10,11 +10,14 @@ def test_full_validation_gate_covers_release_blockers() -> None:
     assert "ui_e2e_probe" in names
     assert "latency_probe_ui" in names
     assert "memory_probe_ui_tts" in names
+    latency_step = next(step for step in build_steps("python") if step.name == "latency_probe_ui")
+    assert "--provider-runtime" in latency_step.command
     memory_step = next(step for step in build_steps("python") if step.name == "memory_probe_ui_tts")
     assert "--listener" in memory_step.command
     assert "--realtime" in memory_step.command
     assert "--network" in memory_step.command
     assert "--ai-runtime" in memory_step.command
+    assert "--provider-runtime" in memory_step.command
     assert "strict_public_release_check" in names
     assert "config_diagnostics" in names
     assert "build_public_release_package" in names

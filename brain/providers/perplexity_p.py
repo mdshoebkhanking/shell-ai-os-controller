@@ -1,6 +1,5 @@
 
 import os
-import aiohttp
 import asyncio
 from typing import List, Dict
 from .base import ModelProvider
@@ -26,6 +25,7 @@ class PerplexityProvider(ModelProvider):
         """
         if not self.api_key:
             raise Exception("Perplexity API Key missing")
+        import aiohttp
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

@@ -2,25 +2,19 @@ import os
 from typing import List, Dict, Any
 from .base import ModelProvider
 
-try:
-    from openai import OpenAI, AsyncOpenAI
-    _OPENAI_AVAILABLE = True
-except ImportError:
-    OpenAI = None
-    AsyncOpenAI = None
-    _OPENAI_AVAILABLE = False
-
 
 class OpenAIProvider(ModelProvider):
     def __init__(self):
         # Fail-fast so MultiBrain skips cleanly if SDK is missing or
         # the key isn't set, instead of constructing an `OpenAI()` with
         # None key (which raises a confusing OpenAIError deep inside).
-        if not _OPENAI_AVAILABLE:
-            raise ImportError("openai SDK not installed. pip install openai")
         self.api_key = os.getenv("OPENAI_API_KEY", "").strip()
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found or empty in environment")
+        try:
+            from openai import OpenAI, AsyncOpenAI
+        except ImportError:
+            raise ImportError("openai SDK not installed. pip install openai")
         self.client = OpenAI(api_key=self.api_key)
         self.async_client = AsyncOpenAI(api_key=self.api_key)
 

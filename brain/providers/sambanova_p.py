@@ -1,6 +1,5 @@
 
 import os
-import aiohttp
 from .base import ModelProvider
 
 class SambaNovaProvider(ModelProvider):
@@ -24,6 +23,7 @@ class SambaNovaProvider(ModelProvider):
     async def generate_response_async(self, messages, model="Meta-Llama-3.1-405B-Instruct", **kwargs):
         if not self.api_key:
             raise Exception("SambaNova API Key missing")
+        import aiohttp
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",

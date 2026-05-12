@@ -2,19 +2,24 @@ import os
 from typing import List, Dict
 from .base import ModelProvider
 
-try:
-    from mistralai.client import MistralClient
-    from mistralai.async_client import MistralAsyncClient
-    from mistralai.models.chat_completion import ChatMessage
-except ImportError:
-    MistralClient = None
-    MistralAsyncClient = None
-    ChatMessage = None
-
 class MistralProvider(ModelProvider):
     def __init__(self):
         self.api_key = os.getenv("MISTRAL_API_KEY")
-        if MistralClient and self.api_key:
+        self._chat_message_cls = None
+        if self.api_key:
+            try:
+                from mistralai.client import MistralClient
+                from mistralai.async_client import MistralAsyncClient
+                from mistralai.models.chat_completion import ChatMessage
+            except ImportError:
+                MistralClient = None
+                MistralAsyncClient = None
+                ChatMessage = None
+            self._chat_message_cls = ChatMessage
+        else:
+            MistralClient = None
+            MistralAsyncClient = None
+        if MistralClient and MistralAsyncClient and self.api_key:
             self.client = MistralClient(api_key=self.api_key)
             self.async_client = MistralAsyncClient(api_key=self.api_key)
         else:
@@ -26,9 +31,9 @@ class MistralProvider(ModelProvider):
         return "Mistral"
 
     def _convert_messages(self, messages: List[Dict[str, str]]):
-        if not ChatMessage:
+        if not self._chat_message_cls:
             return []
-        return [ChatMessage(role=m["role"], content=m["content"]) for m in messages]
+        return [self._chat_message_cls(role=m["role"], content=m["content"]) for m in messages]
 
     def generate_response(self, messages: List[Dict[str, str]], **kwargs) -> str:
         if not self.client:

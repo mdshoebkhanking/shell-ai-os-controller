@@ -25,15 +25,7 @@ from typing import List, Dict, Optional, Any, AsyncGenerator
 from collections import OrderedDict, Counter
 from datetime import datetime
 from .router import SmartRouter
-from .providers.openai_p import OpenAIProvider
-from .providers.mistral_p import MistralProvider
-from .providers.blackbox_p import BlackboxProvider
-from .providers.groq_p import GroqProvider
-from .providers.sambanova_p import SambaNovaProvider
-from .providers.gemini_p import GeminiProvider
-from .providers.perplexity_p import PerplexityProvider
-from .providers.deepseek_p import DeepSeekProvider
-from .providers.openrouter_p import OpenRouterProvider
+from .provider_runtime import build_lazy_providers, provider_runtime_diagnostics
 
 logger = logging.getLogger("MultiBrain")
 
@@ -392,27 +384,9 @@ class MultiAIBrain:
         return cls._instance
 
     def _initialize_providers(self):
-        provider_map = {
-            "groq": GroqProvider,
-            "gemini": GeminiProvider,
-            "deepseek": DeepSeekProvider,
-            "openrouter": OpenRouterProvider,
-            "sambanova": SambaNovaProvider,
-            # Blackbox public endpoint (api.blackbox.ai/api/chat) returns
-            # 404 since their API was restructured. Disabled by default —
-            # set BLACKBOX_ENABLED=1 in .env if you have a working URL.
-            **({"blackbox": BlackboxProvider}
-               if os.getenv("BLACKBOX_ENABLED", "0").strip() == "1" else {}),
-            "openai": OpenAIProvider,
-            "mistral": MistralProvider,
-            "perplexity": PerplexityProvider,
-        }
-        for name, cls in provider_map.items():
-            try:
-                self.providers[name] = cls()
-                logger.info(f"Provider '{name}' initialized.")
-            except Exception as e:
-                logger.warning(f"Provider '{name}' unavailable: {e}")
+        self.providers = build_lazy_providers()
+        for name in self.providers:
+            logger.info("Provider '%s' registered for lazy initialization.", name)
 
         if not self.providers:
             logger.error("CRITICAL: No AI providers initialized! Check API keys in .env")
@@ -423,6 +397,10 @@ class MultiAIBrain:
         self.health = ProviderHealth()
         self._initialize_providers()
         return sorted(self.providers.keys())
+
+    def get_provider_runtime_diagnostics(self) -> Dict[str, Any]:
+        """Expose provider hydration state without forcing provider imports."""
+        return provider_runtime_diagnostics(self.providers)
 
     # ------------------------------------------------------------------
     # Token estimation & prompt compression
