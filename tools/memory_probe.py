@@ -303,6 +303,53 @@ def _provider_runtime_probe() -> dict[str, Any]:
     }
 
 
+def _provider_transport_probe() -> dict[str, Any]:
+    from brain.provider_transport import (
+        close_aiohttp_sessions,
+        get_aiohttp_session,
+        provider_transport_stats,
+        set_session_factory_for_tests,
+    )
+
+    class FakeSession:
+        def __init__(self, owner: str, timeout_s: float):
+            self.owner = owner
+            self.timeout_s = timeout_s
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+    created: list[FakeSession] = []
+
+    async def _run():
+        set_session_factory_for_tests(lambda owner, timeout_s: created.append(FakeSession(owner, timeout_s)) or created[-1])
+        try:
+            before = provider_transport_stats()
+            first = await get_aiohttp_session("probe", timeout_s=5)
+            second = await get_aiohttp_session("probe", timeout_s=5)
+            after_reuse = provider_transport_stats()
+            closed = await close_aiohttp_sessions()
+            after_close = provider_transport_stats()
+            return {
+                "reused": first is second,
+                "created": len(created),
+                "closed": closed,
+                "session_closed": bool(created and created[0].closed),
+                "before": before,
+                "after_reuse": after_reuse,
+                "after_close": after_close,
+                "aiohttp_loaded": "aiohttp" in sys.modules,
+            }
+        finally:
+            set_session_factory_for_tests(None)
+            await close_aiohttp_sessions()
+
+    import asyncio
+
+    return asyncio.run(_run())
+
+
 def build_report(
     *,
     include_ui: bool,
@@ -312,6 +359,7 @@ def build_report(
     include_network: bool = False,
     include_ai_runtime: bool = False,
     include_provider_runtime: bool = False,
+    include_provider_transport: bool = False,
     stress_iterations: int = 10,
 ) -> dict[str, Any]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -384,6 +432,11 @@ def build_report(
         provider_runtime = _provider_runtime_probe()
         snapshots.append(_snapshot("after_provider_runtime_probe", started, provider_runtime=provider_runtime))
 
+    if include_provider_transport:
+        started = time.perf_counter()
+        provider_transport = _provider_transport_probe()
+        snapshots.append(_snapshot("after_provider_transport_probe", started, provider_transport=provider_transport))
+
     previous = snapshots[0]["rss_mb"]
     for item in snapshots:
         current = item["rss_mb"]
@@ -402,6 +455,7 @@ def build_report(
         "include_network": include_network,
         "include_ai_runtime": include_ai_runtime,
         "include_provider_runtime": include_provider_runtime,
+        "include_provider_transport": include_provider_transport,
         "peak_rss_mb": peak,
         "snapshots": snapshots,
     }
@@ -416,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--network", action="store_true", help="Run a synthetic Socket.IO runtime cleanup probe.")
     parser.add_argument("--ai-runtime", action="store_true", help="Verify the AI brain lazy runtime stays unloaded.")
     parser.add_argument("--provider-runtime", action="store_true", help="Verify brain provider SDKs stay lazy after brain initialization.")
+    parser.add_argument("--provider-transport", action="store_true", help="Verify provider HTTP session reuse and cleanup.")
     parser.add_argument("--stress-iterations", type=int, default=10, help="Repeated catalog/tool iterations for retention checks.")
     parser.add_argument("--json-out", default="", help="Optional JSON output path.")
     args = parser.parse_args(argv)
@@ -428,6 +483,7 @@ def main(argv: list[str] | None = None) -> int:
         include_network=args.network,
         include_ai_runtime=args.ai_runtime,
         include_provider_runtime=args.provider_runtime,
+        include_provider_transport=args.provider_transport,
         stress_iterations=args.stress_iterations,
     )
     text = json.dumps(report, indent=2, sort_keys=True)

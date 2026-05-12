@@ -1,5 +1,6 @@
 
 import os
+from brain.provider_transport import get_aiohttp_session
 from .base import ModelProvider
 
 class GroqProvider(ModelProvider):
@@ -18,7 +19,6 @@ class GroqProvider(ModelProvider):
     async def generate_response_async(self, messages, model="llama-3.3-70b-versatile", **kwargs):
         if not self.api_key:
             raise Exception("Groq API Key missing")
-        import aiohttp
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -35,10 +35,10 @@ class GroqProvider(ModelProvider):
             "max_tokens": 1024
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.base_url, headers=headers, json=payload) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise Exception(f"Groq Error {resp.status}: {text}")
-                result = await resp.json()
-                return result['choices'][0]['message']['content']
+        session = await get_aiohttp_session("groq", timeout_s=60)
+        async with session.post(self.base_url, headers=headers, json=payload) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(f"Groq Error {resp.status}: {text}")
+            result = await resp.json()
+            return result['choices'][0]['message']['content']

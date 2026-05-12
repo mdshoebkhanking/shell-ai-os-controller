@@ -5,6 +5,7 @@ import asyncio
 import urllib.request
 import urllib.error
 from typing import List, Dict
+from brain.provider_transport import get_aiohttp_session
 from .base import ModelProvider
 
 logger = logging.getLogger("blackbox_provider")
@@ -96,7 +97,6 @@ class BlackboxProvider(ModelProvider):
     async def generate_response_async(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Async response. Uses aiohttp if available, otherwise runs sync in executor."""
         try:
-            import aiohttp
             return await self._async_aiohttp(messages, **kwargs)
         except ImportError:
             loop = asyncio.get_event_loop()
@@ -104,8 +104,6 @@ class BlackboxProvider(ModelProvider):
 
     async def _async_aiohttp(self, messages: List[Dict[str, str]], **kwargs) -> str:
         """Async implementation using aiohttp."""
-        import aiohttp
-
         model = kwargs.get("model", "blackboxai")
         temperature = kwargs.get("temperature", 0.7)
         max_tokens = kwargs.get("max_tokens", 4096)
@@ -125,45 +123,39 @@ class BlackboxProvider(ModelProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
 
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.api_url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=60)
-                ) as resp:
-                    raw = await resp.text()
+            session = await get_aiohttp_session("blackbox", timeout_s=60)
+            async with session.post(self.api_url, json=payload, headers=headers) as resp:
+                raw = await resp.text()
 
-                    if resp.status != 200:
-                        logger.error(f"Blackbox HTTP error {resp.status}: {raw[:500]}")
-                        # RAISE so MultiBrain falls through. Returning the
-                        # error string was leaking into user chat.
-                        raise RuntimeError(
-                            f"Blackbox HTTP {resp.status}: {raw[:200]}")
+                if resp.status != 200:
+                    logger.error(f"Blackbox HTTP error {resp.status}: {raw[:500]}")
+                    # RAISE so MultiBrain falls through. Returning the
+                    # error string was leaking into user chat.
+                    raise RuntimeError(
+                        f"Blackbox HTTP {resp.status}: {raw[:200]}")
 
-                    # Try JSON parse
-                    try:
-                        parsed = json.loads(raw)
-                        if isinstance(parsed, dict):
-                            if "choices" in parsed:
-                                return parsed["choices"][0]["message"]["content"]
-                            if "message" in parsed:
-                                content = parsed["message"]
-                                if isinstance(content, dict):
-                                    return content.get("content", str(content))
-                                return str(content)
-                            if "text" in parsed:
-                                return parsed["text"]
-                            if "response" in parsed:
-                                return parsed["response"]
-                            if "content" in parsed:
-                                return parsed["content"]
-                        return str(parsed)
-                    except json.JSONDecodeError:
-                        if raw.strip():
-                            return raw.strip()
-                        return "Blackbox AI returned an empty response."
-
-        except aiohttp.ClientError as e:
-            logger.error(f"Blackbox aiohttp error: {e}")
-            raise RuntimeError(f"Blackbox connection error: {e}")
+                # Try JSON parse
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, dict):
+                        if "choices" in parsed:
+                            return parsed["choices"][0]["message"]["content"]
+                        if "message" in parsed:
+                            content = parsed["message"]
+                            if isinstance(content, dict):
+                                return content.get("content", str(content))
+                            return str(content)
+                        if "text" in parsed:
+                            return parsed["text"]
+                        if "response" in parsed:
+                            return parsed["response"]
+                        if "content" in parsed:
+                            return parsed["content"]
+                    return str(parsed)
+                except json.JSONDecodeError:
+                    if raw.strip():
+                        return raw.strip()
+                    return "Blackbox AI returned an empty response."
 
         except asyncio.TimeoutError:
             logger.error("Blackbox request timed out")

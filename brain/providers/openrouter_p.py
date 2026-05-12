@@ -17,6 +17,7 @@ import asyncio
 import json
 import logging
 from typing import List, Dict
+from brain.provider_transport import get_aiohttp_session
 from .base import ModelProvider
 
 logger = logging.getLogger("openrouter_provider")
@@ -109,17 +110,13 @@ class OpenRouterProvider(ModelProvider):
         }
 
         try:
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    self.base_url, json=payload, headers=headers,
-                    timeout=aiohttp.ClientTimeout(total=60)
-                ) as resp:
-                    if resp.status != 200:
-                        text = await resp.text()
-                        raise Exception(f"OpenRouter HTTP {resp.status}: {text[:500]}")
-                    result = await resp.json()
-                    return result["choices"][0]["message"]["content"]
+            session = await get_aiohttp_session("openrouter", timeout_s=60)
+            async with session.post(self.base_url, json=payload, headers=headers) as resp:
+                if resp.status != 200:
+                    text = await resp.text()
+                    raise Exception(f"OpenRouter HTTP {resp.status}: {text[:500]}")
+                result = await resp.json()
+                return result["choices"][0]["message"]["content"]
         except ImportError:
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(

@@ -69,6 +69,7 @@ def build_steps(python: str) -> list[ValidationStep]:
                 "--network",
                 "--ai-runtime",
                 "--provider-runtime",
+                "--provider-transport",
                 "--json-out",
                 ".shell_runtime/memory_full_validation.json",
             ),

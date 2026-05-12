@@ -1052,6 +1052,11 @@ class AIChatWorker(QThread):
                                 mode="FAST")
                         )
                     finally:
+                        try:
+                            if hasattr(self._brain, "close_provider_sessions"):
+                                loop.run_until_complete(self._brain.close_provider_sessions())
+                        except Exception as _e:
+                            logging.debug("brain provider session cleanup failed: %s", _e)
                         loop.close()
 
                     if reply and "All Brains Failed" not in reply:
@@ -1111,6 +1116,11 @@ class AIChatWorker(QThread):
                         self._brain.generate_response(full_prompt, system_prompt=self._SYSTEM_PROMPT, mode=mode)
                     )
             finally:
+                try:
+                    if hasattr(self._brain, "close_provider_sessions"):
+                        loop.run_until_complete(self._brain.close_provider_sessions())
+                except Exception as _e:
+                    logging.debug("brain provider session cleanup failed: %s", _e)
                 loop.close()
 
             if reply and "All Brains Failed" not in reply:

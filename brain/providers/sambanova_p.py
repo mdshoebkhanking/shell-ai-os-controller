@@ -1,5 +1,6 @@
 
 import os
+from brain.provider_transport import get_aiohttp_session
 from .base import ModelProvider
 
 class SambaNovaProvider(ModelProvider):
@@ -23,7 +24,6 @@ class SambaNovaProvider(ModelProvider):
     async def generate_response_async(self, messages, model="Meta-Llama-3.1-405B-Instruct", **kwargs):
         if not self.api_key:
             raise Exception("SambaNova API Key missing")
-        import aiohttp
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -40,10 +40,10 @@ class SambaNovaProvider(ModelProvider):
             "max_tokens": 1024
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.base_url, headers=headers, json=payload) as resp:
-                if resp.status != 200:
-                    text = await resp.text()
-                    raise Exception(f"SambaNova Error {resp.status}: {text}")
-                result = await resp.json()
-                return result['choices'][0]['message']['content']
+        session = await get_aiohttp_session("sambanova", timeout_s=60)
+        async with session.post(self.base_url, headers=headers, json=payload) as resp:
+            if resp.status != 200:
+                text = await resp.text()
+                raise Exception(f"SambaNova Error {resp.status}: {text}")
+            result = await resp.json()
+            return result['choices'][0]['message']['content']

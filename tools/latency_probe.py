@@ -111,6 +111,46 @@ def _provider_runtime_probe():
     }
 
 
+def _provider_transport_probe():
+    from brain.provider_transport import (
+        close_aiohttp_sessions,
+        get_aiohttp_session,
+        provider_transport_stats,
+        set_session_factory_for_tests,
+    )
+
+    class FakeSession:
+        closed = False
+
+        async def close(self):
+            self.closed = True
+
+    created = []
+
+    async def _run():
+        set_session_factory_for_tests(lambda owner, timeout_s: created.append(FakeSession()) or created[-1])
+        try:
+            first = await get_aiohttp_session("latency_probe", timeout_s=5)
+            second = await get_aiohttp_session("latency_probe", timeout_s=5)
+            stats = provider_transport_stats()
+            closed = await close_aiohttp_sessions()
+            return {
+                "reused": first is second,
+                "created": len(created),
+                "closed": closed,
+                "stats_before_close": stats,
+                "stats_after_close": provider_transport_stats(),
+                "aiohttp_loaded": "aiohttp" in sys.modules,
+            }
+        finally:
+            set_session_factory_for_tests(None)
+            await close_aiohttp_sessions()
+
+    import asyncio
+
+    return asyncio.run(_run())
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure Shell low-latency hot paths.")
     parser.add_argument("--ui", action="store_true", help="Also instantiate the PyQt UI offscreen.")
@@ -171,6 +211,7 @@ def main() -> int:
 
     if args.provider_runtime:
         samples.append(_measure("ai.provider_runtime_init", _provider_runtime_probe))
+        samples.append(_measure("ai.provider_transport_reuse", _provider_transport_probe))
 
     report = {
         "ok": all(sample["ok"] for sample in samples if sample["name"] != "shell_v2.connect_1s"),

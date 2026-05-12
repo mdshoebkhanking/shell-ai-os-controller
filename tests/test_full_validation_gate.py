@@ -18,6 +18,7 @@ def test_full_validation_gate_covers_release_blockers() -> None:
     assert "--network" in memory_step.command
     assert "--ai-runtime" in memory_step.command
     assert "--provider-runtime" in memory_step.command
+    assert "--provider-transport" in memory_step.command
     assert "strict_public_release_check" in names
     assert "config_diagnostics" in names
     assert "build_public_release_package" in names

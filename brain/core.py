@@ -402,6 +402,18 @@ class MultiAIBrain:
         """Expose provider hydration state without forcing provider imports."""
         return provider_runtime_diagnostics(self.providers)
 
+    async def close_provider_sessions(self) -> int:
+        """Close reusable async provider transports for the current event loop."""
+        from .provider_transport import close_aiohttp_sessions
+
+        return await close_aiohttp_sessions()
+
+    def get_provider_transport_stats(self) -> Dict[str, Any]:
+        """Expose reusable provider transport state without importing aiohttp."""
+        from .provider_transport import provider_transport_stats
+
+        return provider_transport_stats()
+
     # ------------------------------------------------------------------
     # Token estimation & prompt compression
     # ------------------------------------------------------------------
@@ -893,9 +905,13 @@ Based on the above context, answer this:
             def _run_in_new_loop():
                 new_loop = asyncio.new_event_loop()
                 try:
-                    return new_loop.run_until_complete(
-                        self.generate_response(prompt, system_prompt, mode)
-                    )
+                    async def _run_and_cleanup():
+                        try:
+                            return await self.generate_response(prompt, system_prompt, mode)
+                        finally:
+                            await self.close_provider_sessions()
+
+                    return new_loop.run_until_complete(_run_and_cleanup())
                 finally:
                     new_loop.close()
 
@@ -903,7 +919,13 @@ Based on the above context, answer this:
                 future = pool.submit(_run_in_new_loop)
                 return future.result(timeout=60)
         else:
-            return asyncio.run(self.generate_response(prompt, system_prompt, mode))
+            async def _run_and_cleanup():
+                try:
+                    return await self.generate_response(prompt, system_prompt, mode)
+                finally:
+                    await self.close_provider_sessions()
+
+            return asyncio.run(_run_and_cleanup())
 
     # ------------------------------------------------------------------
     # Statistics & reports
