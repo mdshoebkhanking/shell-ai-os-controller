@@ -63,6 +63,7 @@ def build_steps(python: str) -> list[ValidationStep]:
                 "tools/memory_probe.py",
                 "--ui",
                 "--tts",
+                "--listener",
                 "--json-out",
                 ".shell_runtime/memory_full_validation.json",
             ),

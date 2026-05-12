@@ -5,6 +5,7 @@ import gc
 import json
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any
@@ -85,7 +86,51 @@ def _tts_probe() -> dict[str, Any]:
     return {"system_tts_command": command}
 
 
-def build_report(*, include_ui: bool, include_tts: bool, stress_iterations: int = 10) -> dict[str, Any]:
+def _listener_probe() -> dict[str, Any]:
+    import numpy as np
+
+    from shell_voice_listener_runtime import VoiceListenerThread, _SD_AVAILABLE, _SR_AVAILABLE
+
+    class FakeSoundDevice:
+        @staticmethod
+        def rec(frames, samplerate, channels, dtype, blocking):
+            time.sleep(0.02)
+            return np.zeros((frames, channels), dtype=dtype)
+
+    class FakeSpeechRecognition:
+        class Recognizer:
+            pass
+
+    listener = VoiceListenerThread()
+    listener._load_audio_modules = lambda: (
+        FakeSoundDevice,
+        FakeSpeechRecognition,
+        np,
+        (__import__("io"), __import__("wave")),
+        "",
+    )
+    thread_count_before = threading.active_count()
+    listener.start()
+    time.sleep(0.15)
+    listener.stop_listening()
+    listener.wait(1500)
+    thread_count_after = threading.active_count()
+    return {
+        "sounddevice_available": _SD_AVAILABLE,
+        "speech_recognition_available": _SR_AVAILABLE,
+        "thread_count_before": thread_count_before,
+        "thread_count_after": thread_count_after,
+        "thread_cleaned_up": not listener.isRunning(),
+    }
+
+
+def build_report(
+    *,
+    include_ui: bool,
+    include_tts: bool,
+    include_listener: bool = False,
+    stress_iterations: int = 10,
+) -> dict[str, Any]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("SHELL_V2_TIMEOUT_S", "1")
 
@@ -126,6 +171,11 @@ def build_report(*, include_ui: bool, include_tts: bool, stress_iterations: int 
         tts = _tts_probe()
         snapshots.append(_snapshot("after_tts_probe", started, tts=tts))
 
+    if include_listener:
+        started = time.perf_counter()
+        listener = _listener_probe()
+        snapshots.append(_snapshot("after_listener_probe", started, listener=listener))
+
     if include_ui:
         started = time.perf_counter()
         ui = _ui_probe()
@@ -144,6 +194,7 @@ def build_report(*, include_ui: bool, include_tts: bool, stress_iterations: int 
         "pid": os.getpid(),
         "include_ui": include_ui,
         "include_tts": include_tts,
+        "include_listener": include_listener,
         "peak_rss_mb": peak,
         "snapshots": snapshots,
     }
@@ -153,11 +204,17 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Measure Shell startup, UI, tool, and TTS memory usage.")
     parser.add_argument("--ui", action="store_true", help="Instantiate the PyQt UI offscreen and measure first paint memory.")
     parser.add_argument("--tts", action="store_true", help="Initialize the TTS helper and measure its memory impact.")
+    parser.add_argument("--listener", action="store_true", help="Run a synthetic voice listener thread cleanup probe.")
     parser.add_argument("--stress-iterations", type=int, default=10, help="Repeated catalog/tool iterations for retention checks.")
     parser.add_argument("--json-out", default="", help="Optional JSON output path.")
     args = parser.parse_args(argv)
 
-    report = build_report(include_ui=args.ui, include_tts=args.tts, stress_iterations=args.stress_iterations)
+    report = build_report(
+        include_ui=args.ui,
+        include_tts=args.tts,
+        include_listener=args.listener,
+        stress_iterations=args.stress_iterations,
+    )
     text = json.dumps(report, indent=2, sort_keys=True)
     if args.json_out:
         Path(args.json_out).parent.mkdir(parents=True, exist_ok=True)
