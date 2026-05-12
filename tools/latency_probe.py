@@ -230,6 +230,86 @@ def _streaming_fallback_probe():
         SmartRouter.get_model_for_provider = original_model
 
 
+def _shell_v2_sse_client_probe():
+    from shell_ui.shell_cinematic_full import ShellV2Worker
+
+    class FakeSSEResponse:
+        status = 200
+
+        def __init__(self, chunks: list[str], *, delay_s: float = 0.01) -> None:
+            full = ""
+            lines: list[bytes] = []
+            for chunk in chunks:
+                full += chunk
+                frame = f"event: delta\ndata: {json.dumps({'text': chunk})}\n\n"
+                lines.extend(line.encode("utf-8") for line in frame.splitlines(keepends=True))
+            end = f"event: end\ndata: {json.dumps({'full_reply': full})}\n\n"
+            lines.extend(line.encode("utf-8") for line in end.splitlines(keepends=True))
+            self._lines = lines
+            self._delay_s = delay_s
+            self._idx = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def readline(self) -> bytes:
+            if self._idx >= len(self._lines):
+                return b""
+            if self._delay_s:
+                time.sleep(self._delay_s)
+            line = self._lines[self._idx]
+            self._idx += 1
+            return line
+
+    old_url = ShellV2Worker.SHELL_V2_URL
+    old_timeout = ShellV2Worker.TIMEOUT_S
+    old_urlopen = urllib.request.urlopen
+
+    def fake_urlopen(request, timeout=0):
+        if not str(getattr(request, "full_url", "")).endswith("/api/say-stream"):
+            raise RuntimeError("probe expected Shell-v2 SSE endpoint")
+        return FakeSSEResponse(["Hel", "lo"], delay_s=0.01)
+
+    urllib.request.urlopen = fake_urlopen
+    try:
+        ShellV2Worker.SHELL_V2_URL = "http://127.0.0.1:8765"
+        ShellV2Worker.TIMEOUT_S = 3
+        worker = ShellV2Worker("hello")
+        chunks: list[str] = []
+        replies: list[str] = []
+        errors: list[str] = []
+        done: list[bool] = []
+        events: list[dict[str, object]] = []
+
+        worker.chunk_received.connect(chunks.append)
+        worker.reply_ready.connect(replies.append)
+        worker.reply_error.connect(errors.append)
+        worker.stream_done.connect(lambda: done.append(True))
+
+        def _latency(event, payload):
+            item = {"event": str(event)}
+            if isinstance(payload, dict):
+                item.update(payload)
+            events.append(item)
+
+        worker.latency_event.connect(_latency)
+        worker.run()
+        return {
+            "chunks": chunks,
+            "reply": replies[0] if replies else "",
+            "errors": errors,
+            "done": bool(done),
+            "events": events,
+        }
+    finally:
+        urllib.request.urlopen = old_urlopen
+        ShellV2Worker.SHELL_V2_URL = old_url
+        ShellV2Worker.TIMEOUT_S = old_timeout
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure Shell low-latency hot paths.")
     parser.add_argument("--ui", action="store_true", help="Also instantiate the PyQt UI offscreen.")
@@ -293,6 +373,7 @@ def main() -> int:
         samples.append(_measure("ai.provider_transport_reuse", _provider_transport_probe))
         samples.append(_measure("ai.streaming_first_token", _streaming_first_token_probe))
         samples.append(_measure("ai.streaming_fallback", _streaming_fallback_probe))
+        samples.append(_measure("shell_v2.sse_client_stream", _shell_v2_sse_client_probe))
 
     report = {
         "ok": all(sample["ok"] for sample in samples if sample["name"] != "shell_v2.connect_1s"),

@@ -94,3 +94,10 @@ def test_streaming_reply_keeps_bubble_actions_on_full_text():
     done_src = ast.get_source_segment(SRC, _function("_on_stream_done")) or ""
     assert "_raw_text = self._streaming_text" in chunk_src
     assert "_raw_text = final_text" in done_src
+
+
+def test_streaming_reply_batches_followup_renders_and_flushes_on_done():
+    chunk_src = ast.get_source_segment(SRC, _function("_on_stream_chunk")) or ""
+    done_src = ast.get_source_segment(SRC, _function("_on_stream_done")) or ""
+    assert "_schedule_stream_render()" in chunk_src
+    assert "_flush_stream_render()" in done_src

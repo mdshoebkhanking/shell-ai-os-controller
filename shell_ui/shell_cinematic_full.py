@@ -872,8 +872,14 @@ class ShellV2Worker(QThread):
                     saw_end = False
                     saw_error: str | None = None
                     first_chunk_seen = False
+                    first_line_seen = False
+                    first_frame_seen = False
+                    stream_bytes = 0
+                    sse_frames = 0
+                    chunk_count = 0
                     with urllib.request.urlopen(sreq, timeout=self.TIMEOUT_S) as sresp:
-                        self._emit_latency("stream_headers", started)
+                        status = getattr(sresp, "status", None) or getattr(sresp, "code", None)
+                        self._emit_latency("stream_headers", started, status=status)
                         # SSE frames are separated by a blank line; within
                         # one frame each line is `event: <kind>` or
                         # `data: <json>`. We accumulate per-frame and
@@ -884,10 +890,23 @@ class ShellV2Worker(QThread):
                             raw = sresp.readline()
                             if not raw:
                                 break
+                            stream_bytes += len(raw)
+                            if not first_line_seen:
+                                first_line_seen = True
+                                self._emit_latency("first_sse_line", started, bytes=stream_bytes)
                             line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
                             if line == "":
                                 # Frame boundary — dispatch what we have.
                                 if cur_event is not None and cur_data:
+                                    sse_frames += 1
+                                    if not first_frame_seen:
+                                        first_frame_seen = True
+                                        self._emit_latency(
+                                            "first_sse_frame",
+                                            started,
+                                            sse_event=cur_event,
+                                            bytes=stream_bytes,
+                                        )
                                     payload_str = "\n".join(cur_data)
                                     try:
                                         ev_payload = _json.loads(payload_str)
@@ -897,9 +916,17 @@ class ShellV2Worker(QThread):
                                         chunk = str(ev_payload.get("text") or "")
                                         if chunk:
                                             full_reply += chunk
+                                            chunk_count += 1
                                             if not first_chunk_seen:
                                                 first_chunk_seen = True
-                                                self._emit_latency("first_text_chunk", started, chars=len(chunk))
+                                                self._emit_latency(
+                                                    "first_text_chunk",
+                                                    started,
+                                                    chars=len(chunk),
+                                                    chunks=chunk_count,
+                                                    sse_frames=sse_frames,
+                                                    bytes=stream_bytes,
+                                                )
                                             try:
                                                 self.chunk_received.emit(chunk)
                                             except Exception:
@@ -926,7 +953,14 @@ class ShellV2Worker(QThread):
                         self.reply_error.emit(f"Shell-v2 stream error: {saw_error}")
                         return
                     if saw_end:
-                        self._emit_latency("stream_done", started, chars=len(full_reply))
+                        self._emit_latency(
+                            "stream_done",
+                            started,
+                            chars=len(full_reply),
+                            chunks=chunk_count,
+                            sse_frames=sse_frames,
+                            bytes=stream_bytes,
+                        )
                         try:
                             self.stream_done.emit()
                         except Exception:
@@ -10266,6 +10300,13 @@ class ShellHoloUI(QMainWindow):
         self._streaming_text = ""
         self._stream_bubble = None
         self._stream_first_rendered = False
+        try:
+            self._stream_render_batch_ms = max(0, min(50, int(os.environ.get("SHELL_STREAM_RENDER_BATCH_MS", "16"))))
+        except Exception:
+            self._stream_render_batch_ms = 16
+        self._stream_render_timer = QTimer(self)
+        self._stream_render_timer.setSingleShot(True)
+        self._stream_render_timer.timeout.connect(self._flush_stream_render)
         self._backend_command_workers = []
 
         # Persistent chat history store (sidebar list + ~/.shell_chat_history).
@@ -11983,15 +12024,32 @@ class ShellHoloUI(QMainWindow):
             # Update existing bubble text. ChatBubble exposes `_stream_label`
             # for streaming reveal; the older `_text_label` attribute never
             # existed, so the fallback path below is for safety only.
-            try:
-                self._stream_bubble._raw_text = self._streaming_text
-                lbl = getattr(self._stream_bubble, '_stream_label', None)
-                if lbl is not None:
-                    lbl.setText(self._streaming_text)
-                elif hasattr(self._stream_bubble, 'setText'):
-                    self._stream_bubble.setText(self._streaming_text)
-            except Exception as _e:
-                logger.debug("stream chunk update failed: %s", _e)
+            self._stream_bubble._raw_text = self._streaming_text
+            self._schedule_stream_render()
+
+    def _schedule_stream_render(self):
+        try:
+            if self._stream_render_batch_ms <= 0:
+                self._flush_stream_render()
+                return
+            if not self._stream_render_timer.isActive():
+                self._stream_render_timer.start(self._stream_render_batch_ms)
+        except Exception as _e:
+            logger.debug("stream render schedule failed: %s", _e)
+            self._flush_stream_render()
+
+    def _flush_stream_render(self):
+        try:
+            if self._stream_bubble is None:
+                return
+            lbl = getattr(self._stream_bubble, '_stream_label', None)
+            if lbl is not None:
+                lbl.setText(self._streaming_text)
+            elif hasattr(self._stream_bubble, 'setText'):
+                self._stream_bubble.setText(self._streaming_text)
+        except Exception as _e:
+            logger.debug("stream chunk update failed: %s", _e)
+
     def _on_stream_done(self):
         """Streaming complete — finalize."""
         if not self._waiting_reply:
@@ -12009,6 +12067,11 @@ class ShellHoloUI(QMainWindow):
         # import ChatBubble` would re-import the entire module under a
         # second name when launched as `__main__`, doubling timers + Qt
         # widgets. Use the in-scope class directly.
+        try:
+            self._stream_render_timer.stop()
+            self._flush_stream_render()
+        except Exception as _e:
+            logger.debug("stream render final flush failed: %s", _e)
         lbl = getattr(self._stream_bubble, '_stream_label', None)
         if self._stream_bubble:
             self._stream_bubble._raw_text = final_text
