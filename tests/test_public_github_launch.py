@@ -28,6 +28,9 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/showcase/windows-chat-acceptance.png",
         "gifs/shell-realtime-demo.svg",
         "gifs/shell-install-flow.svg",
+        "videos/shell-launch-demo.mp4",
+        "videos/shell-launch-demo-poster.png",
+        "videos/shell-launch-demo-voiceover.md",
         "videos/shell-launch-trailer.svg",
     ]
 
@@ -43,6 +46,9 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     assert "screenshots/showcase/voice-interface.png" in readme
     assert "gifs/shell-realtime-demo.svg" in readme
     assert "gifs/shell-install-flow.svg" in readme
+    assert "videos/shell-launch-demo.mp4" in readme
+    assert "videos/shell-launch-demo-poster.png" in readme
+    assert "videos/shell-launch-demo-voiceover.md" in readme
     assert "videos/shell-launch-trailer.svg" in readme
     assert "Replace these placeholders" not in readme
     assert "Add setup GIF here" not in readme
@@ -57,6 +63,13 @@ def test_public_github_launch_audit_has_no_high_findings():
     assert report["summary"]["visual_presentation_score"] >= 90
     assert report["summary"]["branding_quality_score"] >= 90
     assert report["summary"]["security_maturity_score"] >= 90
+
+
+def test_launch_demo_video_is_github_friendly_size():
+    video = ROOT / "videos" / "shell-launch-demo.mp4"
+
+    assert video.exists()
+    assert video.stat().st_size < 15_000_000
 
 
 def test_public_launch_docs_and_ci_gate_are_linked():

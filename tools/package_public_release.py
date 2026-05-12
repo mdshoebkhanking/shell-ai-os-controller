@@ -125,6 +125,10 @@ EXCLUDED_SUFFIXES = {
     ".wav",
 }
 
+PUBLIC_MEDIA_EXCEPTIONS = {
+    ("videos", "shell-launch-demo.mp4"),
+}
+
 TEXT_SUFFIXES = {
     ".bat",
     ".cfg",
@@ -167,7 +171,7 @@ def excluded(path: Path) -> bool:
         return True
     if path.name.startswith(".env.") and path.name not in {".env.example", ".env.template"}:
         return True
-    if path.suffix.lower() in EXCLUDED_SUFFIXES:
+    if path.suffix.lower() in EXCLUDED_SUFFIXES and rel_parts not in PUBLIC_MEDIA_EXCEPTIONS:
         return True
     return False
 

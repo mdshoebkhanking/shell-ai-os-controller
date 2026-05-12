@@ -110,6 +110,20 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 ## Demo Media
 
+### Launch Demo With Voiceover
+
+<p align="center">
+  <a href="videos/shell-launch-demo.mp4">
+    <img src="videos/shell-launch-demo-poster.png" alt="Watch the Shell AI OS Controller launch demo video" width="760">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="videos/shell-launch-demo.mp4">Watch the 57-second launch demo with voiceover</a></strong>
+  ·
+  <a href="videos/shell-launch-demo-voiceover.md">Voiceover script</a>
+</p>
+
 | Media | Preview |
 | --- | --- |
 | Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
@@ -128,6 +142,8 @@ Storyboards:
 - [Realtime demo visual](gifs/shell-realtime-demo.svg)
 - [One-click install visual](gifs/shell-install-flow.svg)
 - [Launch trailer visual](videos/shell-launch-trailer.svg)
+- [Launch demo MP4](videos/shell-launch-demo.mp4)
+- [Launch demo voiceover script](videos/shell-launch-demo-voiceover.md)
 - [GIF demo storyboards](gifs/storyboards/README.md)
 - [Launch video storyboards](videos/storyboards/README.md)
 

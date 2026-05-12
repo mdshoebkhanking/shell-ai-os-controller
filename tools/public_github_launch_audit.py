@@ -38,6 +38,9 @@ REQUIRED_SHOWCASE = [
 REQUIRED_DEMO_MEDIA = [
     "gifs/shell-realtime-demo.svg",
     "gifs/shell-install-flow.svg",
+    "videos/shell-launch-demo.mp4",
+    "videos/shell-launch-demo-poster.png",
+    "videos/shell-launch-demo-voiceover.md",
     "videos/shell-launch-trailer.svg",
 ]
 
@@ -109,6 +112,9 @@ def check_demo_media(findings: list[Finding]) -> None:
             findings.append(Finding("high", "demo_media", f"Missing demo media asset: {path}", "Add lightweight public demo media before launch.", path))
         if path not in readme:
             findings.append(Finding("medium", "demo_media", f"README does not reference demo media asset: {path}", "Show demo media directly in README.", "README.md"))
+    video = ROOT / "videos" / "shell-launch-demo.mp4"
+    if video.exists() and video.stat().st_size > 15_000_000:
+        findings.append(Finding("medium", "demo_media", "Launch demo MP4 is larger than 15 MB.", "Compress or host large videos in GitHub Releases/YouTube.", "videos/shell-launch-demo.mp4"))
     if "Add setup GIF here" in readme or "Add video demo here" in readme:
         findings.append(Finding("medium", "demo_media", "README still contains demo media placeholder labels.", "Replace placeholder demo labels with real launch media.", "README.md"))
 
