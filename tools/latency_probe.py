@@ -35,7 +35,7 @@ def _measure(name: str, fn):
 
 def _tts_playback_probe(text: str, timeout_s: float = 10.0):
     from PyQt6.QtCore import QCoreApplication
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     app = QCoreApplication.instance() or QCoreApplication(sys.argv)
     speaker = TTSSpeaker()
@@ -96,7 +96,8 @@ def main() -> int:
         pass
 
     import shell_tool_catalog
-    from shell_ui.shell_cinematic_full import ShellHoloUI, ShellV2Worker, TTSSpeaker, _EDGE_TTS_AVAILABLE
+    from shell_ui.shell_cinematic_full import ShellHoloUI, ShellV2Worker
+    from shell_voice_runtime import TTSSpeaker, _EDGE_TTS_AVAILABLE
 
     samples = []
     samples.append(_measure("catalog.discovery", lambda: len(shell_tool_catalog.discover_capabilities().get("catalog", []))))

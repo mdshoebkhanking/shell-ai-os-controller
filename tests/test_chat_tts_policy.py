@@ -5,6 +5,9 @@ from pathlib import Path
 SRC_PATH = Path(__file__).resolve().parents[1] / "shell_ui" / "shell_cinematic_full.py"
 SRC = SRC_PATH.read_text(encoding="utf-8")
 TREE = ast.parse(SRC)
+VOICE_RUNTIME_PATH = Path(__file__).resolve().parents[1] / "shell_voice_runtime.py"
+VOICE_RUNTIME_SRC = VOICE_RUNTIME_PATH.read_text(encoding="utf-8")
+VOICE_RUNTIME_TREE = ast.parse(VOICE_RUNTIME_SRC)
 
 
 def _function(name: str) -> ast.FunctionDef:
@@ -12,6 +15,13 @@ def _function(name: str) -> ast.FunctionDef:
         if isinstance(node, ast.FunctionDef) and node.name == name:
             return node
     raise AssertionError(f"function not found: {name}")
+
+
+def _voice_runtime_function(name: str) -> ast.FunctionDef:
+    for node in ast.walk(VOICE_RUNTIME_TREE):
+        if isinstance(node, ast.FunctionDef) and node.name == name:
+            return node
+    raise AssertionError(f"voice runtime function not found: {name}")
 
 
 def _calls_tts_speak(fn: ast.FunctionDef) -> bool:
@@ -56,7 +66,7 @@ def test_voice_page_replies_force_tts_even_when_chat_voice_off():
 
 
 def test_manual_bubble_speak_forces_tts():
-    speaker = _function("speak")
+    speaker = _voice_runtime_function("speak")
     assert any(arg.arg == "force" for arg in speaker.args.args)
 
     bubble_handler = _function("_on_bubble_speak")

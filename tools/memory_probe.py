@@ -77,7 +77,7 @@ def _ui_probe() -> dict[str, Any]:
 
 
 def _tts_probe() -> dict[str, Any]:
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     command = speaker._detect_system_tts_command()
