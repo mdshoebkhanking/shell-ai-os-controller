@@ -151,6 +151,85 @@ def _provider_transport_probe():
     return asyncio.run(_run())
 
 
+def _streaming_first_token_probe():
+    import asyncio
+
+    from brain.core import MultiAIBrain
+    from brain.router import SmartRouter
+
+    class StreamingProvider:
+        async def generate_response_stream_async(self, messages, model=None):
+            await asyncio.sleep(0.01)
+            yield "Hel"
+            await asyncio.sleep(0.01)
+            yield "lo"
+
+    original_sequence = SmartRouter.get_provider_sequence
+    original_model = SmartRouter.get_model_for_provider
+    SmartRouter.get_provider_sequence = staticmethod(lambda mode="SMART": ["probe_stream"])
+    SmartRouter.get_model_for_provider = staticmethod(lambda mode, provider_name: "probe-model")
+    try:
+        async def _run():
+            brain = MultiAIBrain()
+            brain.providers = {"probe_stream": StreamingProvider()}
+            chunks = []
+            async for chunk in brain.generate_response_stream("hello", mode="FAST"):
+                chunks.append(chunk)
+            return {
+                "chunks": chunks,
+                "metrics": brain.get_last_stream_metrics(),
+            }
+
+        return asyncio.run(_run())
+    finally:
+        SmartRouter.get_provider_sequence = original_sequence
+        SmartRouter.get_model_for_provider = original_model
+
+
+def _streaming_fallback_probe():
+    import asyncio
+
+    from brain.core import MultiAIBrain
+    from brain.router import SmartRouter
+
+    class SlowProvider:
+        async def generate_response_async(self, messages, model=None):
+            await asyncio.sleep(1.0)
+            return "slow"
+
+    class FastProvider:
+        async def generate_response_async(self, messages, model=None):
+            await asyncio.sleep(0.01)
+            return "fast"
+
+    old_timeout = os.environ.get("SHELL_AI_STREAM_FALLBACK_TIMEOUT_S")
+    os.environ["SHELL_AI_STREAM_FALLBACK_TIMEOUT_S"] = "0.25"
+    original_sequence = SmartRouter.get_provider_sequence
+    original_model = SmartRouter.get_model_for_provider
+    SmartRouter.get_provider_sequence = staticmethod(lambda mode="SMART": ["slow", "fast"])
+    SmartRouter.get_model_for_provider = staticmethod(lambda mode, provider_name: "probe-model")
+    try:
+        async def _run():
+            brain = MultiAIBrain()
+            brain.providers = {"slow": SlowProvider(), "fast": FastProvider()}
+            chunks = []
+            async for chunk in brain.generate_response_stream("hello", mode="FAST"):
+                chunks.append(chunk)
+            return {
+                "chunks": chunks,
+                "metrics": brain.get_last_stream_metrics(),
+            }
+
+        return asyncio.run(_run())
+    finally:
+        if old_timeout is None:
+            os.environ.pop("SHELL_AI_STREAM_FALLBACK_TIMEOUT_S", None)
+        else:
+            os.environ["SHELL_AI_STREAM_FALLBACK_TIMEOUT_S"] = old_timeout
+        SmartRouter.get_provider_sequence = original_sequence
+        SmartRouter.get_model_for_provider = original_model
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure Shell low-latency hot paths.")
     parser.add_argument("--ui", action="store_true", help="Also instantiate the PyQt UI offscreen.")
@@ -212,6 +291,8 @@ def main() -> int:
     if args.provider_runtime:
         samples.append(_measure("ai.provider_runtime_init", _provider_runtime_probe))
         samples.append(_measure("ai.provider_transport_reuse", _provider_transport_probe))
+        samples.append(_measure("ai.streaming_first_token", _streaming_first_token_probe))
+        samples.append(_measure("ai.streaming_fallback", _streaming_fallback_probe))
 
     report = {
         "ok": all(sample["ok"] for sample in samples if sample["name"] != "shell_v2.connect_1s"),

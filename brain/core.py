@@ -38,6 +38,15 @@ def _provider_timeout_s(mode: str = "SMART") -> float:
         return 18.0
 
 
+def _stream_fallback_timeout_s(mode: str = "SMART") -> float:
+    """Shorter timeout for streaming fallback so visible output starts sooner."""
+    try:
+        requested = float(os.environ.get("SHELL_AI_STREAM_FALLBACK_TIMEOUT_S", "8"))
+    except Exception:
+        requested = 8.0
+    return max(0.25, min(_provider_timeout_s(mode), requested))
+
+
 # ---------------------------------------------------------------------------
 # ResponseQualityScorer
 # ---------------------------------------------------------------------------
@@ -366,6 +375,7 @@ class MultiAIBrain:
         self.cost_tracker = ProviderCostTracker()
         self._total_calls = 0
         self._total_tokens_est = 0
+        self._last_stream_metrics: Dict[str, Any] = {}
         self._initialize_providers()
 
     @classmethod
@@ -413,6 +423,9 @@ class MultiAIBrain:
         from .provider_transport import provider_transport_stats
 
         return provider_transport_stats()
+
+    def get_last_stream_metrics(self) -> Dict[str, Any]:
+        return dict(self._last_stream_metrics)
 
     # ------------------------------------------------------------------
     # Token estimation & prompt compression
@@ -608,6 +621,21 @@ class MultiAIBrain:
 
         provider_sequence = SmartRouter.get_provider_sequence(mode)
         provider_timeout = _provider_timeout_s(mode)
+        stream_fallback_timeout = _stream_fallback_timeout_s(mode)
+        stream_started = time.perf_counter()
+        metrics: Dict[str, Any] = {
+            "mode": mode,
+            "provider_timeout_s": provider_timeout,
+            "fallback_timeout_s": stream_fallback_timeout,
+            "providers_attempted": [],
+            "selected_provider": "",
+            "first_token_ms": None,
+            "completion_ms": None,
+            "fallback_activated_ms": None,
+            "errors": [],
+            "chunks": 0,
+        }
+        self._last_stream_metrics = metrics
 
         for provider_name in provider_sequence:
             provider = self.providers.get(provider_name)
@@ -617,6 +645,7 @@ class MultiAIBrain:
             model_name = SmartRouter.get_model_for_provider(mode, provider_name)
             self.health.record_call(provider_name)
             start = time.time()
+            metrics["providers_attempted"].append(provider_name)
 
             # Attempt streaming if the provider exposes the method
             if hasattr(provider, "generate_response_stream_async"):
@@ -626,6 +655,10 @@ class MultiAIBrain:
                         messages=messages, model=model_name
                     ):
                         collected.append(chunk)
+                        metrics["chunks"] += 1
+                        if metrics["first_token_ms"] is None:
+                            metrics["first_token_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
+                            metrics["selected_provider"] = provider_name
                         yield chunk
 
                     full_response = "".join(collected)
@@ -641,18 +674,23 @@ class MultiAIBrain:
                     if model_name:
                         self.cost_tracker.record(model_name, input_tok, output_tok)
                     self.cache.set(prompt, mode, full_response, system_prompt)
+                    metrics["completion_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
+                    self._last_stream_metrics = dict(metrics)
                     return  # successfully streamed
 
                 except Exception as e:
                     logger.warning(f"[MultiBrain] Streaming failed for {provider_name}: {e}")
                     self.health.record_failure(provider_name)
+                    metrics["errors"].append(f"{provider_name} stream: {str(e)[:120]}")
                     continue
 
             # Fallback — non-streaming provider
             try:
+                if metrics["fallback_activated_ms"] is None:
+                    metrics["fallback_activated_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
                 response = await asyncio.wait_for(
                     provider.generate_response_async(messages=messages, model=model_name),
-                    timeout=provider_timeout,
+                    timeout=stream_fallback_timeout,
                 )
                 latency = time.time() - start
 
@@ -666,12 +704,28 @@ class MultiAIBrain:
                 if model_name:
                     self.cost_tracker.record(model_name, input_tok, output_tok)
                 self.cache.set(prompt, mode, response, system_prompt)
+                metrics["selected_provider"] = provider_name
+                metrics["first_token_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
+                metrics["completion_ms"] = metrics["first_token_ms"]
+                metrics["chunks"] += 1
+                self._last_stream_metrics = dict(metrics)
                 yield response
                 return
 
+            except asyncio.TimeoutError:
+                logger.warning(
+                    f"[MultiBrain] Streaming fallback timed out for {provider_name} "
+                    f"after {stream_fallback_timeout:g}s"
+                )
+                self.health.record_failure(provider_name)
+                metrics["errors"].append(
+                    f"{provider_name} fallback timeout ({stream_fallback_timeout:g}s)"
+                )
+                continue
             except Exception as e:
                 logger.warning(f"[MultiBrain] Fallback failed for {provider_name}: {e}")
                 self.health.record_failure(provider_name)
+                metrics["errors"].append(f"{provider_name} fallback: {str(e)[:120]}")
                 continue
 
         # Every provider failed. Do NOT yield an error string — that would
@@ -680,6 +734,8 @@ class MultiAIBrain:
         # a failure and falls back to its non-streaming chat() path.
         logger.error("[MultiBrain] All providers failed for streaming. "
                      "Caller should fall back to generate_response().")
+        metrics["completion_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
+        self._last_stream_metrics = dict(metrics)
         return
 
     # ------------------------------------------------------------------

@@ -979,6 +979,7 @@ class AIChatWorker(QThread):
     reply_error = pyqtSignal(str)
     chunk_received = pyqtSignal(str)  # Streaming: emits each chunk as it arrives
     stream_done = pyqtSignal()        # Signals end of streaming
+    latency_event = pyqtSignal(str, object)
 
     _SYSTEM_PROMPT = (
         f"You are Shell OS {APP_VERSION}, a desktop AI assistant created by {APP_CREATOR}. "
@@ -1023,7 +1024,15 @@ class AIChatWorker(QThread):
         self._message = message
         self._history = history or []
 
+    def _emit_latency(self, event: str, started: float, **payload):
+        try:
+            payload["elapsed_ms"] = round((_time.perf_counter() - started) * 1000.0, 2)
+            self.latency_event.emit(event, payload)
+        except Exception:
+            pass
+
     def run(self):
+        started = _time.perf_counter()
         try:
             # --- Step 1: Check if this is an ACTION (do something) ---
             action = ShellActionExecutor.detect_action(self._message)
@@ -1085,7 +1094,10 @@ class AIChatWorker(QThread):
                 # Try streaming first for real-time display
                 if hasattr(self._brain, 'generate_response_stream'):
                     collected = []
+                    first_chunk_seen = False
+                    self._emit_latency("inprocess_stream_start", started, mode=mode)
                     async def _stream():
+                        nonlocal first_chunk_seen
                         async for chunk in self._brain.generate_response_stream(
                             full_prompt, system_prompt=self._SYSTEM_PROMPT, mode=mode
                         ):
@@ -1096,17 +1108,23 @@ class AIChatWorker(QThread):
                                 continue
                             if chunk:
                                 collected.append(chunk)
+                                if not first_chunk_seen:
+                                    first_chunk_seen = True
+                                    self._emit_latency("first_text_chunk", started, chars=len(str(chunk)))
                                 self.chunk_received.emit(chunk)
                     try:
                         loop.run_until_complete(_stream())
                         reply = "".join(collected)
                         if reply and "All Brains Failed" not in reply:
+                            self._emit_latency("stream_done", started, chars=len(reply))
                             self.stream_done.emit()
                             return
-                    except Exception:
+                    except Exception as exc:
+                        self._emit_latency("stream_exception", started, error=str(exc)[:180])
                         pass  # Fall through to non-streaming
 
                 # Fallback: non-streaming chat
+                self._emit_latency("inprocess_nonstream_start", started)
                 if hasattr(self._brain, 'chat'):
                     reply = loop.run_until_complete(
                         self._brain.chat(full_prompt, system_prompt=self._SYSTEM_PROMPT, mode=mode)
@@ -1124,10 +1142,12 @@ class AIChatWorker(QThread):
                 loop.close()
 
             if reply and "All Brains Failed" not in reply:
+                self._emit_latency("nonstream_done", started, chars=len(reply))
                 self.reply_ready.emit(reply)
             else:
                 self.reply_error.emit(reply or "Empty response")
         except Exception as e:
+            self._emit_latency("request_exception", started, error=str(e)[:180])
             self.reply_error.emit(str(e))
 
 
@@ -10245,6 +10265,7 @@ class ShellHoloUI(QMainWindow):
         self._last_user_text_ts = 0.0
         self._streaming_text = ""
         self._stream_bubble = None
+        self._stream_first_rendered = False
         self._backend_command_workers = []
 
         # Persistent chat history store (sidebar list + ~/.shell_chat_history).
@@ -11946,6 +11967,18 @@ class ShellHoloUI(QMainWindow):
             self.chat_page.set_thinking(False)
             self._stream_bubble = self.chat_page.add_message(
                 "shell", self._streaming_text)
+            if not getattr(self, "_stream_first_rendered", False):
+                self._stream_first_rendered = True
+                elapsed = round((_time.time() - getattr(self, "_query_start", _time.time())) * 1000.0, 2)
+                try:
+                    from core.performance import LOW_LATENCY_RECORDER
+                    LOW_LATENCY_RECORDER.record("ai.first_visible_render", elapsed)
+                except Exception:
+                    pass
+                try:
+                    self.system_page.add_log_entry("AI Latency", f"first_visible_render: {elapsed}ms", "INFO")
+                except Exception as _e:
+                    logger.debug("first visible render log failed: %s", _e)
         else:
             # Update existing bubble text. ChatBubble exposes `_stream_label`
             # for streaming reveal; the older `_text_label` attribute never
@@ -11988,6 +12021,7 @@ class ShellHoloUI(QMainWindow):
                 logger.debug("stream done finalize failed: %s", _e)
         self._stream_bubble = None
         self._streaming_text = ""
+        self._stream_first_rendered = False
         self.system_page.add_log_entry("AI Stream Response", f"{elapsed}ms", "SUCCESS")
         try:
             self._record_agent_message(final_text)
@@ -12017,6 +12051,7 @@ class ShellHoloUI(QMainWindow):
         try:
             self._streaming_text = ""
             self._stream_bubble = None
+            self._stream_first_rendered = False
             text = getattr(self, "_last_user_text", "hello")
             self.system_page.add_log_entry("AI Fallback", "Shell-v2 down, using local brain", "PROCESSING")
             self._inprocess_ai_worker = AIChatWorker(brain, text, history=self._chat_history, parent=self)
@@ -12024,6 +12059,7 @@ class ShellHoloUI(QMainWindow):
             self._inprocess_ai_worker.reply_error.connect(self._on_inprocess_ai_error)
             self._inprocess_ai_worker.chunk_received.connect(self._on_stream_chunk)
             self._inprocess_ai_worker.stream_done.connect(self._on_stream_done)
+            self._inprocess_ai_worker.latency_event.connect(self._on_ai_latency_event)
             self._inprocess_ai_worker.start()
             return True
         except Exception as exc:
