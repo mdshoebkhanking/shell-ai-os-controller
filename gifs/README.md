@@ -8,6 +8,8 @@ diffable, and safe for the repository.
 
 ## Current Assets
 
+- `shell-launch-preview.gif`: animated README hero preview that links to the
+  full voiceover MP4.
 - `shell-realtime-demo.svg`: realtime chat, tool routing, and voice-on-demand preview.
 - `shell-install-flow.svg`: beginner one-click install flow.
 - `add-setup-demo.svg`: compact setup storyboard backup.

@@ -26,6 +26,7 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/showcase/settings-panel.png",
         "screenshots/showcase/tools-catalog.png",
         "screenshots/showcase/windows-chat-acceptance.png",
+        "gifs/shell-launch-preview.gif",
         "gifs/shell-realtime-demo.svg",
         "gifs/shell-install-flow.svg",
         "videos/shell-launch-demo.mp4",
@@ -44,6 +45,7 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     assert "assets/brand/shell-official-logo.png" in readme
     assert "screenshots/showcase/chat-interface.png" in readme
     assert "screenshots/showcase/voice-interface.png" in readme
+    assert "gifs/shell-launch-preview.gif" in readme
     assert "gifs/shell-realtime-demo.svg" in readme
     assert "gifs/shell-install-flow.svg" in readme
     assert "videos/shell-launch-demo.mp4" in readme
@@ -67,9 +69,12 @@ def test_public_github_launch_audit_has_no_high_findings():
 
 def test_launch_demo_video_is_github_friendly_size():
     video = ROOT / "videos" / "shell-launch-demo.mp4"
+    preview = ROOT / "gifs" / "shell-launch-preview.gif"
 
     assert video.exists()
+    assert preview.exists()
     assert video.stat().st_size < 15_000_000
+    assert preview.stat().st_size < 8_000_000
 
 
 def test_public_launch_docs_and_ci_gate_are_linked():

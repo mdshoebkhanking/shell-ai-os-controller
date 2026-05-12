@@ -36,6 +36,7 @@ REQUIRED_SHOWCASE = [
 ]
 
 REQUIRED_DEMO_MEDIA = [
+    "gifs/shell-launch-preview.gif",
     "gifs/shell-realtime-demo.svg",
     "gifs/shell-install-flow.svg",
     "videos/shell-launch-demo.mp4",
@@ -115,6 +116,9 @@ def check_demo_media(findings: list[Finding]) -> None:
     video = ROOT / "videos" / "shell-launch-demo.mp4"
     if video.exists() and video.stat().st_size > 15_000_000:
         findings.append(Finding("medium", "demo_media", "Launch demo MP4 is larger than 15 MB.", "Compress or host large videos in GitHub Releases/YouTube.", "videos/shell-launch-demo.mp4"))
+    preview = ROOT / "gifs" / "shell-launch-preview.gif"
+    if preview.exists() and preview.stat().st_size > 8_000_000:
+        findings.append(Finding("medium", "demo_media", "Launch preview GIF is larger than 8 MB.", "Compress the README preview GIF so the repository loads quickly.", "gifs/shell-launch-preview.gif"))
     if "Add setup GIF here" in readme or "Add video demo here" in readme:
         findings.append(Finding("medium", "demo_media", "README still contains demo media placeholder labels.", "Replace placeholder demo labels with real launch media.", "README.md"))
 

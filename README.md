@@ -29,6 +29,16 @@
   <strong>Primary OS:</strong> Windows 10/11
 </p>
 
+<p align="center">
+  <a href="videos/shell-launch-demo.mp4">
+    <img src="gifs/shell-launch-preview.gif" alt="Shell AI OS Controller launch demo preview" width="760">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="videos/shell-launch-demo.mp4">Watch the full 57-second launch demo with voiceover</a></strong>
+</p>
+
 ---
 
 ## What Shell Is
@@ -126,6 +136,7 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 | Media | Preview |
 | --- | --- |
+| Launch Preview GIF | <a href="videos/shell-launch-demo.mp4"><img src="gifs/shell-launch-preview.gif" alt="Shell AI launch preview GIF" width="420"></a> |
 | Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
 | One-Click Install Flow | <img src="gifs/shell-install-flow.svg" alt="Animated Shell one-click installation flow" width="420"> |
 | Launch Trailer Storyboard | <img src="videos/shell-launch-trailer.svg" alt="Shell public launch trailer storyboard" width="420"> |
@@ -140,6 +151,7 @@ Recommended launch media:
 Storyboards:
 
 - [Realtime demo visual](gifs/shell-realtime-demo.svg)
+- [Launch preview GIF](gifs/shell-launch-preview.gif)
 - [One-click install visual](gifs/shell-install-flow.svg)
 - [Launch trailer visual](videos/shell-launch-trailer.svg)
 - [Launch demo MP4](videos/shell-launch-demo.mp4)
