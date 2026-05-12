@@ -78,8 +78,8 @@ README must always include:
 Good:
 
 ```text
-Full tests: 260 passed locally.
-Production readiness: 100/100 local automated gates.
+Full tests: use the latest pytest count from the release run.
+Full validation: PASS on the current local gate.
 Windows GA still requires fresh install and signing checks.
 ```
 

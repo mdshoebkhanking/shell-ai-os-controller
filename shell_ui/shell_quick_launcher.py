@@ -47,8 +47,13 @@ except Exception as _e:
     logger.warning("python-socketio not available: %s", _e)
 
 try:
-    from shell_ui.design_tokens import text_for_fill
+    from shell_ui.design_tokens import T, text_for_fill
 except Exception:
+    class _FallbackType:
+        family = "Arial"
+
+    T = _FallbackType()
+
     def text_for_fill(_fill: str, *, dark: str = "#041018", light: str = "#ffffff") -> str:
         return light
 
@@ -262,7 +267,7 @@ class QuickLauncher(QWidget):
 
         title = QLabel("Shell Quick Launch")
         title.setStyleSheet(
-            f"color:{DB_ACCENT}; font-family:'Segoe UI'; font-size:12px; "
+            f"color:{DB_ACCENT}; font-family:'{T.family}'; font-size:12px; "
             f"font-weight:700; letter-spacing:1px; "
             f"background:transparent; border:none;"
         )
@@ -272,7 +277,7 @@ class QuickLauncher(QWidget):
 
         hint = QLabel("Enter to send  •  Esc to close")
         hint.setStyleSheet(
-            f"color:{DB_TEXT_SUBTLE}; font-family:'Segoe UI'; font-size:11px; "
+            f"color:{DB_TEXT_SUBTLE}; font-family:'{T.family}'; font-size:11px; "
             f"background:transparent; border:none;"
         )
         head.addWidget(hint)
@@ -310,7 +315,7 @@ class QuickLauncher(QWidget):
             f"  border:1px solid {DB_BORDER}; "
             f"  border-radius:10px; "
             f"  padding:0 14px; "
-            f"  font-family:'Segoe UI'; font-size:14px; "
+            f"  font-family:'{T.family}'; font-size:14px; "
             f"  selection-background-color:{DB_ACCENT_SOFT}; "
             f"}} "
             f"QLineEdit:focus {{ "
@@ -326,7 +331,7 @@ class QuickLauncher(QWidget):
             f"QPushButton {{ "
             f"  background-color:{DB_ACCENT}; color:{DB_ACCENT_TEXT}; "
             f"  border:none; border-radius:10px; "
-            f"  font-family:'Segoe UI'; font-size:13px; font-weight:600; "
+            f"  font-family:'{T.family}'; font-size:13px; font-weight:600; "
             f"}} "
             f"QPushButton:hover {{ background-color:{DB_ACCENT_HOV}; }} "
             f"QPushButton:pressed {{ padding-top:1px; }}"
@@ -337,7 +342,7 @@ class QuickLauncher(QWidget):
         # Status line
         self.status = QLabel("Connecting to Shell hub…")
         self.status.setStyleSheet(
-            f"color:{DB_TEXT_DIM}; font-family:'Segoe UI'; font-size:12px; "
+            f"color:{DB_TEXT_DIM}; font-family:'{T.family}'; font-size:12px; "
             f"background:transparent; border:none;"
         )
         self.status.setWordWrap(True)

@@ -101,9 +101,13 @@ def main() -> int:
     os.environ.setdefault("SHELL_AGENT_BROWSER_SOCKET_DIR", "/tmp/shell-agent-browser")
 
     from PyQt6.QtWidgets import QApplication
-    from shell_ui.shell_cinematic_full import ShellHoloUI
+    from shell_ui.app_bootstrap import configure_qt_application
 
     app = QApplication.instance() or QApplication(sys.argv)
+    configure_qt_application(app)
+
+    from shell_ui.shell_cinematic_full import ShellHoloUI
+
     window = ShellHoloUI()
     window.resize(1260, 720)
     window.show()

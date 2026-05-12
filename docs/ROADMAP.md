@@ -8,7 +8,7 @@
 - Improve voice diagnostics.
 - Replace placeholder screenshots with real public-safe media.
 - Finish clean Windows acceptance testing.
-- Keep production readiness at 100/100.
+- Keep the full validation gate passing before every public push.
 - Keep product language consistent with the trust framework.
 
 ## 1.1.x Open Source Growth

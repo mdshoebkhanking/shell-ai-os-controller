@@ -56,6 +56,11 @@ def main() -> int:
 
     from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
 
+    from shell_ui.app_bootstrap import configure_qt_application
+
+    app = QApplication.instance() or QApplication(sys.argv)
+    configure_qt_application(app)
+
     original_settings = None
     original_shell_language = os.environ.get("SHELL_LANGUAGE")
     try:
@@ -67,7 +72,6 @@ def main() -> int:
 
     from shell_ui.shell_cinematic_full import ShellHoloUI
 
-    app = QApplication.instance() or QApplication(sys.argv)
     window = ShellHoloUI()
     window.resize(1260, 720)
     window.show()

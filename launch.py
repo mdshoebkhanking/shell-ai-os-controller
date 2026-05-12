@@ -53,6 +53,12 @@ try:
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
+    try:
+        from shell_ui.app_bootstrap import configure_qt_application
+
+        configure_qt_application(app)
+    except Exception as _font_err:
+        print(f"Font bootstrap failed (non-fatal): {_font_err}", flush=True)
     dp = QPalette()
     _dark = QColor(4, 7, 16); _darker = QColor(2, 3, 10)
     dp.setColor(QPalette.ColorRole.Window, _dark)

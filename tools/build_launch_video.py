@@ -589,7 +589,7 @@ def build_scenes() -> list[Scene]:
         ("22_automate", 1.3, impact("Hype", "Automate", "Connect local desktop work.", ["Tools"], 75), "pull"),
         ("23_tools_zoom", 1.5, ui_scene("Control", "Tools in one place", "Browser, files, apps, media, email, system.", "screenshots/showcase/tools-catalog.png", ["300+ tools"], 78), "right"),
         ("24_evolve", 1.3, impact("Hype", "Evolve", "Open architecture. Real roadmap.", ["Community"], 81), "push"),
-        ("25_runtime_zoom", 1.5, ui_scene("Runtime", "Production gates", "Release checks before public shipping.", "screenshots/showcase/system-dashboard.png", ["100/100"], 84, True), "left"),
+        ("25_runtime_zoom", 1.5, ui_scene("Runtime", "Production gates", "Release checks before public shipping.", "screenshots/showcase/system-dashboard.png", ["PASS"], 84, True), "left"),
         ("26_logo_flash", 1.5, hero("Shell AI OS Controller", "A futuristic AI workspace with practical boundaries.", 87), "pull"),
         ("27_repo", 1.9, impact("Open source", "GitHub repository", "github.com/mdshoebkhanking/shell-ai-os-controller", ["Apache-2.0", "v1.0.0"], 90), "right"),
         ("28_final_logo", 5.0, hero("Shell AI OS Controller", "The future of AI productivity, built by mdshoebking.", 96), "push"),

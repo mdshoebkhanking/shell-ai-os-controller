@@ -15,6 +15,7 @@ Usage:
 """
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 
@@ -407,13 +408,15 @@ def off_palette_change(fn) -> None:
 # Qt.QFont.Weight.* enums in widgets.py).
 # ---------------------------------------------------------------------------
 
+_DEFAULT_UI_FONT = "Segoe UI" if sys.platform == "win32" else "Arial" if sys.platform == "darwin" else "DejaVu Sans"
+_DEFAULT_MONO_FONT = "Consolas" if sys.platform == "win32" else "Menlo" if sys.platform == "darwin" else "DejaVu Sans Mono"
+
 @dataclass(frozen=True)
 class _Type:
-    # macOS uses SF Pro Display / Text. On Windows we fall through to
-    # Segoe UI Variable (Win 11) → Segoe UI → system. The Qt CSS engine
-    # picks the first family it can resolve.
-    family: str = "SF Pro Display, -apple-system, Segoe UI Variable, 'Segoe UI', system-ui, sans-serif"
-    family_mono: str = "SF Mono, Cascadia Mono, Consolas, Menlo, monospace"
+    # Keep these concrete for Qt stylesheets. Generic CSS families like
+    # `sans-serif` can trigger slow missing-font alias resolution in Qt.
+    family: str = _DEFAULT_UI_FONT
+    family_mono: str = _DEFAULT_MONO_FONT
 
     # Mac-style scale — slightly larger body, looser line-heights for
     # the breathing-room feel of macOS apps.

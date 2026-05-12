@@ -19,7 +19,7 @@
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-111827.svg">
   <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776AB.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0F172A.svg">
-  <img alt="Status" src="https://img.shields.io/badge/readiness-100%2F100-16A34A.svg">
+  <img alt="Status" src="https://img.shields.io/badge/status-validation--gated-16A34A.svg">
 </p>
 
 <p align="center">

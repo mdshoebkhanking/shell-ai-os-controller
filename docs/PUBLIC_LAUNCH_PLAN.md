@@ -78,8 +78,8 @@ Every release should include:
 Use concrete claims:
 
 ```text
-Production readiness: 100/100 local automated gates.
-Full tests: 260 passed.
+Full validation: PASS on the current local gate.
+Full tests: use the latest pytest count from the release run.
 Package SHA256: ...
 ```
 

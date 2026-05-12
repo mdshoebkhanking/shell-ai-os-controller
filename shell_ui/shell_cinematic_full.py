@@ -2091,7 +2091,7 @@ def _pick_font(candidates, fallback):
         logger.debug("ignored Exception: %s", _e)
     return fallback
 
-_FONT = _pick_font(["Segoe UI", "SF Pro Display", "Helvetica Neue", "Arial", "Noto Sans"], "Arial")
+_FONT = _pick_font(["Arial", "Segoe UI", "Helvetica Neue", "Noto Sans"], "Arial")
 _MONO = _pick_font(["Cascadia Code", "Consolas", "SF Mono", "Menlo", "Courier New"], "Courier New")
 
 
@@ -13890,7 +13890,7 @@ def main():
     app.setStyle("Fusion")
 
     # Re-resolve fonts now that QApp exists
-    _FONT = _pick_font(["Segoe UI", "SF Pro Display", "Helvetica Neue", "Arial", "Noto Sans"], "Arial")
+    _FONT = _pick_font(["Arial", "Segoe UI", "Helvetica Neue", "Noto Sans"], "Arial")
     _MONO = _pick_font(["Cascadia Code", "Consolas", "SF Mono", "Menlo", "Courier New"], "Courier New")
 
     # Set application-wide font explicitly to avoid rendering issues
