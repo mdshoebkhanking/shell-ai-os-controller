@@ -8,6 +8,7 @@
     "test": "python -m pytest -q",
     "audit:repo": "python tools/repo_audit.py",
     "package": "python tools/package_public_release.py",
+    "profile:memory": "python tools/memory_probe.py --ui --tts",
     "validate:release": "python tools/full_validation.py",
     "validate:prepush": "python tools/full_validation.py --require-clean-git"
   }

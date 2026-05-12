@@ -56,6 +56,18 @@ def build_steps(python: str) -> list[ValidationStep]:
             ),
             120,
         ),
+        ValidationStep(
+            "memory_probe_ui_tts",
+            (
+                python,
+                "tools/memory_probe.py",
+                "--ui",
+                "--tts",
+                "--json-out",
+                ".shell_runtime/memory_full_validation.json",
+            ),
+            120,
+        ),
         ValidationStep("strict_public_release_check", (python, "tools/production_release_check.py", "--strict"), 120),
         ValidationStep("config_diagnostics", (python, "tools/config_diagnostics.py", "--fail-on-error"), 120),
         ValidationStep("build_public_release_package", (python, "tools/package_public_release.py"), 180),
