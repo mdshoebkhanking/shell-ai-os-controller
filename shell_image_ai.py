@@ -1,23 +1,16 @@
 #!/usr/bin/env python3
 # =============================================================================
-# 🎨 SHELL IMAGE AI - LEVEL 100000 MEGA UPGRADE
+# Shell image AI integration
 # =============================================================================
-# ULTIMATE AI Image Generation Suite with:
-# - ✅ 7+ AI Providers (Pollinations, HF, Replicate, DALL-E 3, Stability, Leonardo)
-# - ✅ Image-to-Image Generation
-# - ✅ Inpainting & Outpainting
-# - ✅ 4K/8K Upscaling
-# - ✅ Background Removal
-# - ✅ Face Enhancement
-# - ✅ Image Variations
-# - ✅ Advanced Filters & Effects
-# - ✅ Collage/Montage Creation
-# - ✅ Real-time Progress Tracking
-# - ✅ Generation History & Analytics
-# - ✅ Advanced Prompt Templates
-# - ✅ EXIF Metadata Support
-# - ✅ Color Grading & Correction
-# - ✅ Style Transfer
+# Image generation and editing suite with:
+# - Multiple AI providers when configured
+# - Image-to-image generation
+# - Inpainting and outpainting
+# - Upscaling hooks
+# - Background removal and face enhancement hooks
+# - Image variations, filters, and effects
+# - Collage and montage creation
+# - Progress tracking, history, analytics, prompt templates, and metadata support
 # - ✅ Batch Processing with Progress
 # - ✅ WebSocket Real-time Updates
 # - ✅ Priority Queue System

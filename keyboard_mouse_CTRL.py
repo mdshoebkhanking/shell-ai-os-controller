@@ -1,5 +1,5 @@
 # =============================================================================
-# 🎹 SHELL KEYBOARD & MOUSE CONTROL - LEVEL 10000 UPGRADE
+# Shell keyboard and mouse control
 # =============================================================================
 # Advanced Human-Machine Interface with:
 # - ✅ Proper Error Handling & Logging
@@ -1390,7 +1390,7 @@ def with_temporary_activation(fn):
 
 
 # =============================================================================
-# 🚀 LIVEKIT TOOL WRAPPERS (LEVEL 10000)
+# LiveKit tool wrappers
 # =============================================================================
 
 # Try to import function_tool, provide fallback for standalone testing
@@ -1423,7 +1423,7 @@ async def move_cursor_tool(direction: str, distance: int = 100, speed: str = "no
 @function_tool
 async def move_cursor_to_position_tool(x: int, y: int, speed: str = "normal", smooth: bool = True) -> str:
     """
-    🎯 LEVEL 10000 PRECISION TARGETING - Moves cursor to exact coordinates.
+    Moves cursor to exact coordinates with optional smooth animation.
     
     Args:
         x: Target X coordinate (pixels from left)

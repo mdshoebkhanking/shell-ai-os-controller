@@ -16,7 +16,7 @@ def test_phase4_product_ecosystem_docs_exist():
         "docs/PUBLIC_LAUNCH_PLAN.md",
         "docs/ECOSYSTEM_ROADMAP.md",
         "docs/TRUST_AND_CREDIBILITY.md",
-        "docs/assets/shell_logo_concept.svg",
+        "assets/brand/shell-official-logo.png",
         "banners/social-preview-concept.svg",
     ]
     for path in required:

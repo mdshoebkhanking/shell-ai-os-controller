@@ -3,25 +3,32 @@
 This is the voiceover script used by `tools/build_launch_video.py`.
 
 - Voice: macOS `Daniel`
-- Rate: 180 words per minute
+- Rate: 176 words per minute
 
 ```text
-Meet Shell AI OS Controller, version one point zero, created by mdshoebking.
+Shell AI OS Controller.
+The future of AI automation, built by mdshoebking.
 
-This is a desktop AI operating layer, not a normal chatbot.
-It brings chat, voice, tools, automation, diagnostics, and safe execution into one focused workspace.
+This is not a normal chatbot.
+It is a desktop AI operating layer for chat, voice, tools, diagnostics, and controlled automation.
 
-Chat is text first and fast.
-Actions stay visible, tool results stay traceable, and voice remains under user control.
+Ask. Execute. Inspect. Continue.
 
-The voice workspace keeps transcript, audio state, and assistant controls clean.
-The tool gateway organizes browser actions, files, apps, email, media, and system tasks with clearer boundaries.
+Text stays fast.
+Voice stays optional.
+Actions stay visible.
 
-The operations dashboard shows runtime health, dependencies, logs, release checks, and production readiness.
+Shell connects workflows across apps, files, browser tasks, media, email, and system tools with safer boundaries.
 
-For beginners, Shell includes one click setup flows for Windows, macOS, and Linux.
-For developers, it is open source, modular, and prepared for agents, plugins, workflows, and future AI runtimes.
+For beginners, setup is simple.
+For developers, the platform is open, modular, and ready to extend.
 
-Shell is built to be transparent, practical, and ready for real AI desktop automation.
+Agents, plugins, workflows, health checks, release gates, and runtime diagnostics work together in one AI workspace.
+
+Shell is not pretending to be AGI.
+It is practical AI infrastructure for real desktop productivity.
+
+Shell AI OS Controller.
+Build. Automate. Evolve.
 
 ```

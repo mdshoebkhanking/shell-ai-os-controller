@@ -111,27 +111,18 @@ Use:
 
 No negative letter spacing. Do not scale text with viewport width.
 
-## Logo Concepts
+## Official Logo
 
-Concept A: command ring.
+Shell uses one official logo everywhere:
 
-- A small terminal prompt mark inside a circular orbit.
-- Best for app icon and GitHub avatar.
+```text
+assets/brand/shell-official-logo.png
+```
 
-Concept B: workspace node.
-
-- Four connected nodes around a center dot.
-- Best for ecosystem, tools, and orchestration branding.
-
-Concept C: voice signal.
-
-- A soft particle ring around a central voice core.
-- Best for voice page, demo videos, and social preview.
-
-Current placeholder assets:
-
-- `docs/assets/shell_logo_concept.svg`
-- `banners/social-preview-concept.svg`
+This uploaded app-icon mark is the permanent identity for the README, app
+splash, sidebar branding, installer, social assets, thumbnails, and launch
+videos. Older concept marks must not be reused. Keep the logo on dark,
+premium, high-contrast surfaces with generous negative space.
 
 ## Icon System
 

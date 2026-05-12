@@ -13,9 +13,9 @@ import re
 import traceback
 
 # =============================================================================
-# SHELL AI CORE V8.0 — ULTRA PRO MAX (LEVEL 1000000)
-# ARCHITECT: MD SHOEB KING
-# BUILD: GOD-TIER | TOOLS: 150+ | BRAIN: OMNI-CORTEX (GEMINI REALTIME)
+# Shell AI core runtime.
+# Creator: mdshoebking
+# Real capability claims only: configured providers, tools, and voice paths.
 # =============================================================================
 
 # CRASH LOGGER START

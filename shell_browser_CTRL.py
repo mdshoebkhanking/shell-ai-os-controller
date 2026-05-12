@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
 # =============================================================================
-# 🌐 SHELL BROWSER CTRL - LEVEL 100000 MEGA UPGRADE
+# Shell browser automation controller
 # =============================================================================
 # Advanced Browser Automation with:
 # - ✅ Multi-Browser Support (Chrome, Edge, Firefox, Brave)
 # - ✅ AI-Powered Web Navigation
 # - ✅ Smart Tab Management
-# - ✅ Advanced YouTube Automation
-# - ✅ Web AI Integration (ChatGPT, Gemini, Claude, Perplexity)
-# - ✅ Visual Intelligence + OCR
-# - ✅ Form Filling & Submission
-# - ✅ Screenshot & Annotation
-# - ✅ Download Management
-# - ✅ Cookie & Session Handling
-# - ✅ Ad Blocker Integration
-# - ✅ Reading Mode
-# - ✅ Translation Support
-# - ✅ Price Tracking
-# - ✅ News Aggregation
+# - YouTube automation
+# - Web AI integration when providers are configured
+# - Visual intelligence and OCR hooks
+# - Form filling and submission
+# - Screenshot and annotation
+# - Download management
+# - Cookie and session handling
+# - Reading mode, translation, price tracking, and news workflows
 # - ✅ Social Media Automation
 # - ✅ Security & Privacy Controls
 # =============================================================================

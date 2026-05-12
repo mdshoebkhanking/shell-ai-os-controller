@@ -1,6 +1,6 @@
 """
-HyperCortex — GOD-MODE REASONING ENGINE V5
-=============================================
+HyperCortex - reasoning engine V5
+=================================
 Multi-step reasoning with self-reflection, confidence scoring,
 tool chaining, error recovery, and parallel reasoning.
 
@@ -32,7 +32,7 @@ logger = logging.getLogger("HyperCortex")
 
 class HyperCortex:
     """
-    GOD-MODE REASONING ENGINE V5 — Real multi-step reasoning with:
+    Reasoning engine V5 - multi-step reasoning with:
     - 10+ intent types (WEB, CODE, SYSTEM, CREATIVE, RESEARCH, DATA, SOCIAL, SECURITY, AUTOMATION, FILE, GENERAL)
     - Multi-step plan generation using AI
     - Real tool routing via ToolRegistry

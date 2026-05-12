@@ -642,7 +642,7 @@ async def net_scan_tool() -> str:
 @function_tool
 async def god_tier_optimizer_tool() -> str:
     """
-    🚀 LEVEL 10000 PC OPTIMIZER - ENHANCED.
+    PC optimizer.
     Cleans Temp/Junk files, Prefetch folder, flushes DNS, resets Windows Cache.
     Shows per-directory cleanup count and total optimization time. Use when PC is slow!
     """

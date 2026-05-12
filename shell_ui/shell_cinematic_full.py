@@ -41,6 +41,18 @@ from PyQt6.QtWidgets import (QApplication, QFrame, QGridLayout, QHBoxLayout,
                               QComboBox, QFileDialog, QToolTip, QSplitter,
                               QListWidget, QListWidgetItem)
 
+
+def _shell_logo_pixmap(size: int) -> QPixmap:
+    pixmap = QPixmap(os.path.join(_ui_dir, "shell_logo.png"))
+    if pixmap.isNull():
+        return pixmap
+    return pixmap.scaled(
+        size,
+        size,
+        Qt.AspectRatioMode.KeepAspectRatio,
+        Qt.TransformationMode.SmoothTransformation,
+    )
+
 try:
     QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
 except Exception as _e:
@@ -2771,14 +2783,19 @@ class SidebarNav(QWidget):
             _input_focus = _accent
             _input_placeholder = _txt_subtle
 
-        icon = QLabel("S")
+        icon = QLabel()
         icon.setFixedSize(36, 36)
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        icon.setStyleSheet(
-            f"background:{_accent}; border-radius:10px; border:none; "
-            f"color:{_accent_text}; font-family:'{_FONT}'; font-size:18px; font-weight:700;"
-        )
-        # No glow — single solid coral square is enough.
+        _logo = _shell_logo_pixmap(36)
+        if _logo.isNull():
+            icon.setText("Shell")
+            icon.setStyleSheet(
+                f"background:{_accent}; border-radius:10px; border:none; "
+                f"color:{_accent_text}; font-family:'{_FONT}'; font-size:11px; font-weight:700;"
+            )
+        else:
+            icon.setPixmap(_logo)
+            icon.setStyleSheet("background:transparent; border:none;")
         brand_row.addWidget(icon)
 
         brand_text = QVBoxLayout()
@@ -4932,7 +4949,7 @@ class ChatBubble(QFrame):
         role_row.setSpacing(8)
 
         # Avatar circle
-        avatar = QLabel("S" if not is_user else "U")
+        avatar = QLabel("U" if is_user else "")
         avatar.setFixedSize(22, 22)
         avatar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         if is_user:
@@ -4942,14 +4959,20 @@ class ChatBubble(QFrame):
                 border:1px solid {_bubble_border};
             """)
         else:
-            avatar.setStyleSheet(f"""
-                background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
-                    stop:0 {_bubble_accent}, stop:1 {_bubble_accent_hover});
-                border-radius:11px;
-                color:{_bubble_accent_text}; font-family:'{_FONT}'; font-size:9px; font-weight:800;
-                border:none;
-            """)
-            _glow_shadow(avatar, _bubble_accent, 8, 60)
+            _avatar_logo = _shell_logo_pixmap(22)
+            if _avatar_logo.isNull():
+                avatar.setText("S")
+                avatar.setStyleSheet(f"""
+                    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                        stop:0 {_bubble_accent}, stop:1 {_bubble_accent_hover});
+                    border-radius:11px;
+                    color:{_bubble_accent_text}; font-family:'{_FONT}'; font-size:9px; font-weight:800;
+                    border:none;
+                """)
+                _glow_shadow(avatar, _bubble_accent, 8, 60)
+            else:
+                avatar.setPixmap(_avatar_logo)
+                avatar.setStyleSheet("background:transparent; border:none;")
         role_row.addWidget(avatar)
 
         role_lbl = QLabel("SHELL" if not is_user else "YOU")

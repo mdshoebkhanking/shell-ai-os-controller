@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # =============================================================================
-# 🤖 SHELL TELEGRAM BOT - LEVEL 100000 MEGA UPGRADE
+# Shell Telegram bot integration
 # =============================================================================
 # Advanced Telegram Bot with:
 # - ✅ Multi-User Support (Admin + Authorized Users)
@@ -8,18 +8,13 @@
 # - ✅ Channel Broadcasting
 # - ✅ Inline Keyboard & Buttons
 # - ✅ File/Media Handling (Photos, Documents, Voice)
-# - ✅ Advanced PC Control (118 Tools Integration)
-# - ✅ Multi-AI Brain (Groq + Gemini + Perplexity + Claude)
-# - ✅ Conversation Memory & Context
-# - ✅ Command System (50+ Commands)
-# - ✅ Scheduled Messages
-# - ✅ Auto-Reply Rules
-# - ✅ Analytics & Statistics
-# - ✅ Security (2FA, Whitelist, Blacklist)
-# - ✅ Webhook Support (Alternative to Polling)
-# - ✅ Rate Limiting & Spam Protection
-# - ✅ Custom Commands Creator
-# - ✅ Plugin System
+# - Advanced PC control through approved tools
+# - Multi-provider AI routing when configured
+# - Conversation memory and context
+# - Command system, scheduled messages, and auto-reply rules
+# - Analytics, rate limiting, and security controls
+# - Webhook support as an alternative to polling
+# - Custom commands and plugin-ready extension points
 # =============================================================================
 
 import os

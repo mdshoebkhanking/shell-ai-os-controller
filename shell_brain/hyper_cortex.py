@@ -295,8 +295,8 @@ class HyperCortex:
         if is_tool:
             html_instructions = """
 === HTML (html_body) ===
-[LEVEL 10000 ENGINEERING MODE: ACTIVATED]
-Generate a FLAWLESS, PRODUCTION-GRADE, HIGHLY INTERACTIVE WEB APPLICATION UI.
+[ENGINEERING MODE]
+Generate a production-grade, highly interactive web application UI.
 1. CORE: Build the exact core interface for the requested tool (e.g., calculator keypad, dashboard panels, complex forms).
 2. ARCHITECTURE: Use semantic HTML5, perfect ARIA labels for accessibility, and a modular DOM structure.
 3. COMPLETENESS: Every input, button, slider, canvas, or panel required MUST be present. No placeholders.
@@ -305,8 +305,8 @@ Generate a FLAWLESS, PRODUCTION-GRADE, HIGHLY INTERACTIVE WEB APPLICATION UI.
 """
             js_instructions = """
 === JS (js_logic) ===
-[LEVEL 10000 EXECUTION MODE: ACTIVATED]
-Write BULLETPROOF, ENTERPRISE-GRADE JavaScript to power this application.
+[EXECUTION MODE]
+Write robust JavaScript to power this application.
 1. PARADIGM: Use modern ES6+ classes or modular closures. Implement complex state management.
 2. LOGIC: Implement the FULL logical requirements without cutting corners. (e.g., For a calculator: handle precision, order of operations, memory, edge cases like NaN/Infinity).
 3. ROBUSTNESS: 100% error handling. Catch exceptions, validate all inputs, and prevent any unhandled states.
@@ -315,8 +315,8 @@ Write BULLETPROOF, ENTERPRISE-GRADE JavaScript to power this application.
 """
             css_instructions = """
 === CSS (full_css) ===
-[LEVEL 10000 AESTHETICS MODE: ACTIVATED]
-Create a VISUALLY STUNNING, AWARD-WINNING stylesheet.
+[AESTHETICS MODE]
+Create a polished, production-quality stylesheet.
 1. VARIABLES: Define an exhaustive `:root` with exact HSL/RGB values for dynamic theming (--primary, --surface, --border, --shadow-sm to --shadow-xl).
 2. LAYOUT: Thoughtful use of CSS Grid & Flexbox for precise alignment. 100% fluid and responsive across all devices.
 3. VISUALS: Utilize advanced techniques: backdrop-filter (glassmorphism), complex multi-layered box-shadows, subtle gradients, and perfect typography tracking/leading.
@@ -326,15 +326,15 @@ Create a VISUALLY STUNNING, AWARD-WINNING stylesheet.
         else:
             html_instructions = f"""
 === HTML (html_body) ===
-[LEVEL 10000 DESIGN MODE: ACTIVATED]
-Generate a MESMERIZING, AWARD-WINNING Landing Page/Website.
+[DESIGN MODE]
+Generate a polished landing page or website.
 1. SECTIONS: Design a breathtaking journey. Include sticky morphing Nav, cinematic Hero (<img src='https://picsum.photos/seed/{project_name.replace(' ','')}hero/1920/1080'>), gorgeous Bento-grid Features, immersive About, dynamic Stats, and an elegant Footer.
 2. STRUCTURE: Use advanced HTML5 semantics. Prepare elements for scroll-driven animations (e.g., `data-aos`, `reveal` classes).
 3. CONTENT: Write compelling, high-converting, professional copy. DO NOT use Lorem Ipsum.
 """
             js_instructions = """
 === JS (js_logic) ===
-[LEVEL 10000 INTERACTION MODE: ACTIVATED]
+[INTERACTION MODE]
 Implement cinematic scroll and interaction logic.
 1. OBSERVERS: Complex `IntersectionObserver` logic to trigger staggered, cascading reveal animations as elements enter the viewport.
 2. DYNAMICS: Navbar scroll-morphing (transparent to glass), parallax scrolling effects, and smooth anchor navigation.
@@ -342,7 +342,7 @@ Implement cinematic scroll and interaction logic.
 """
             css_instructions = """
 === CSS (full_css) ===
-[LEVEL 10000 AESTHETICS MODE: ACTIVATED]
+[AESTHETICS MODE]
 COMPLETE standalone stylesheet. MUST include:
 1. THEMING: Consistent color system using `:root` variables.
 2. TYPOGRAPHY: Fluid typography system (`clamp()`). Perfect hierarchy.
@@ -351,7 +351,7 @@ COMPLETE standalone stylesheet. MUST include:
 """
 
         return f"""
-You are a 'LEVEL 10000' HYPER-INTELLIGENT AI ARCHITECT. You write the best code on planet Earth. 
+You are a practical AI systems architect. Write maintainable, testable code with clear UI structure.
 
 Project: "{project_name}"
 Brief: "{user_intent}"

@@ -21,6 +21,8 @@ caller (see `launch.py`) so a broken splash can never block the main app.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PyQt6.QtCore import (
     Qt,
     QPropertyAnimation,
@@ -37,6 +39,7 @@ from PyQt6.QtGui import (
     QLinearGradient,
     QPaintEvent,
     QGuiApplication,
+    QPixmap,
 )
 from PyQt6.QtWidgets import (
     QWidget,
@@ -63,14 +66,14 @@ def _qcolor_with_alpha(hex_color: str, alpha: int) -> QColor:
 
 
 # ---------------------------------------------------------------------------
-# Logo bubble — round accent fill with a centred white "S" and a soft glow.
+# Official logo bubble — uses the same uploaded Shell logo as public branding.
 # ---------------------------------------------------------------------------
 
 class _LogoBubble(QLabel):
-    """64x64 round accent disc with a white 'S' letter and a soft glow.
+    """Official Shell logo with a soft startup glow.
 
-    Implemented as a single QLabel so we can reuse Qt's built-in shadow
-    effect and avoid a custom paint loop.
+    The splash should never show a placeholder "S" mark when the official
+    logo is available.
     """
 
     SIZE = 64
@@ -78,22 +81,26 @@ class _LogoBubble(QLabel):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(self.SIZE, self.SIZE)
-        self.setText("S")
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        font = QFont(T.family.split(",")[0].strip(), 30)
-        font.setBold(True)
-        font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, -1)
-        self.setFont(font)
+        logo_path = Path(__file__).with_name("shell_logo.png")
+        pixmap = QPixmap(str(logo_path))
+        if pixmap.isNull():
+            self.setText("Shell")
+            font = QFont(T.family.split(",")[0].strip(), 12)
+            font.setBold(True)
+            self.setFont(font)
+        else:
+            self.setPixmap(
+                pixmap.scaled(
+                    self.SIZE,
+                    self.SIZE,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )
 
-        self.setStyleSheet(
-            f"QLabel {{"
-            f"  background-color:{C.accent};"
-            f"  color:{accent_text_color()};"
-            f"  border:1px solid {C.accent_hover};"
-            f"  border-radius:{self.SIZE // 2}px;"
-            f"}}"
-        )
+        self.setStyleSheet("QLabel { background: transparent; border: none; }")
 
         glow = QGraphicsDropShadowEffect(self)
         glow.setBlurRadius(34)

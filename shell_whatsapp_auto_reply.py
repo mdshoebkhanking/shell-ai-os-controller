@@ -1,19 +1,17 @@
 """
-🤖 Shell WhatsApp Auto-Reply System v3.0 (GOD TIER — 100 LEVEL)
+Shell WhatsApp Auto-Reply System v3.0
 
-UPGRADES:
-  ✅ Multi-Provider AI Brain: Groq → Gemini → Perplexity
-  ✅ Sender Detection: Reads WHO sent the message from chat header
-  ✅ Message Classification: greeting/question/request/complaint/emergency/casual
-  ✅ Tone Matching: Formal for boss, casual for friends, caring for family
-  ✅ Time-Aware Replies: Different vibes for morning/afternoon/night
-  ✅ Multi-Chat Queue: Scans ALL unread chats, replies one by one
-  ✅ Contact Memory: Remembers last conversation per contact
-  ✅ Keyword Triggers: "urgent", "call me", "help" = priority reply
-  ✅ Anti-Spam: Ignores group chats and forwarded messages  
-  ✅ Reply History: Logs all sent replies for boss to review
-  ✅ Smart Fallback: Personality-rich replies even if AI fails
-  ✅ Language Detection: Replies in same language sender used
+Capabilities:
+  - Multi-provider AI brain: Groq, Gemini, Perplexity when configured.
+  - Sender detection from the chat header.
+  - Message classification: greeting, question, request, complaint, emergency, casual.
+  - Tone matching for work, friends, and family contexts.
+  - Time-aware replies for morning, afternoon, and night.
+  - Multi-chat queue for unread chats.
+  - Contact memory and reply history.
+  - Priority keyword triggers such as "urgent", "call me", and "help".
+  - Group and forwarded-message safety filters.
+  - Same-language reply detection.
 """
 
 import asyncio

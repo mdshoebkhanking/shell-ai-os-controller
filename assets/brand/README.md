@@ -2,14 +2,15 @@
 
 # Shell Brand Assets
 
-The official Shell AI OS Controller logo is:
+The uploaded app-icon mark is the only official Shell AI OS Controller logo:
 
 ```text
 assets/brand/shell-official-logo.png
 ```
 
 This is the source logo for public GitHub presentation, README hero sections,
-installer branding, launch visuals, social previews, and future website assets.
+installer branding, launch visuals, splash screens, social previews, app UI,
+demo videos, thumbnails, docs, and future website assets.
 
 ## Visual Identity
 
@@ -22,7 +23,7 @@ installer branding, launch visuals, social previews, and future website assets.
 
 ## Usage Rules
 
-- Do not replace the official logo with generated alternatives.
+- Do not use older logo concepts or generated replacements.
 - Do not distort the aspect ratio.
 - Keep enough negative space around the mark.
 - Avoid noisy backgrounds behind the logo.

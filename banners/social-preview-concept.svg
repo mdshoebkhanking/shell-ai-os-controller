@@ -1,26 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
-  <title id="title">Shell AI social preview concept</title>
-  <desc id="desc">Social preview concept for Shell AI OS Controller.</desc>
+  <title id="title">Shell AI OS Controller official social preview</title>
+  <desc id="desc">Dark premium social preview using the official Shell logo.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#071014"/>
-      <stop offset="55%" stop-color="#0D1B22"/>
-      <stop offset="100%" stop-color="#132934"/>
+      <stop offset="0%" stop-color="#020407"/>
+      <stop offset="56%" stop-color="#0A111B"/>
+      <stop offset="100%" stop-color="#111820"/>
     </linearGradient>
-    <linearGradient id="accent" x1="120" y1="120" x2="1080" y2="510">
-      <stop offset="0%" stop-color="#18D7F3"/>
-      <stop offset="55%" stop-color="#4F8CFF"/>
-      <stop offset="100%" stop-color="#38D996"/>
-    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="42%" stop-color="#74ecff" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="#020407" stop-opacity="0"/>
+    </radialGradient>
   </defs>
   <rect width="1200" height="630" fill="url(#bg)"/>
-  <rect x="52" y="52" width="1096" height="526" rx="36" fill="none" stroke="#244250" stroke-width="2"/>
-  <circle cx="920" cy="315" r="128" fill="none" stroke="url(#accent)" stroke-width="8" stroke-dasharray="110 36"/>
-  <circle cx="920" cy="315" r="62" fill="#18D7F3" opacity="0.92"/>
-  <path d="M872 294 L902 315 L872 336" fill="none" stroke="#071014" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M926 348 H982" stroke="#071014" stroke-width="12" stroke-linecap="round"/>
-  <text x="110" y="206" fill="#EAF7FB" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="70" font-weight="800">Shell AI OS Controller</text>
-  <text x="112" y="284" fill="#91A8B3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="34">AI desktop control layer for chat, voice, tools, and automation.</text>
-  <text x="112" y="380" fill="#18D7F3" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="26" font-weight="700">Open source · Human-controlled · Observable</text>
-  <text x="112" y="486" fill="#EAF7FB" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="24">Built by mdshoebking · Version 1.0.0</text>
+  <rect x="44" y="44" width="1112" height="542" rx="42" fill="none" stroke="#ffffff" stroke-opacity="0.13" stroke-width="2"/>
+  <circle cx="928" cy="315" r="238" fill="url(#glow)"/>
+  <path d="M82 438 C250 320 394 440 568 320 S836 210 1064 330" fill="none" stroke="#77ecff" stroke-opacity="0.28" stroke-width="2"/>
+  <image href="../assets/brand/shell-official-logo.png" x="760" y="122" width="336" height="336" preserveAspectRatio="xMidYMid meet"/>
+  <text x="92" y="182" fill="#F7FBFF" font-family="Inter, SF Pro Display, Segoe UI, Arial, sans-serif" font-size="72" font-weight="850">Shell AI OS</text>
+  <text x="96" y="252" fill="#F7FBFF" font-family="Inter, SF Pro Display, Segoe UI, Arial, sans-serif" font-size="52" font-weight="760">Controller</text>
+  <text x="98" y="328" fill="#BBD0DA" font-family="Inter, SF Pro Text, Segoe UI, Arial, sans-serif" font-size="30">AI desktop control layer for voice, tools, automation, and local workflows.</text>
+  <text x="100" y="422" fill="#70E8FF" font-family="Inter, SF Pro Text, Segoe UI, Arial, sans-serif" font-size="23" font-weight="800">OPEN SOURCE · SAFE AUTOMATION · BUILT BY MDSHOEBKING</text>
+  <text x="100" y="504" fill="#F7FBFF" fill-opacity="0.82" font-family="Inter, SF Pro Text, Segoe UI, Arial, sans-serif" font-size="20">Version 1.0.0 · Apache-2.0 · Human-controlled AI workspace</text>
 </svg>
