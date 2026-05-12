@@ -118,8 +118,10 @@ def main() -> int:
     if args.ui:
         def _ui_init():
             from PyQt6.QtWidgets import QApplication
+            from shell_ui.app_bootstrap import configure_qt_application
 
             app = QApplication.instance() or QApplication(sys.argv)
+            configure_qt_application(app)
             window = ShellHoloUI()
             window.resize(1100, 680)
             window.show()

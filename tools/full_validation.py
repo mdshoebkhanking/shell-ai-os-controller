@@ -45,6 +45,17 @@ def build_steps(python: str) -> list[ValidationStep]:
             ),
             120,
         ),
+        ValidationStep(
+            "latency_probe_ui",
+            (
+                python,
+                "tools/latency_probe.py",
+                "--ui",
+                "--json-out",
+                ".shell_runtime/latency_full_validation.json",
+            ),
+            120,
+        ),
         ValidationStep("strict_public_release_check", (python, "tools/production_release_check.py", "--strict"), 120),
         ValidationStep("config_diagnostics", (python, "tools/config_diagnostics.py", "--fail-on-error"), 120),
         ValidationStep("build_public_release_package", (python, "tools/package_public_release.py"), 180),

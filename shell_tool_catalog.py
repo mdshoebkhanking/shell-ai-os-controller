@@ -9,6 +9,7 @@ import time; the UI only needs metadata until the user executes a tool.
 from __future__ import annotations
 
 import ast
+import json
 import os
 from pathlib import Path
 from typing import Any, Optional, Union
@@ -16,6 +17,8 @@ from typing import Any, Optional, Union
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 _DISCOVER_TOOL_CACHE: dict[tuple[str, tuple[tuple[str, int, int], ...]], list[dict[str, Any]]] = {}
+_DISK_CACHE_VERSION = 1
+_DISK_CACHE_PATH = PROJECT_ROOT / ".shell_runtime" / "tool_catalog_cache.json"
 
 _SKIP_DIRS = {
     ".git",
@@ -165,6 +168,50 @@ def _copy_catalog(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return copied
 
 
+def _truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _disk_cache_enabled(root_path: Path) -> bool:
+    if _truthy(os.environ.get("SHELL_DISABLE_TOOL_CATALOG_CACHE")):
+        return False
+    return root_path == PROJECT_ROOT
+
+
+def _signature_to_json(signature: tuple[tuple[str, int, int], ...]) -> list[list[object]]:
+    return [[path, mtime_ns, size] for path, mtime_ns, size in signature]
+
+
+def _read_disk_cache(signature: tuple[tuple[str, int, int], ...]) -> list[dict[str, Any]] | None:
+    try:
+        payload = json.loads(_DISK_CACHE_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if payload.get("version") != _DISK_CACHE_VERSION:
+        return None
+    if payload.get("signature") != _signature_to_json(signature):
+        return None
+    catalog = payload.get("catalog")
+    if not isinstance(catalog, list):
+        return None
+    return [dict(item) for item in catalog if isinstance(item, dict)]
+
+
+def _write_disk_cache(signature: tuple[tuple[str, int, int], ...], tools: list[dict[str, Any]]) -> None:
+    try:
+        _DISK_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "version": _DISK_CACHE_VERSION,
+            "signature": _signature_to_json(signature),
+            "catalog": tools,
+        }
+        tmp = _DISK_CACHE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+        tmp.replace(_DISK_CACHE_PATH)
+    except Exception:
+        return
+
+
 def _params_for(node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[dict[str, Any]]:
     args = list(node.args.posonlyargs) + list(node.args.args)
     if args and args[0].arg in {"self", "cls"}:
@@ -192,7 +239,7 @@ def _params_for(node: Union[ast.FunctionDef, ast.AsyncFunctionDef]) -> list[dict
 
 def discover_tool_catalog(root: Optional[Union[str, os.PathLike[str]]] = None) -> list[dict[str, Any]]:
     root_path = Path(root).resolve() if root else PROJECT_ROOT
-    paths = list(_iter_python_files(root_path))
+    paths = sorted(_iter_python_files(root_path), key=lambda p: str(p.relative_to(root_path)))
     signature_rows = []
     for path in paths:
         try:
@@ -205,6 +252,12 @@ def discover_tool_catalog(root: Optional[Union[str, os.PathLike[str]]] = None) -
     cached = _DISCOVER_TOOL_CACHE.get(cache_key)
     if cached is not None:
         return _copy_catalog(cached)
+
+    if _disk_cache_enabled(root_path):
+        disk_cached = _read_disk_cache(signature)
+        if disk_cached is not None:
+            _DISCOVER_TOOL_CACHE[cache_key] = _copy_catalog(disk_cached)
+            return _copy_catalog(disk_cached)
 
     if len(_DISCOVER_TOOL_CACHE) > 4:
         _DISCOVER_TOOL_CACHE.clear()
@@ -243,6 +296,8 @@ def discover_tool_catalog(root: Optional[Union[str, os.PathLike[str]]] = None) -
                 "params": _params_for(node),
             })
     tools.sort(key=lambda item: (item["category"], item["module"], item["name"]))
+    if _disk_cache_enabled(root_path):
+        _write_disk_cache(signature, tools)
     _DISCOVER_TOOL_CACHE[cache_key] = _copy_catalog(tools)
     return _copy_catalog(tools)
 

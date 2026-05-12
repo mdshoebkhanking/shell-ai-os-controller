@@ -8,6 +8,7 @@ def test_full_validation_gate_covers_release_blockers() -> None:
 
     assert names[0] == "unit_and_regression_tests"
     assert "ui_e2e_probe" in names
+    assert "latency_probe_ui" in names
     assert "strict_public_release_check" in names
     assert "config_diagnostics" in names
     assert "build_public_release_package" in names
