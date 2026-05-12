@@ -64,6 +64,7 @@ def build_steps(python: str) -> list[ValidationStep]:
                 "--ui",
                 "--tts",
                 "--listener",
+                "--realtime",
                 "--json-out",
                 ".shell_runtime/memory_full_validation.json",
             ),

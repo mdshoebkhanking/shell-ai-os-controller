@@ -10,7 +10,7 @@ import os as _os
 _os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 _os.environ.setdefault("OMP_NUM_THREADS", "1")
 
-import asyncio, importlib.util, json, logging, math, os, random, re, sys, time as _time
+import asyncio, json, logging, math, os, random, re, sys, time as _time
 from collections import deque
 from datetime import datetime
 
@@ -75,6 +75,7 @@ try: import GPUtil
 except Exception: GPUtil = None
 
 import socketio
+from shell_realtime_audio_runtime import LIVEKIT_AVAILABLE, LiveKitAudioClient
 
 # --- AI Brain import ---
 _BRAIN = None
@@ -87,22 +88,6 @@ try:
     logging.info(f"AI Brain loaded: {len(_BRAIN.providers)} providers")
 except Exception as _brain_err:
     logging.warning(f"AI Brain not available: {_brain_err}")
-
-try:
-    import aiohttp
-except Exception:
-    aiohttp = None
-try:
-    import numpy as np
-except Exception:
-    np = None
-
-# Do not import `livekit.rtc` during UI startup. On macOS it loads WebRTC
-# symbols that collide with QtWebEngine's WebRTC classes, producing noisy
-# Objective-C duplicate-class warnings and possible casting failures. The
-# actual rtc module is imported lazily inside the voice audio thread.
-LIVEKIT_AVAILABLE = importlib.util.find_spec("livekit") is not None
-
 
 def _silent_engineio_logger():
     lg = logging.getLogger("shell.ui.engineio")
@@ -324,55 +309,6 @@ class SocketIOClient(QThread):
         try: self.sio.shutdown()
         except Exception as _e:
             logger.debug("ignored Exception: %s", _e)
-class LiveKitAudioClient(QThread):
-    audio_amplitude = pyqtSignal(float)
-    def __init__(self, token_url=None):
-        super().__init__()
-        self._dyn = token_url is None
-        self.token_url = token_url or _resolve_token_url()
-        self.running = True
-    async def _run(self):
-        if not LIVEKIT_AVAILABLE or aiohttp is None or np is None:
-            return
-        from livekit import rtc
-        while self.running:
-            room = None
-            try:
-                if self._dyn: self.token_url = _resolve_token_url()
-                async with aiohttp.ClientSession() as s:
-                    async with s.get(self.token_url, headers=_hub_auth_headers()) as r:
-                        if r.status != 200: await asyncio.sleep(1.5); continue
-                        d = await r.json()
-                        token, url = d["token"], d.get("url", "wss://sell-ejcqoa9w.livekit.cloud")
-                room = rtc.Room(); await room.connect(url, token)
-                @room.on("track_subscribed")
-                def _sub(track, pub, part):
-                    if track.kind == rtc.TrackKind.KIND_AUDIO: asyncio.create_task(self._audio(track))
-                for p in room.remote_participants.values():
-                    for pub in p.track_publications.values():
-                        if pub.track and pub.track.kind == rtc.TrackKind.KIND_AUDIO:
-                            asyncio.create_task(self._audio(pub.track))
-                while self.running: await asyncio.sleep(0.1)
-            except Exception: await asyncio.sleep(1.5)
-            finally:
-                if room:
-                    try: await room.disconnect()
-                    except Exception as _e:
-                        logger.debug("ignored Exception: %s", _e)
-    async def _audio(self, track):
-        from livekit import rtc
-        stream = rtc.AudioStream(track)
-        async for frame in stream:
-            if not self.running: break
-            samples = np.frombuffer(frame.data, dtype=np.int16)
-            self.audio_amplitude.emit(float(np.abs(samples).mean() / 32768.0))
-    def run(self):
-        if LIVEKIT_AVAILABLE:
-            loop = asyncio.new_event_loop(); asyncio.set_event_loop(loop)
-            loop.run_until_complete(self._run())
-    def stop(self): self.running = False
-
-
 class ShellActionExecutor:
     """Detects actionable commands in user text and executes matching shell tools."""
 

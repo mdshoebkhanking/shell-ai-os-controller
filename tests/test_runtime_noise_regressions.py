@@ -9,7 +9,10 @@ def test_ui_import_does_not_eager_load_livekit_rtc():
         "import os, sys, json; "
         "os.environ.setdefault('QT_QPA_PLATFORM','offscreen'); "
         "import shell_ui.shell_cinematic_full; "
-        "print(json.dumps({'livekit_rtc_loaded': 'livekit.rtc' in sys.modules}))"
+        "print(json.dumps({"
+        "'numpy_loaded': 'numpy' in sys.modules, "
+        "'livekit_rtc_loaded': 'livekit.rtc' in sys.modules"
+        "}))"
     )
 
     proc = subprocess.run(
@@ -23,6 +26,7 @@ def test_ui_import_does_not_eager_load_livekit_rtc():
 
     assert proc.returncode == 0, proc.stderr[-1200:]
     data = json.loads(proc.stdout.strip().splitlines()[-1])
+    assert data["numpy_loaded"] is False
     assert data["livekit_rtc_loaded"] is False
 
 

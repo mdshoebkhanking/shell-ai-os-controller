@@ -124,11 +124,56 @@ def _listener_probe() -> dict[str, Any]:
     }
 
 
+def _realtime_probe() -> dict[str, Any]:
+    import shell_realtime_audio_runtime as realtime
+    from shell_realtime_audio_runtime import LiveKitAudioClient
+
+    class ProbeLiveKitAudioClient(LiveKitAudioClient):
+        async def _run(self, asyncio_module):
+            self.probe_started = True
+            while self.running:
+                await asyncio_module.sleep(0.01)
+
+    modules_before = {
+        "aiohttp": "aiohttp" in sys.modules,
+        "numpy": "numpy" in sys.modules,
+        "livekit_rtc": "livekit.rtc" in sys.modules,
+    }
+    old_available = realtime.LIVEKIT_AVAILABLE
+    realtime.LIVEKIT_AVAILABLE = True
+    try:
+        client = ProbeLiveKitAudioClient(token_url="http://127.0.0.1/token")
+        client.probe_started = False
+        thread_count_before = threading.active_count()
+        client.start()
+        deadline = time.time() + 0.5
+        while time.time() < deadline and not client.probe_started:
+            time.sleep(0.01)
+        client.stop()
+        client.wait(1500)
+        thread_count_after = threading.active_count()
+    finally:
+        realtime.LIVEKIT_AVAILABLE = old_available
+    return {
+        "thread_count_before": thread_count_before,
+        "thread_count_after": thread_count_after,
+        "thread_cleaned_up": not client.isRunning(),
+        "started": bool(client.probe_started),
+        "modules_before": modules_before,
+        "modules_after": {
+            "aiohttp": "aiohttp" in sys.modules,
+            "numpy": "numpy" in sys.modules,
+            "livekit_rtc": "livekit.rtc" in sys.modules,
+        },
+    }
+
+
 def build_report(
     *,
     include_ui: bool,
     include_tts: bool,
     include_listener: bool = False,
+    include_realtime: bool = False,
     stress_iterations: int = 10,
 ) -> dict[str, Any]:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -176,6 +221,11 @@ def build_report(
         listener = _listener_probe()
         snapshots.append(_snapshot("after_listener_probe", started, listener=listener))
 
+    if include_realtime:
+        started = time.perf_counter()
+        realtime = _realtime_probe()
+        snapshots.append(_snapshot("after_realtime_probe", started, realtime=realtime))
+
     if include_ui:
         started = time.perf_counter()
         ui = _ui_probe()
@@ -195,6 +245,7 @@ def build_report(
         "include_ui": include_ui,
         "include_tts": include_tts,
         "include_listener": include_listener,
+        "include_realtime": include_realtime,
         "peak_rss_mb": peak,
         "snapshots": snapshots,
     }
@@ -205,6 +256,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ui", action="store_true", help="Instantiate the PyQt UI offscreen and measure first paint memory.")
     parser.add_argument("--tts", action="store_true", help="Initialize the TTS helper and measure its memory impact.")
     parser.add_argument("--listener", action="store_true", help="Run a synthetic voice listener thread cleanup probe.")
+    parser.add_argument("--realtime", action="store_true", help="Run a synthetic realtime audio thread cleanup probe.")
     parser.add_argument("--stress-iterations", type=int, default=10, help="Repeated catalog/tool iterations for retention checks.")
     parser.add_argument("--json-out", default="", help="Optional JSON output path.")
     args = parser.parse_args(argv)
@@ -213,6 +265,7 @@ def main(argv: list[str] | None = None) -> int:
         include_ui=args.ui,
         include_tts=args.tts,
         include_listener=args.listener,
+        include_realtime=args.realtime,
         stress_iterations=args.stress_iterations,
     )
     text = json.dumps(report, indent=2, sort_keys=True)

@@ -44,3 +44,16 @@ def test_memory_probe_listener_thread_cleanup() -> None:
 
     assert listener_snapshot["listener"]["thread_cleaned_up"] is True
     assert listener_snapshot["listener"]["thread_count_after"] <= listener_snapshot["listener"]["thread_count_before"]
+
+
+def test_memory_probe_realtime_thread_cleanup() -> None:
+    from tools.memory_probe import build_report
+
+    report = build_report(include_ui=False, include_tts=False, include_realtime=True, stress_iterations=1)
+    realtime_snapshot = next(item for item in report["snapshots"] if item["name"] == "after_realtime_probe")
+    realtime = realtime_snapshot["realtime"]
+
+    assert realtime["started"] is True
+    assert realtime["thread_cleaned_up"] is True
+    assert realtime["thread_count_after"] <= realtime["thread_count_before"]
+    assert realtime["modules_after"]["livekit_rtc"] is False
