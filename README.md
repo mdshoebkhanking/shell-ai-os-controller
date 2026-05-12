@@ -36,7 +36,7 @@
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-launch-demo.mp4">Watch the full 57-second launch demo with voiceover</a></strong>
+  <strong><a href="videos/shell-launch-demo.mp4">Watch the full cinematic launch demo with voiceover</a></strong>
 </p>
 
 ---
@@ -129,7 +129,7 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-launch-demo.mp4">Watch the 57-second launch demo with voiceover</a></strong>
+  <strong><a href="videos/shell-launch-demo.mp4">Watch the cinematic launch demo with voiceover</a></strong>
   ·
   <a href="videos/shell-launch-demo-voiceover.md">Voiceover script</a>
 </p>

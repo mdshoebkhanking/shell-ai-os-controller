@@ -7,7 +7,7 @@ Prefer YouTube, GitHub Releases, or Git LFS for large videos.
 
 ## Current Asset
 
-- `shell-launch-demo.mp4`: 57-second compressed public launch demo with
+- `shell-launch-demo.mp4`: compressed public launch demo with
   voiceover.
 - `shell-launch-demo-poster.png`: README poster frame for the launch demo.
 - `shell-launch-demo-voiceover.md`: script used to generate the voiceover.
