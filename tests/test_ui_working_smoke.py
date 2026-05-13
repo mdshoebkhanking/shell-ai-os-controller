@@ -94,3 +94,24 @@ def test_shell_start_page_env_hook_exists_for_ui_qa():
 
     assert "SHELL_START_PAGE" in src
     assert '"voice": 1' in src
+
+
+def test_chat_stream_scroll_is_coalesced_and_user_safe():
+    app = _app()
+    from shell_ui.shell_cinematic_full import ChatPage
+
+    page = ChatPage()
+    page.resize(900, 700)
+    page.show()
+    app.processEvents()
+
+    assert page.is_scroll_near_bottom() is True
+
+    page.request_stream_scroll(was_near_bottom=False)
+    assert page._stream_scroll_timer.isActive() is False
+
+    page.request_stream_scroll(was_near_bottom=True)
+    assert page._stream_scroll_timer.isActive() is True
+
+    page._stream_scroll_timer.stop()
+    page.close()

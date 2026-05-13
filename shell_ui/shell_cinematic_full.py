@@ -5540,6 +5540,14 @@ class ChatPage(QWidget):
         self._chat_lay.addStretch(1)
         self._scroll.setWidget(self._chat_w)
         lay.addWidget(self._scroll, 1)
+        self._stream_scroll_timer = QTimer(self)
+        self._stream_scroll_timer.setSingleShot(True)
+        self._stream_scroll_timer.timeout.connect(self._smooth_scroll_to_bottom)
+        try:
+            margin_px = int(os.environ.get("SHELL_STREAM_SCROLL_MARGIN_PX", "96"))
+            self._stream_scroll_margin_px = max(24, min(240, margin_px))
+        except Exception:
+            self._stream_scroll_margin_px = 96
 
         self.show_empty_state()
 
@@ -6286,6 +6294,26 @@ class ChatPage(QWidget):
                     self._scroll.verticalScrollBar().maximum())
             except Exception:
                 pass
+
+    def is_scroll_near_bottom(self, margin_px=None):
+        try:
+            sb = self._scroll.verticalScrollBar()
+            if sb is None:
+                return True
+            margin = self._stream_scroll_margin_px if margin_px is None else int(margin_px)
+            return (sb.maximum() - sb.value()) <= max(0, margin)
+        except Exception:
+            return True
+
+    def request_stream_scroll(self, *, was_near_bottom=True):
+        """Coalesce streaming auto-scroll without fighting manual scroll-up."""
+        if not was_near_bottom:
+            return
+        try:
+            if not self._stream_scroll_timer.isActive():
+                self._stream_scroll_timer.start(24)
+        except Exception:
+            self._smooth_scroll_to_bottom()
 
     def set_thinking(self, v):
         self._typing_container.setVisible(v)
@@ -12053,11 +12081,20 @@ class ShellHoloUI(QMainWindow):
         try:
             if self._stream_bubble is None:
                 return
+            was_near_bottom = True
+            try:
+                was_near_bottom = self.chat_page.is_scroll_near_bottom()
+            except Exception:
+                was_near_bottom = True
             lbl = getattr(self._stream_bubble, '_stream_label', None)
             if lbl is not None:
                 lbl.setText(self._streaming_text)
             elif hasattr(self._stream_bubble, 'setText'):
                 self._stream_bubble.setText(self._streaming_text)
+            try:
+                self.chat_page.request_stream_scroll(was_near_bottom=was_near_bottom)
+            except Exception as _se:
+                logger.debug("stream scroll request failed: %s", _se)
         except Exception as _e:
             logger.debug("stream chunk update failed: %s", _e)
 
