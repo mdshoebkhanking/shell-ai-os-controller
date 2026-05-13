@@ -877,6 +877,9 @@ class ShellV2Worker(QThread):
                     stream_bytes = 0
                     sse_frames = 0
                     chunk_count = 0
+                    end_server_elapsed_ms = None
+                    end_server_metrics = {}
+                    end_provider_metrics = {}
                     with urllib.request.urlopen(sreq, timeout=self.TIMEOUT_S) as sresp:
                         status = getattr(sresp, "status", None) or getattr(sresp, "code", None)
                         self._emit_latency("stream_headers", started, status=status)
@@ -926,6 +929,8 @@ class ShellV2Worker(QThread):
                                                     chunks=chunk_count,
                                                     sse_frames=sse_frames,
                                                     bytes=stream_bytes,
+                                                    server_elapsed_ms=ev_payload.get("server_elapsed_ms"),
+                                                    chunk_index=ev_payload.get("chunk_index"),
                                                 )
                                             try:
                                                 self.chunk_received.emit(chunk)
@@ -933,6 +938,9 @@ class ShellV2Worker(QThread):
                                                 pass
                                     elif cur_event == "end":
                                         full_reply = str(ev_payload.get("full_reply") or full_reply)
+                                        end_server_elapsed_ms = ev_payload.get("server_elapsed_ms")
+                                        end_server_metrics = ev_payload.get("server_metrics")
+                                        end_provider_metrics = ev_payload.get("provider_metrics")
                                         saw_end = True
                                     elif cur_event == "error":
                                         saw_error = str(ev_payload.get("message") or "stream error")
@@ -960,6 +968,9 @@ class ShellV2Worker(QThread):
                             chunks=chunk_count,
                             sse_frames=sse_frames,
                             bytes=stream_bytes,
+                            server_elapsed_ms=end_server_elapsed_ms,
+                            server_metrics=end_server_metrics,
+                            provider_metrics=end_provider_metrics,
                         )
                         try:
                             self.stream_done.emit()

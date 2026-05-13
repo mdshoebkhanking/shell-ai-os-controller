@@ -13,9 +13,9 @@ class _FakeSSEResponse:
         lines: list[bytes] = []
         for chunk in chunks:
             full += chunk
-            frame = f"event: delta\ndata: {json.dumps({'text': chunk})}\n\n"
+            frame = f"event: delta\ndata: {json.dumps({'text': chunk, 'server_elapsed_ms': 1.2, 'chunk_index': len(full)})}\n\n"
             lines.extend(line.encode("utf-8") for line in frame.splitlines(keepends=True))
-        end = f"event: end\ndata: {json.dumps({'full_reply': full})}\n\n"
+        end = f"event: end\ndata: {json.dumps({'full_reply': full, 'server_elapsed_ms': 2.4, 'server_metrics': {'chunks': len(chunks)}, 'provider_metrics': {'selected_provider': 'fake'}})}\n\n"
         lines.extend(line.encode("utf-8") for line in end.splitlines(keepends=True))
         self._lines = lines
         self._delay_s = delay_s
@@ -91,7 +91,11 @@ def test_shell_v2_worker_records_real_sse_timing(monkeypatch) -> None:
     assert first_chunk["chunks"] == 1
     assert first_chunk["sse_frames"] >= 1
     assert first_chunk["bytes"] > 0
+    assert first_chunk["server_elapsed_ms"] == 1.2
     assert stream_done["chunks"] == 2
     assert stream_done["chars"] == 5
     assert stream_done["sse_frames"] >= 3
+    assert stream_done["server_elapsed_ms"] == 2.4
+    assert stream_done["server_metrics"]["chunks"] == 2
+    assert stream_done["provider_metrics"]["selected_provider"] == "fake"
     assert stream_done["elapsed_ms"] >= first_chunk["elapsed_ms"]
