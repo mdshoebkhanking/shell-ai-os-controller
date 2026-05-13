@@ -164,6 +164,9 @@ def _streaming_first_token_probe():
             await asyncio.sleep(0.01)
             yield "lo"
 
+        def supports_streaming(self):
+            return True
+
     original_sequence = SmartRouter.get_provider_sequence
     original_model = SmartRouter.get_model_for_provider
     SmartRouter.get_provider_sequence = staticmethod(lambda mode="SMART": ["probe_stream"])

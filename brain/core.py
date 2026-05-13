@@ -647,8 +647,18 @@ class MultiAIBrain:
             start = time.time()
             metrics["providers_attempted"].append(provider_name)
 
-            # Attempt streaming if the provider exposes the method
+            # Attempt streaming only when the selected provider explicitly
+            # supports token streaming. LazyProviderProxy may expose the
+            # method as a forwarding surface, so `hasattr` alone would turn
+            # every provider into a one-chunk pseudo-stream and bypass the
+            # shorter fallback timeout below.
+            stream_supported = False
             if hasattr(provider, "generate_response_stream_async"):
+                try:
+                    stream_supported = bool(provider.supports_streaming())
+                except Exception:
+                    stream_supported = False
+            if stream_supported:
                 try:
                     collected: List[str] = []
                     async for chunk in provider.generate_response_stream_async(

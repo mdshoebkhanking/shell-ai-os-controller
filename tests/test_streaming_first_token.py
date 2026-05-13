@@ -22,6 +22,9 @@ def test_brain_stream_records_first_token_metrics(monkeypatch) -> None:
             await asyncio.sleep(0.01)
             yield "llo"
 
+        def supports_streaming(self):
+            return True
+
     monkeypatch.setattr(SmartRouter, "get_provider_sequence", staticmethod(lambda mode="SMART": ["streamer"]))
     monkeypatch.setattr(SmartRouter, "get_model_for_provider", staticmethod(lambda mode, provider_name: "fake-model"))
 

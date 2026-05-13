@@ -132,12 +132,22 @@ class LazyProviderProxy(ModelProvider):
     async def generate_response_async(self, messages: List[Dict[str, str]], **kwargs) -> str:
         return await self._load_provider().generate_response_async(messages, **kwargs)
 
+    async def generate_response_stream_async(self, messages: List[Dict[str, str]], **kwargs):
+        provider = self._load_provider()
+        method = getattr(provider, "generate_response_stream_async", None)
+        if not method or not provider.supports_streaming():
+            raise NotImplementedError(f"{self.spec.name} does not support token streaming")
+        async for chunk in method(messages, **kwargs):
+            yield chunk
+
     def get_cost_per_1k_tokens(self, model: str = "") -> Dict[str, float]:
         return self._load_provider().get_cost_per_1k_tokens(model)
 
     def supports_streaming(self) -> bool:
-        provider = self._provider
-        return bool(provider and provider.supports_streaming())
+        try:
+            return bool(self._load_provider().supports_streaming())
+        except Exception:
+            return False
 
     def supports_function_calling(self) -> bool:
         provider = self._provider

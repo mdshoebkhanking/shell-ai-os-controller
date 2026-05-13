@@ -55,3 +55,28 @@ class OpenAIProvider(ModelProvider):
             return response.choices[0].message.content
         except Exception as e:
             return f"OpenAI Error: {str(e)}"
+
+    async def generate_response_stream_async(self, messages: List[Dict[str, str]], **kwargs):
+        if not self.async_client:
+            raise RuntimeError("OpenAI async client unavailable")
+
+        model = kwargs.get("model", "gpt-4o")
+        temperature = kwargs.get("temperature", 0.7)
+
+        stream = await self.async_client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            stream=True,
+        )
+        async for event in stream:
+            choices = getattr(event, "choices", None) or []
+            if not choices:
+                continue
+            delta = getattr(choices[0], "delta", None)
+            text = getattr(delta, "content", None) if delta is not None else None
+            if text:
+                yield str(text)
+
+    def supports_streaming(self) -> bool:
+        return True
