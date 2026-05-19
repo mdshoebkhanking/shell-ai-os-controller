@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 
 import pytest
 
@@ -72,6 +73,32 @@ def test_encode_sse_event_is_compact_valid_json_frame() -> None:
     assert frame.endswith(b"\n\n")
     data_line = next(line for line in frame.decode("utf-8").splitlines() if line.startswith("data: "))
     assert json.loads(data_line[len("data: "):]) == {"text": "Hi", "chunk_index": 1}
+
+
+def test_tcp_nodelay_helper_prefers_low_latency_streaming() -> None:
+    import shell_v2_runtime
+
+    class FakeSocket:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def setsockopt(self, level, option, value) -> None:
+            self.calls.append((level, option, value))
+
+    fake_socket = FakeSocket()
+
+    assert shell_v2_runtime._set_tcp_nodelay(fake_socket) is True
+    assert fake_socket.calls == [(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)]
+
+
+def test_tcp_nodelay_helper_is_best_effort() -> None:
+    import shell_v2_runtime
+
+    class FailingSocket:
+        def setsockopt(self, level, option, value) -> None:
+            raise OSError("not supported")
+
+    assert shell_v2_runtime._set_tcp_nodelay(FailingSocket()) is False
 
 
 def test_shell_v2_default_brain_factory_uses_singleton(monkeypatch) -> None:

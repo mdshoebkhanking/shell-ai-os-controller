@@ -639,3 +639,39 @@
 - Gemini Live is still turn-scoped; provider modules are warm, but the actual Live WebSocket is not yet persistent across voice turns.
 - Intent prewarm currently imports provider modules but does not open a provider audio session, which is the safer first step but not the final realtime-duplex architecture.
 - Human timbre judgment still requires user verification; telemetry confirms the Aoede premium route.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran a hybrid multi-language runtime architecture cycle focused on Shell's future Tauri/Rust-or-Go realtime core without starting a risky rewrite.
+- Researched current Tauri v2 process/IPC/sidecar patterns, Rust Tokio async networking, Go pipeline/concurrency patterns, LiveKit turn orchestration, Pipecat smart-turn endpointing, and OpenAI Realtime VAD/turn detection.
+- Mapped current hot runtime boundaries: Python Shell-v2 SSE bridge, async runtime thread, PyQt SSE worker, premium voice runtime, optional LiveKit realtime audio runtime, provider transport reuse, and tool catalog execution.
+- Confirmed this local environment does not currently include `rustc`, `cargo`, or `go`, so native extraction should be planned and benchmark-gated before adding toolchain/build complexity.
+- Added best-effort `TCP_NODELAY` configuration to the Shell-v2 bridge listener and accepted client sockets so realtime SSE frames prefer immediate local delivery.
+- Added focused unit coverage for the low-latency socket helper.
+
+### Changes Made
+- Updated `shell_v2_runtime.py` with `_set_tcp_nodelay(...)`, listener-level low-latency socket setup, and accepted-connection low-latency setup.
+- Updated `tests/test_shell_v2_runtime.py` with success/failure tests for the best-effort TCP no-delay helper.
+
+### Current State
+- Shell-v2 local bridge before samples: first visible text median `18.45 ms`; transport-to-worker median `7.342 ms`; stream completion median `40.68 ms`.
+- Shell-v2 local bridge after samples: first visible text median `17.27 ms`; transport-to-worker median `6.215 ms`; stream completion median `39.52 ms`.
+- Measured improvement: first visible text improved by `1.18 ms` (`6.4%`); transport-to-worker improved by `1.127 ms` (`15.4%`).
+- Baseline memory probe remains stable: provider transport closes cleanly, `after_close.session_count=0`, peak RSS `27.859 MB`.
+- Latency probe remained healthy; `shell_v2.worker_cancel` stayed sub-millisecond at `0.406 ms` total in the after run.
+- Production release check passed with no blockers; warning only that local `.env` exists and must not be packaged.
+- Full test suite passed: `396 passed, 1 warning`.
+
+### Next Steps
+1. Add a dedicated hybrid-runtime benchmark that isolates SSE frame encode, local TCP flush, queue handoff, provider transport reuse, and voice PCM scheduling as separate migration gates.
+2. Prototype a Rust sidecar only for a narrow Shell-v2 transport shim once Rust tooling is intentionally added; keep Python as the AI/provider/tool orchestration layer.
+3. Compare a Go sidecar for websocket/SSE supervision only if operational simplicity beats Rust/Tauri integration for that boundary.
+4. Treat realtime PCM audio scheduling and persistent duplex websocket sessions as the highest-value future Rust candidates.
+5. Keep provider SDKs, workflow orchestration, tool execution, and rapid AI experimentation in Python until profiling proves otherwise.
+
+### Open Issues
+- No native Rust/Go prototype was built in this cycle because the toolchains are not installed locally and the safe first step was architecture mapping plus a measurable Python transport improvement.
+- Provider first-token and premium voice first-audio variance are still much larger than local Shell-v2 transport overhead.
+- Shell is still PyQt-based today; Tauri migration should be a phased frontend/runtime program, not a direct replacement commit.
+- Future native sidecars need explicit IPC ownership, lifecycle supervision, crash recovery, telemetry, and cleanup tests before they can become production runtime paths.

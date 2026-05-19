@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import queue
+import socket
 import threading
 import time
 from dataclasses import dataclass
@@ -21,6 +22,15 @@ def encode_sse_event(event: str, payload: dict[str, Any]) -> bytes:
 
 def _elapsed_ms(started: float) -> float:
     return round((time.perf_counter() - started) * 1000.0, 3)
+
+
+def _set_tcp_nodelay(sock: socket.socket) -> bool:
+    """Prefer immediate delivery for local realtime SSE frames."""
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        return True
+    except OSError:
+        return False
 
 
 def _default_brain_factory() -> Any:
@@ -275,9 +285,17 @@ class _ShellV2HTTPServer(ThreadingHTTPServer):
         super().__init__(server_address, RequestHandlerClass)
         self.runtime = runtime
 
+    def server_bind(self) -> None:
+        _set_tcp_nodelay(self.socket)
+        super().server_bind()
+
 
 class ShellV2BridgeHandler(BaseHTTPRequestHandler):
     server: _ShellV2HTTPServer
+
+    def setup(self) -> None:
+        super().setup()
+        _set_tcp_nodelay(self.connection)
 
     def log_message(self, format: str, *args: Any) -> None:
         return
