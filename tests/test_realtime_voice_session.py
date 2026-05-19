@@ -35,6 +35,22 @@ class _SystemPage:
         self.logs.append(args)
 
 
+class _ChatPage:
+    def __init__(self) -> None:
+        self.messages = []
+
+    def add_message(self, role: str, text: str) -> None:
+        self.messages.append((role, text))
+
+
+class _TTSRecorder:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def speak(self, text: str, force: bool = False) -> None:
+        self.calls.append((text, force))
+
+
 def test_realtime_voice_session_tracks_duplex_lifecycle() -> None:
     from shell_realtime_voice_session import RealtimeVoiceSession
 
@@ -145,6 +161,34 @@ def test_shell_v2_voice_reply_does_not_duplicate_stream_done(monkeypatch) -> Non
     ShellHoloUI._on_voice_shell_v2_reply_for_turn(ui, 5, "already streamed")
 
     assert replies == []
+
+
+def test_shell_v2_voice_reply_does_not_double_speak_streamed_turn(monkeypatch) -> None:
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    from shell_ui.shell_cinematic_full import ShellHoloUI
+
+    ui = ShellHoloUI.__new__(ShellHoloUI)
+    ui._voice_turn_id = 7
+    ui._voice_stream_completed_turn_id = 0
+    ui._voice_streaming_text = "Hello, world."
+    ui._voice_stream_spoken_upto = len("Hello, ")
+    ui._voice_first_chunk_seen = True
+    ui._chat_history = [("user", "say hello")]
+    ui._tts = _TTSRecorder()
+    ui.voice_page = _VoicePage()
+    ui.chat_page = _ChatPage()
+    ui.top_bar = _TopBar()
+    ui.system_page = _SystemPage()
+    ui._record_agent_message = lambda _text: None
+
+    ShellHoloUI._on_voice_shell_v2_reply_for_turn(ui, 7, "Hello, world.")
+    ShellHoloUI._on_voice_stream_done_for_turn(ui, 7)
+    ShellHoloUI._on_voice_stream_chunk_for_turn(ui, 7, "Hello, world.")
+
+    assert ui._tts.calls == [("world.", True)]
+    assert all(call[0] != "Hello, world." for call in ui._tts.calls)
+    assert ui._voice_stream_completed_turn_id == 7
 
 
 def test_shell_v2_voice_error_falls_back_to_inprocess(monkeypatch) -> None:

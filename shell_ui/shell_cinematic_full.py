@@ -13116,6 +13116,8 @@ class ShellHoloUI(QMainWindow):
     def _on_voice_stream_chunk_for_turn(self, turn_id, chunk):
         if not self._is_voice_turn_current(turn_id):
             return
+        if int(turn_id or 0) == int(getattr(self, "_voice_stream_completed_turn_id", 0) or 0):
+            return
         self._on_voice_stream_chunk(chunk)
 
     def _on_voice_stream_done_for_turn(self, turn_id):
@@ -13130,7 +13132,21 @@ class ShellHoloUI(QMainWindow):
         self._on_voice_ai_reply(text)
 
     def _on_voice_shell_v2_reply_for_turn(self, turn_id, text):
-        if int(turn_id or 0) == int(getattr(self, "_voice_stream_completed_turn_id", 0) or 0):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        completed_turn = int(getattr(self, "_voice_stream_completed_turn_id", 0) or 0)
+        if int(turn_id or 0) == completed_turn:
+            return
+        streamed_text = str(getattr(self, "_voice_streaming_text", "") or "")
+        streamed_already = bool(streamed_text.strip()) or int(getattr(self, "_voice_stream_spoken_upto", 0) or 0) > 0
+        if streamed_already or bool(getattr(self, "_voice_first_chunk_seen", False)):
+            final_text = str(text or "").strip()
+            if final_text:
+                current_text = streamed_text.strip()
+                if not current_text or final_text.startswith(current_text) or len(final_text) >= len(current_text):
+                    self._voice_streaming_text = final_text
+            self._voice_stream_completed_turn_id = int(turn_id or 0)
+            self._on_voice_stream_done()
             return
         self._on_voice_ai_reply_for_turn(turn_id, text)
 

@@ -1014,3 +1014,34 @@
 - Windows acceptance is blocked on this macOS host by design; elevated non-Windows probe validates hub/UI/voice/agents but cannot replace real Windows UAT.
 - macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
 - Python 3.9 / LibreSSL warnings remain from the local runtime environment.
+
+## Session: 2026-05-19
+
+### Completed
+- Investigated the reported issue where Shell's real premium voice could be heard twice.
+- Traced the duplicate path to voice streaming orchestration: incremental TTS chunks could play while Shell-v2 also emitted the final full reply for the same turn.
+- Added turn-level guards so a voice turn that has already streamed audio cannot route the final Shell-v2 reply through full-reply TTS again.
+- Added protection against late chunk signals after a streamed turn has already finalized.
+- Added regression coverage for the problematic signal ordering.
+
+### Changes Made
+- Updated `shell_ui/shell_cinematic_full.py` so streamed Shell-v2 voice turns finalize through the streaming path and do not double-speak the full reply.
+- Updated `tests/test_realtime_voice_session.py` with a fake TTS recorder test proving the final full reply is not spoken after streamed audio.
+
+### Current State
+- Targeted voice tests passed: `51 passed, 1 warning`.
+- Visible voice validation passed: backend `gemini_live_pcm`, voice `Aoede`, first audible `842.24 ms`, first playback `842.88 ms`.
+- Full test suite passed: `419 passed, 1 warning`.
+- E2E UI probe passed.
+- Latency probe passed; sandbox-only `shell_v2.connect_1s` remains blocked unless elevated.
+- Production release check passed with no blockers; warning remains for local `.env`.
+
+### Next Steps
+1. Add a live voice-session probe that simulates Shell-v2 chunk/end/reply signal reordering directly through the UI worker.
+2. Add user-visible voice playback telemetry showing queued segments versus final full reply suppression.
+3. Add optional audio-device diagnostics for macOS `AudioQueueStart failed (-66680)` cases.
+
+### Open Issues
+- macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
+- Python 3.9 / LibreSSL warnings remain from the local runtime environment.
+- Local `.env` exists and must not be included in public release packages.
