@@ -172,6 +172,102 @@ def test_agents_page_renders_real_orchestration_state():
     page.close()
 
 
+def test_tools_page_surfaces_readiness_filters_and_safe_run_state():
+    app = _app()
+    from PyQt6.QtWidgets import QLabel
+    from shell_ui.shell_cinematic_full import BackendToolsPage
+
+    catalog = [
+        {
+            "id": "safe_math:add",
+            "name": "add",
+            "title": "Add",
+            "kind": "tool",
+            "category": "productivity",
+            "module": "safe_math",
+            "description": "Safe local math.",
+            "params": [],
+            "readiness": {"state": "READY", "ok": True, "reasons": []},
+            "metadata": {"safety_level": "safe", "platform_support": ["all"]},
+        },
+        {
+            "id": "weather:get",
+            "name": "get_weather",
+            "title": "Weather",
+            "kind": "tool",
+            "category": "browser",
+            "module": "weather",
+            "description": "Needs an API key.",
+            "params": [],
+            "readiness": {
+                "state": "NEEDS_API_KEY",
+                "ok": False,
+                "reasons": ["missing API key: OPENWEATHER_API_KEY"],
+            },
+            "metadata": {
+                "safety_level": "safe",
+                "platform_support": ["all"],
+                "api_requirements": ["OPENWEATHER_API_KEY"],
+            },
+        },
+        {
+            "id": "terminal:run",
+            "name": "run_command",
+            "title": "Run Command",
+            "kind": "tool",
+            "category": "system",
+            "module": "terminal",
+            "description": "Safety-gated terminal command.",
+            "params": [],
+            "readiness": {
+                "state": "BLOCKED_BY_SAFETY",
+                "ok": False,
+                "reasons": ["blocked by safety flag: SHELL_ALLOW_TERMINAL_EXEC"],
+            },
+            "metadata": {
+                "safety_level": "guarded",
+                "platform_support": ["all"],
+                "permissions_required": ["SHELL_ALLOW_TERMINAL_EXEC"],
+            },
+        },
+    ]
+
+    page = BackendToolsPage()
+    page._on_catalog_ready({
+        "catalog": catalog,
+        "summary": {
+            "total": 3,
+            "tools": 3,
+            "agents": 0,
+            "actions": 0,
+            "readiness_counts": {
+                "READY": 1,
+                "NEEDS_API_KEY": 1,
+                "BLOCKED_BY_SAFETY": 1,
+            },
+        },
+        "source": "local",
+    })
+
+    labels = "\n".join(lbl.text() for lbl in page.findChildren(QLabel))
+    assert "Ready 1" in labels
+    assert "Needs API 1" in labels
+    assert "Safety 1" in labels
+
+    page._state_filter.setCurrentIndex(page._state_filter.findData("NEEDS_API_KEY"))
+    assert [item["id"] for item in page._filtered_items()] == ["weather:get"]
+
+    page._select_item(catalog[1])
+    assert page._run_btn.isEnabled() is False
+    assert page._chat_btn.isEnabled() is True
+    assert "missing API key" in page._readiness.text()
+
+    page._select_item(catalog[0])
+    assert page._run_btn.isEnabled() is True
+    page.stop_workers()
+    page.close()
+
+
 def test_system_telemetry_does_not_fabricate_random_stats():
     src_path = Path(__file__).resolve().parents[1] / "shell_ui" / "shell_cinematic_full.py"
     src = src_path.read_text(encoding="utf-8")

@@ -843,3 +843,40 @@
 - Agents page is currently read-only; it exposes orchestration state but does not yet allow controlled agent execution from the dashboard.
 - macOS Accessibility permission is still not granted, so real desktop-control polish remains constrained by OS trust settings.
 - Python 3.9 / LibreSSL warnings remain from local runtime dependencies.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran the next autonomous product-evolution cycle against the Tools/MCP surface after the Agents page exposed the backend orchestration layer.
+- Researched current realtime/agent UX patterns around explicit turn/interruption state, session readiness, and observable agent orchestration.
+- Found and fixed a real UI lifecycle issue where the new readiness filter emitted before the Tools list layout existed.
+- Added first-class capability readiness visibility to the Tools page so users can see backend state before executing a capability.
+- Added direct-run gating so not-ready or unsafe capabilities are routed through chat/agent orchestration instead of being treated like ordinary safe buttons.
+
+### Changes Made
+- Updated `shell_ui/shell_cinematic_full.py` with Tools readiness chips, readiness-state filter, readiness/safety metadata in list rows, a selected-capability readiness detail panel, and direct-run gating.
+- Updated `tools/e2e_ui_probe.py` so UI validation fails if Tools readiness controls are missing or direct-run gating regresses.
+- Updated `tests/test_ui_working_smoke.py` with focused coverage for readiness chips, state filtering, not-ready run disabling, chat routing availability, and safe direct-run availability.
+
+### Current State
+- Tools page now surfaces real backend readiness counts: Ready, Needs API, Missing dep, Windows, Safety, Experimental.
+- Offscreen e2e UI probe passed and confirmed Tools readiness summary, state filter, not-ready direct-run disablement, and ready-safe direct-run enablement.
+- Visible e2e UI probe passed with the same Tools readiness checks.
+- All-tools UI probe passed: `439` items, `53` executed successfully, `40` agent-readiness-only, `292` safety-skipped, `10` expected not-ready, `0` errors.
+- Latency probe passed; premium voice identity remains Gemini Live PCM/Aoede with premium voice first and cloud fallback disabled.
+- Memory probe passed with provider transport cleanup: session count returned to `0` after close, peak RSS `30.969 MB`.
+- Production release check passed with no blockers; warnings remain for local `.env` and mac audio.
+- Full test suite passed: `409 passed, 1 warning`.
+
+### Next Steps
+1. Add a Voice Diagnostics page for active TTS engine, Aoede identity, first-audible latency, interruption timing, fallback state, and streaming voice health.
+2. Add a Provider Routing page showing Gemini/Groq/OpenAI availability, first-token latency, quota/rate-limit state, fallback decisions, and provider variance.
+3. Add a Memory/Context page for local memory namespaces, record counts, recent validated memories, reset/export controls, and agent memory bindings.
+4. Add controlled execution actions to the Agents page with approval-gated run flows.
+5. Modernize the local runtime away from Python 3.9/LibreSSL warnings in the packaging cycle.
+
+### Open Issues
+- Tools page is still a single two-pane surface; it now exposes readiness, but it does not yet provide dedicated drill-down pages per capability state.
+- Direct-run gating is intentionally conservative: unsafe/not-ready tools must go through chat orchestration or readiness repair.
+- macOS Accessibility permission is still not granted, so some desktop-control capabilities remain constrained by OS trust settings.
+- Python 3.9 / LibreSSL warnings remain from local runtime dependencies.

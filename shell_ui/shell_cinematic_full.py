@@ -8098,6 +8098,25 @@ class BackendToolsPage(QWidget):
         )
         left_lay.addWidget(self._status)
 
+        self._summary_row = QHBoxLayout()
+        self._summary_row.setSpacing(6)
+        self._readiness_chips = {}
+        for state in (
+            "READY",
+            "NEEDS_API_KEY",
+            "MISSING_DEPENDENCY",
+            "WINDOWS_ONLY",
+            "BLOCKED_BY_SAFETY",
+            "EXPERIMENTAL",
+        ):
+            chip = QLabel(f"{self._state_title(state)} --")
+            chip.setStyleSheet(self._chip_style(self._state_color(state)))
+            chip.setToolTip(state)
+            self._readiness_chips[state] = chip
+            self._summary_row.addWidget(chip)
+        self._summary_row.addStretch(1)
+        left_lay.addLayout(self._summary_row)
+
         self._search = QLineEdit()
         self._search.setPlaceholderText("Search backend tools")
         self._search.setStyleSheet(self._input_style())
@@ -8108,6 +8127,14 @@ class BackendToolsPage(QWidget):
         self._category.setStyleSheet(self._input_style())
         self._category.currentTextChanged.connect(self._render_list)
         left_lay.addWidget(self._category)
+
+        self._state_filter = QComboBox()
+        self._state_filter.setStyleSheet(self._input_style())
+        self._state_filter.currentTextChanged.connect(self._render_list)
+        self._state_filter.blockSignals(True)
+        self._state_filter.addItem("All readiness states", "")
+        self._state_filter.blockSignals(False)
+        left_lay.addWidget(self._state_filter)
 
         self._list_scroll = QScrollArea()
         self._list_scroll.setWidgetResizable(True)
@@ -8151,6 +8178,15 @@ class BackendToolsPage(QWidget):
             "border:none; background:transparent;"
         )
         right_lay.addWidget(self._desc)
+
+        self._readiness = QLabel("")
+        self._readiness.setWordWrap(True)
+        self._readiness.setStyleSheet(
+            f"color:{C_TEXT_MUTED}; font-family:'{_FONT}'; font-size:12px; "
+            f"border:1px solid {C_OUTLINE}; background:{C_SURFACE_HIGH}; "
+            "border-radius:8px; padding:8px 10px;"
+        )
+        right_lay.addWidget(self._readiness)
 
         args_lbl = QLabel("Arguments JSON")
         args_lbl.setStyleSheet(
@@ -8225,11 +8261,29 @@ class BackendToolsPage(QWidget):
         self._status.setText(
             f"{total} items ({actions} MCP, {tools} tools, {agents} agents) | {source}{suffix}"
         )
+        self._update_readiness_summary(summary, catalog)
         categories = ["All"] + sorted({str(x.get("category", "general")) for x in catalog})
         self._category.blockSignals(True)
         self._category.clear()
         self._category.addItems(categories)
         self._category.blockSignals(False)
+        states = [
+            state for state in (
+                "READY",
+                "NEEDS_API_KEY",
+                "MISSING_DEPENDENCY",
+                "WINDOWS_ONLY",
+                "BLOCKED_BY_SAFETY",
+                "EXPERIMENTAL",
+            )
+            if any(self._readiness_state(item) == state for item in catalog)
+        ]
+        self._state_filter.blockSignals(True)
+        self._state_filter.clear()
+        self._state_filter.addItem("All readiness states", "")
+        for state in states:
+            self._state_filter.addItem(self._state_title(state), state)
+        self._state_filter.blockSignals(False)
         self._render_list()
         if catalog and self._selected is None:
             self._select_item(catalog[0])
@@ -8241,18 +8295,25 @@ class BackendToolsPage(QWidget):
     def _filtered_items(self):
         query = self._search.text().strip().lower()
         category = self._category.currentText().strip().lower()
+        state_filter = str(self._state_filter.currentData() or "").strip().upper()
         items = []
         for item in self._catalog:
+            state = self._readiness_state(item)
             blob = " ".join([
                 str(item.get("name", "")),
                 str(item.get("title", "")),
                 str(item.get("module", "")),
                 str(item.get("description", "")),
                 str(item.get("category", "")),
+                state,
+                self._state_title(state),
+                self._safety_level(item),
             ]).lower()
             if query and query not in blob:
                 continue
             if category and category != "all" and str(item.get("category", "")).lower() != category:
+                continue
+            if state_filter and state != state_filter:
                 continue
             items.append(item)
         return items
@@ -8268,13 +8329,17 @@ class BackendToolsPage(QWidget):
         self._clear_list()
         for item in self._filtered_items():
             name = item.get("title") or item.get("name") or item.get("id")
-            sub = f"{item.get('category', 'general')} | {item.get('module', '')}"
+            state = self._readiness_state(item)
+            safety = self._safety_level(item)
+            color = self._state_color(state)
+            sub = f"{self._state_title(state)} | safety {safety} | {item.get('category', 'general')} | {item.get('module', '')}"
             btn = QPushButton(f"{name}\n{sub}")
             btn.setFixedHeight(54)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setStyleSheet(
                 "QPushButton {"
                 f" background:{C_SURFACE_HIGH}; color:{C_TEXT}; border:1px solid {C_OUTLINE};"
+                f" border-left:3px solid {color};"
                 " border-radius:8px; text-align:left; padding:7px 10px;"
                 f" font-family:'{_FONT}'; font-size:12px; font-weight:700;"
                 "}"
@@ -8313,15 +8378,92 @@ class BackendToolsPage(QWidget):
         self._selected = dict(item or {})
         title = self._selected.get("title") or self._selected.get("name") or "Tool"
         self._title.setText(str(title))
+        readiness = self._selected.get("readiness") if isinstance(self._selected.get("readiness"), dict) else {}
+        metadata = self._selected.get("metadata") if isinstance(self._selected.get("metadata"), dict) else {}
+        state = self._readiness_state(self._selected)
+        safety = self._safety_level(self._selected)
+        reasons = readiness.get("reasons") if isinstance(readiness.get("reasons"), list) else []
+        platform = ", ".join(str(x) for x in metadata.get("platform_support", []) or ["all"])
+        apis = ", ".join(str(x) for x in metadata.get("api_requirements", []) or [])
+        deps = ", ".join(str(x) for x in metadata.get("dependency_requirements", []) or [])
         meta = (
             f"{self._selected.get('kind', 'tool')} | {self._selected.get('category', 'general')} "
-            f"| {self._selected.get('id', '')} | risk: {self._selected.get('risk', 'normal')}"
+            f"| {self._selected.get('id', '')} | readiness: {state} | safety: {safety}"
         )
         self._meta.setText(meta)
         self._desc.setText(str(self._selected.get("description") or "No description available."))
+        detail_parts = [f"State: {self._state_title(state)}", f"Platform: {platform}"]
+        if apis:
+            detail_parts.append(f"API: {apis}")
+        if deps:
+            detail_parts.append(f"Deps: {deps}")
+        if reasons:
+            detail_parts.append("Reason: " + "; ".join(str(reason) for reason in reasons[:3]))
+        self._readiness.setText(" | ".join(detail_parts))
+        self._readiness.setStyleSheet(
+            f"color:{C_TEXT}; font-family:'{_FONT}'; font-size:12px; "
+            f"border:1px solid {self._state_color(state)}; background:{C_SURFACE_HIGH}; "
+            "border-radius:8px; padding:8px 10px;"
+        )
         self._args.setPlainText(self._args_template(self._selected))
-        self._run_btn.setEnabled(True)
+        direct_run_safe = bool(readiness.get("ok", True)) and safety == "safe"
+        self._run_btn.setEnabled(direct_run_safe)
+        self._run_btn.setToolTip(
+            "Direct run is available for ready, safe capabilities."
+            if direct_run_safe
+            else "Use chat routing or fix readiness before direct run."
+        )
         self._chat_btn.setEnabled(True)
+
+    def _update_readiness_summary(self, summary, catalog):
+        counts = summary.get("readiness_counts") if isinstance(summary.get("readiness_counts"), dict) else {}
+        if not counts:
+            counts = {}
+            for item in catalog:
+                state = self._readiness_state(item)
+                counts[state] = counts.get(state, 0) + 1
+        for state, chip in getattr(self, "_readiness_chips", {}).items():
+            count = int(counts.get(state, 0) or 0)
+            chip.setText(f"{self._state_title(state)} {count}")
+
+    def _readiness_state(self, item):
+        readiness = item.get("readiness") if isinstance(item.get("readiness"), dict) else {}
+        return str(readiness.get("state") or item.get("runtime_state") or "READY").upper()
+
+    def _safety_level(self, item):
+        metadata = item.get("metadata") if isinstance(item.get("metadata"), dict) else {}
+        return str(metadata.get("safety_level") or item.get("safety_level") or item.get("risk") or "safe").lower()
+
+    def _state_title(self, state):
+        titles = {
+            "READY": "Ready",
+            "OFFLINE_ONLY": "Offline",
+            "NEEDS_API_KEY": "Needs API",
+            "MISSING_DEPENDENCY": "Missing dep",
+            "WINDOWS_ONLY": "Windows",
+            "BLOCKED_BY_SAFETY": "Safety",
+            "EXPERIMENTAL": "Experimental",
+        }
+        return titles.get(str(state or "").upper(), str(state or "Unknown").replace("_", " ").title())
+
+    def _state_color(self, state):
+        state = str(state or "").upper()
+        if state in {"READY", "OFFLINE_ONLY"}:
+            return C_SUCCESS
+        if state in {"NEEDS_API_KEY", "MISSING_DEPENDENCY", "WINDOWS_ONLY"}:
+            return C_WARNING
+        if state == "BLOCKED_BY_SAFETY":
+            return C_ERROR
+        if state == "EXPERIMENTAL":
+            return C_PRIMARY
+        return C_TEXT_MUTED
+
+    def _chip_style(self, color):
+        return (
+            f"color:{color}; background:{C_SURFACE_HIGH}; border:1px solid {C_OUTLINE}; "
+            "border-radius:7px; padding:4px 7px; "
+            f"font-family:'{_FONT}'; font-size:10px; font-weight:800;"
+        )
 
     def _read_args(self):
         import json

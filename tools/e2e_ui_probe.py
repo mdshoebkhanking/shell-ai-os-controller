@@ -127,6 +127,43 @@ def main() -> int:
             report["ok"] = False
             report["errors"].append("agents page did not render expected orchestration state")
 
+        window._on_page_change(4)
+        _process_events(app, 1.0)
+        tools_text = "\n".join(lbl.text() for lbl in window.tools_page.findChildren(QLabel))
+        catalog = list(getattr(window.tools_page, "_catalog", []) or [])
+        non_ready = next(
+            (
+                item for item in catalog
+                if not bool((item.get("readiness") or {}).get("ok", True))
+            ),
+            None,
+        )
+        ready_safe = next(
+            (
+                item for item in catalog
+                if bool((item.get("readiness") or {}).get("ok", True))
+                and str((item.get("metadata") or {}).get("safety_level") or "safe").lower() == "safe"
+            ),
+            None,
+        )
+        non_ready_run_disabled = True
+        ready_safe_run_enabled = True
+        if non_ready:
+            window.tools_page._select_item(non_ready)
+            non_ready_run_disabled = not window.tools_page._run_btn.isEnabled()
+        if ready_safe:
+            window.tools_page._select_item(ready_safe)
+            ready_safe_run_enabled = window.tools_page._run_btn.isEnabled()
+        report["commands"]["tools_readiness"] = {
+            "summary_visible": "Ready" in tools_text and "Needs API" in tools_text,
+            "state_filter_visible": window.tools_page._state_filter.count() > 1,
+            "non_ready_direct_run_disabled": non_ready_run_disabled,
+            "ready_safe_direct_run_enabled": ready_safe_run_enabled,
+        }
+        if not all(report["commands"]["tools_readiness"].values()):
+            report["ok"] = False
+            report["errors"].append("tools page readiness controls did not render or gate execution correctly")
+
         window._on_page_change(1)
         _process_events(app, 0.2)
         vp = window.voice_page
