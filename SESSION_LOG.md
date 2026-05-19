@@ -771,3 +771,38 @@
 - macOS reports this process is not trusted for Accessibility input monitoring; UI tests still passed, but real desktop-control polish needs Accessibility permission.
 - Python 3.9 / LibreSSL warnings remain from local runtime dependencies and should be addressed in a packaging/runtime upgrade.
 - The platform supervisor is read-only; it reports architecture readiness but does not yet drive an in-app status dashboard.
+
+## Session: 2026-05-19
+
+### Completed
+- Reviewed the gap between backend reality and the visible UI: backend reports `456` capabilities, `399` tools, `40` agents, realtime/voice telemetry, readiness states, and platform-supervisor domains, while the UI mostly showed generic system charts and logs.
+- Added a real AI OS Status panel to the System page so users can see the backend platform state directly.
+- Wired the panel to `core.platform_supervisor.build_platform_snapshot(include_catalog=True)` through a dedicated Qt worker.
+- Made the panel lazy-load on actual page visibility or manual Refresh to avoid background thread lifecycle issues in tests and offscreen page construction.
+- Extended e2e UI validation so the probe fails if AI OS Status, score, capabilities, or Aoede identity are not rendered.
+
+### Changes Made
+- Updated `shell_ui/shell_cinematic_full.py` with `PlatformStatusWorker`, a System page AI OS Status card, platform domain chips, summary rendering, risk rendering, and lazy refresh lifecycle handling.
+- Updated `tools/e2e_ui_probe.py` to verify the new backend-backed System page panel.
+- Updated `tests/test_ui_working_smoke.py` with direct UI coverage for platform status rendering.
+
+### Current State
+- Visible UI e2e probe passed and confirmed the System page renders AI OS Status, score, backend capabilities, and Aoede voice identity.
+- Platform supervisor remains fast in the latency probe: `platform.supervisor_snapshot=4.776 ms`, internal `snapshot_ms=2.525 ms`.
+- Realtime probes remained stable: `shell_v2.worker_cancel=0.173 ms`, `voice.turn_cancel=1.692 ms`, realtime session control overhead `0.017 ms`.
+- Premium voice identity remains stable: Gemini `Aoede`, premium streaming enabled, local/cloud fallback disabled.
+- Production release check passed with no blockers; warnings remain for local `.env` and mac audio.
+- Full test suite passed: `407 passed, 1 warning`.
+
+### Next Steps
+1. Add a dedicated Agents page that shows the 19 orchestration agents, the 40 agent tools, selected capability, approval state, and memory scopes.
+2. Replace the generic Tools/MCP page with capability-group views: Ready, Needs API Key, Missing Dependency, Windows Only, Safety Blocked, Experimental.
+3. Add a Voice Diagnostics page showing active TTS engine, Aoede identity, first-audible latency, interruption timing, and fallback state.
+4. Add a Provider Routing page showing Gemini/Groq/OpenAI availability, quotas/rate limits, first-token latency, and fallback decisions.
+5. Add a Memory/Context page showing local memory namespaces, record counts, recent validated memories, and reset/export controls.
+
+### Open Issues
+- The new panel is read-only; it surfaces backend state but does not yet provide drill-down actions for each domain.
+- Agent orchestration, provider routing, voice diagnostics, and memory state still need dedicated UI panels to fully match backend reality.
+- macOS Accessibility permission is still not granted, so some real desktop automation capabilities are constrained by OS trust settings.
+- Python 3.9 / LibreSSL warnings remain and should be handled in a packaging/runtime modernization cycle.

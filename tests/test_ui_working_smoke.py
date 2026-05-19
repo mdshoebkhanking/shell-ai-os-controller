@@ -67,6 +67,52 @@ def test_system_page_shows_real_unavailable_state_when_psutil_missing(monkeypatc
     page.close()
 
 
+def test_system_page_renders_ai_os_platform_status():
+    app = _app()
+    from PyQt6.QtWidgets import QLabel
+    from shell_ui.shell_cinematic_full import SystemPage
+
+    page = SystemPage()
+    page._on_platform_status_ready({
+        "score": 88,
+        "status": "ready",
+        "process": {"snapshot_ms": 4.5},
+        "domains": [
+            {"name": "realtime", "status": "ready", "score": 94, "risks": []},
+            {
+                "name": "voice",
+                "status": "ready",
+                "score": 96,
+                "metrics": {"gemini_voice": "Aoede"},
+                "risks": [],
+            },
+            {"name": "agents", "status": "ready", "score": 93, "risks": []},
+            {
+                "name": "capabilities",
+                "status": "ready",
+                "score": 90,
+                "metrics": {
+                    "total": 456,
+                    "by_kind": {"tool": 399, "agent": 40},
+                    "readiness": {"ready": 214},
+                },
+                "risks": [],
+            },
+        ],
+    })
+    app.processEvents()
+
+    text = "\n".join(lbl.text() for lbl in page.findChildren(QLabel))
+    assert "AI OS Status" in text
+    assert "READY · 88" in text
+    assert "456 capabilities" in text
+    assert "Voice Aoede" in text
+    assert "Capabilities" in text
+    page._tick_timer.stop()
+    page._proc_timer.stop()
+    page.close()
+
+
 def test_system_telemetry_does_not_fabricate_random_stats():
     src_path = Path(__file__).resolve().parents[1] / "shell_ui" / "shell_cinematic_full.py"
     src = src_path.read_text(encoding="utf-8")

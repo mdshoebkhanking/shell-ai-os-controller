@@ -100,6 +100,19 @@ def main() -> int:
                 "visible": window.pages.currentWidget() is window.pages.widget(idx),
             }
 
+        window._on_page_change(2)
+        _process_events(app, 1.0)
+        system_text = "\n".join(lbl.text() for lbl in window.system_page.findChildren(QLabel))
+        report["commands"]["system_platform_status"] = {
+            "panel_visible": "AI OS Status" in system_text,
+            "score_visible": "READY" in system_text or "ATTENTION" in system_text or "OPTIMAL" in system_text,
+            "capabilities_visible": "capabilities" in system_text.lower(),
+            "voice_identity_visible": "Aoede" in system_text,
+        }
+        if not all(report["commands"]["system_platform_status"].values()):
+            report["ok"] = False
+            report["errors"].append("system platform status panel did not render expected backend state")
+
         window._on_page_change(1)
         _process_events(app, 0.2)
         vp = window.voice_page

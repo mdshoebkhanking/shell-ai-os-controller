@@ -6986,6 +6986,8 @@ class SystemPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet("background:transparent; border:none;")
+        self._platform_worker = None
+        self._platform_auto_loaded = False
         # Build deferred to a helper so the giant widget tree stays
         # readable. Keeps the same public surface (add_log_entry,
         # update_stats, add_process_row, _uptime_label, etc.).
@@ -7038,6 +7040,65 @@ class SystemPage(QWidget):
         content_lay = QVBoxLayout(content)
         content_lay.setContentsMargins(0, 0, DT.S.sm, 0)
         content_lay.setSpacing(DT.S.md)
+
+        # ---- AI OS platform readiness --------------------------------
+        platform_card = Card(glass=True, elevated=True, padded=True)
+        platform_lay = platform_card.layout()
+        platform_head = QHBoxLayout()
+        platform_head.setSpacing(DT.S.sm)
+
+        platform_title = H2("AI OS Status")
+        platform_head.addWidget(platform_title)
+        platform_head.addStretch(1)
+
+        self._platform_status = QLabel("Checking")
+        self._platform_status.setObjectName("platformStatusPill")
+        self._platform_status.setStyleSheet(
+            f"#platformStatusPill {{ color:{DT.C.text}; "
+            f"background:{DT.C.accent_soft}; border:1px solid {DT.C.border_strong}; "
+            f"border-radius:{DT.R.sm}px; padding:5px 10px; "
+            f"font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:800; }}"
+        )
+        platform_head.addWidget(self._platform_status)
+
+        self._platform_refresh_btn = QPushButton("Refresh")
+        self._platform_refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._platform_refresh_btn.setStyleSheet(
+            f"QPushButton {{ color:{DT.C.text_muted}; "
+            f"  background:transparent; border:1px solid {DT.C.border_strong}; "
+            f"  border-radius:{DT.R.sm}px; padding:5px 12px; "
+            f"  font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"  font-weight:700; }} "
+            f"QPushButton:hover {{ color:{DT.C.text}; "
+            f"  border:1px solid {DT.C.accent}; "
+            f"  background:{DT.C.accent_soft}; }}"
+        )
+        self._platform_refresh_btn.clicked.connect(self.refresh_platform_status)
+        platform_head.addWidget(self._platform_refresh_btn)
+        platform_lay.addLayout(platform_head)
+
+        self._platform_summary = QLabel("Backend platform state will appear here.")
+        self._platform_summary.setWordWrap(True)
+        self._platform_summary.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; border:none; background:transparent;"
+        )
+        platform_lay.addWidget(self._platform_summary)
+
+        self._platform_domain_grid = QGridLayout()
+        self._platform_domain_grid.setContentsMargins(0, DT.S.xs, 0, 0)
+        self._platform_domain_grid.setSpacing(DT.S.xs)
+        platform_lay.addLayout(self._platform_domain_grid)
+
+        self._platform_risks = QLabel("")
+        self._platform_risks.setWordWrap(True)
+        self._platform_risks.setStyleSheet(
+            f"color:{DT.C.warning}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; border:none; background:transparent;"
+        )
+        platform_lay.addWidget(self._platform_risks)
+        content_lay.addWidget(platform_card, 0)
 
         # ---- 2x2 grid of LiveLineChart cards --------------------------
         chart_grid = QGridLayout()
@@ -7175,6 +7236,153 @@ class SystemPage(QWidget):
         self._proc_timer.start(5000)
         # Populate immediately so the card isn't empty on first show.
         QTimer.singleShot(150, self._refresh_top_processes)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._platform_auto_loaded:
+            self._platform_auto_loaded = True
+            QTimer.singleShot(80, self.refresh_platform_status)
+
+    def closeEvent(self, event):
+        worker = getattr(self, "_platform_worker", None)
+        if worker is not None and worker.isRunning():
+            try:
+                worker.wait(500)
+            except Exception:
+                pass
+        super().closeEvent(event)
+
+    def refresh_platform_status(self):
+        if self._platform_worker and self._platform_worker.isRunning():
+            return
+        self._platform_status.setText("Checking")
+        self._platform_summary.setText("Reading realtime, voice, agents, memory and capability state...")
+        self._platform_refresh_btn.setEnabled(False)
+        self._platform_worker = PlatformStatusWorker(self)
+        self._platform_worker.status_ready.connect(self._on_platform_status_ready)
+        self._platform_worker.status_error.connect(self._on_platform_status_error)
+        self._platform_worker.finished.connect(lambda: self._platform_refresh_btn.setEnabled(True))
+        self._platform_worker.start()
+
+    def _on_platform_status_ready(self, snapshot):
+        from shell_ui import design_tokens as DT
+
+        data = dict(snapshot or {})
+        score = int(data.get("score") or 0)
+        status = str(data.get("status") or "unknown").upper()
+        self._platform_status.setText(f"{status} · {score}")
+        self._platform_status.setStyleSheet(
+            f"#platformStatusPill {{ color:{DT.C.text}; "
+            f"background:{DT.C.accent_soft}; border:1px solid {self._platform_tone(status.lower())}; "
+            f"border-radius:{DT.R.sm}px; padding:5px 10px; "
+            f"font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:800; }}"
+        )
+
+        domains = [dict(item) for item in data.get("domains", []) if isinstance(item, dict)]
+        by_name = {str(item.get("name") or ""): item for item in domains}
+        capabilities = by_name.get("capabilities", {})
+        cap_metrics = capabilities.get("metrics", {}) if isinstance(capabilities.get("metrics"), dict) else {}
+        voice = by_name.get("voice", {})
+        voice_metrics = voice.get("metrics", {}) if isinstance(voice.get("metrics"), dict) else {}
+        process = data.get("process", {}) if isinstance(data.get("process"), dict) else {}
+
+        total = cap_metrics.get("total", "--")
+        kind_counts = cap_metrics.get("by_kind", {}) if isinstance(cap_metrics.get("by_kind"), dict) else {}
+        ready_counts = cap_metrics.get("readiness", {}) if isinstance(cap_metrics.get("readiness"), dict) else {}
+        summary = (
+            f"{total} capabilities · {kind_counts.get('tool', '--')} tools · "
+            f"{kind_counts.get('agent', '--')} agents · {ready_counts.get('ready', '--')} ready · "
+            f"Voice {voice_metrics.get('gemini_voice', 'unknown')} · "
+            f"Snapshot {process.get('snapshot_ms', '--')}ms"
+        )
+        self._platform_summary.setText(summary)
+        self._render_platform_domains(domains)
+
+        risks = []
+        for domain in domains:
+            for risk in domain.get("risks", []) or []:
+                risks.append(f"{domain.get('name')}: {risk}")
+        self._platform_risks.setText(" · ".join(risks[:3]) if risks else "No active blockers reported.")
+        self.add_log_entry("AI OS Status", f"{status} score {score}", "SUCCESS" if score >= 80 else "WARNING")
+
+    def _on_platform_status_error(self, message):
+        self._platform_status.setText("UNAVAILABLE")
+        self._platform_summary.setText(str(message)[:220])
+        self._platform_risks.setText("Platform supervisor did not return a snapshot.")
+        self.add_log_entry("AI OS Status", str(message)[:80], "WARNING")
+
+    def _render_platform_domains(self, domains):
+        while self._platform_domain_grid.count():
+            item = self._platform_domain_grid.takeAt(0)
+            w = item.widget() if item else None
+            if w is not None:
+                w.deleteLater()
+        visible_domains = [
+            domain for domain in domains
+            if domain.get("name") in {
+                "realtime",
+                "voice",
+                "agents",
+                "memory",
+                "multimodal",
+                "packaging",
+                "hybrid_runtime",
+                "capabilities",
+            }
+        ]
+        for idx, domain in enumerate(visible_domains):
+            self._platform_domain_grid.addWidget(
+                self._make_platform_domain_chip(domain),
+                idx // 4,
+                idx % 4,
+            )
+
+    def _make_platform_domain_chip(self, domain):
+        from shell_ui import design_tokens as DT
+
+        name = str(domain.get("name") or "domain").replace("_", " ").title()
+        status = str(domain.get("status") or "unknown")
+        score = int(domain.get("score") or 0)
+        color = self._platform_tone(status)
+
+        chip = QFrame()
+        chip.setStyleSheet(
+            f"QFrame {{ background:{DT.C.surface_2}; border:1px solid {DT.C.border}; "
+            f"border-left:3px solid {color}; border-radius:{DT.R.sm}px; }}"
+        )
+        lay = QVBoxLayout(chip)
+        lay.setContentsMargins(10, 7, 10, 7)
+        lay.setSpacing(2)
+
+        title = QLabel(name)
+        title.setStyleSheet(
+            f"color:{DT.C.text}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; font-weight:800; "
+            f"border:none; background:transparent;"
+        )
+        lay.addWidget(title)
+
+        meta = QLabel(f"{status.upper()} · {score}")
+        meta.setStyleSheet(
+            f"color:{color}; font-family:'{DT.T.family_mono}'; "
+            f"font-size:{DT.T.small_size}px; font-weight:700; "
+            f"border:none; background:transparent;"
+        )
+        lay.addWidget(meta)
+        return chip
+
+    def _platform_tone(self, status):
+        from shell_ui import design_tokens as DT
+
+        value = str(status or "").lower()
+        if value in {"ready", "optimal"}:
+            return DT.C.success
+        if value == "attention":
+            return DT.C.warning
+        if value == "blocked":
+            return DT.C.error
+        return DT.C.accent
 
     # ----------------------------------------------------------------
     # Per-tick housekeeping
@@ -7414,6 +7622,19 @@ class SystemPage(QWidget):
             self._proc_timer.stop()
         except Exception as _e:
             logger.debug("system timers stop failed: %s", _e)
+
+
+class PlatformStatusWorker(QThread):
+    status_ready = pyqtSignal(object)
+    status_error = pyqtSignal(str)
+
+    def run(self):
+        try:
+            from core.platform_supervisor import build_platform_snapshot
+
+            self.status_ready.emit(build_platform_snapshot(include_catalog=True))
+        except Exception as exc:
+            self.status_error.emit(str(exc))
 
 
 class BackendToolCatalogWorker(QThread):
