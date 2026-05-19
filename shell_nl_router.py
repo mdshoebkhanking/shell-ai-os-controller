@@ -351,6 +351,16 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
         return None
     lower = raw.lower()
 
+    if re.search(
+        r"\b(platform|ai\s*os|shell|runtime|system)\s+(status|health|readiness|diagnostics?|dashboard)\b",
+        lower,
+    ) or re.search(r"\b(status|health|readiness|diagnostics?)\s+(of\s+)?(platform|ai\s*os|shell|runtime)\b", lower):
+        return _route(
+            "shell_platform_supervisor:shell_platform_status_tool",
+            {"include_catalog": True},
+            confidence=0.95,
+        )
+
     if re.search(r"\b(list|show|dikha|dikhao)\s+(all\s+)?agents\b", lower) or "kaun se agents" in lower:
         return _route("shell_agents:list_agents_tool", kind="agent", confidence=0.95)
 

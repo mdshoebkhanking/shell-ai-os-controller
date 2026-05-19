@@ -565,6 +565,12 @@ class Assistant(Agent):
         except Exception as _e:
             logger.debug("Optional tool 'agent_orchestrator' unavailable: %s", _e)
             _agent_orchestrator_loaded = False
+        try:
+            from shell_platform_supervisor import shell_platform_status_tool
+            _platform_supervisor_loaded = True
+        except Exception as _e:
+            logger.debug("Optional tool 'platform_supervisor' unavailable: %s", _e)
+            _platform_supervisor_loaded = False
         # ═══════ SHELL AI AGENTS ═══════
         try:
             from shell_agents import (
@@ -712,6 +718,8 @@ class Assistant(Agent):
                 orchestrate_shell_goal_tool,
                 list_orchestration_agents_tool,
             ])
+        if _platform_supervisor_loaded:
+            tools_list.append(shell_platform_status_tool)
 
         tools_list.extend([
             # ═══════ Vision & UI ═══════

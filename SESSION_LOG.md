@@ -721,3 +721,53 @@
 - Background agents remain intentionally disabled until durable queues, cancellation, watchdogs, and UI-visible state are implemented.
 - Memory binding is structured but not yet connected to encrypted/vector long-term memory adapters.
 - Multi-agent collaboration is deterministic and bounded today; deeper LLM-based planning should be added only behind latency, safety, and observability gates.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran a full platform-evolution cycle focused on turning Shell AI OS readiness into a first-class, UI/chat-visible control plane.
+- Researched current realtime and agent platform patterns across OpenAI Realtime, Gemini Live, LiveKit turn handling, Pipecat smart turn/interruption systems, OpenAI Agents SDK, Tauri, Tokio, and Go concurrency.
+- Added a lightweight Shell platform supervisor that reports realtime, premium voice, agent orchestration, memory, multimodal, packaging, hybrid-runtime, and capability readiness in one redacted snapshot.
+- Exposed the supervisor as a Shell tool and natural-language route for prompts like "show shell platform health".
+- Added the platform supervisor to latency probes so AI OS readiness has a measurable runtime budget.
+- Ran visible UI, chat, agent, all-tools, voice, live-provider, memory, release, and full-test validation.
+
+### Changes Made
+- Added `core/platform_supervisor/` with structured `PlatformDomainStatus`, `PlatformSnapshot`, and `ShellPlatformSupervisor`.
+- Added `shell_platform_supervisor.py` with `shell_platform_status_tool`.
+- Updated `agent.py` to load the platform status tool in the main assistant tool list.
+- Updated `shell_nl_router.py` to route platform/runtime/Shell health requests to the supervisor.
+- Updated `shell_tool_catalog.py` so platform/supervisor/runtime tools classify under system capabilities.
+- Updated `tools/latency_probe.py` with `platform.supervisor_snapshot`.
+- Added `tests/test_platform_supervisor.py`.
+
+### Current State
+- Platform supervisor snapshot reports `status=ready`, `score=88`, and domains: realtime, voice, agents, memory, multimodal, packaging, hybrid runtime.
+- Supervisor latency is fast enough for UI diagnostics: `platform.supervisor_snapshot=8.215 ms`, internal `snapshot_ms=4.465 ms` after import warmup.
+- Premium voice remains preserved: `backend=gemini_live_pcm`, `voice=Aoede`, `premium_voice_first=true`, `cloud_fallback_allowed=false`.
+- Real visible voice validation passed: first audible premium Gemini Live PCM chunk `760.21 ms`, playback start `760.74 ms`, queue-to-first-audible `760.511 ms`, no fallback voice.
+- Live Groq provider streaming passed: first chunk `168.395 ms`, completion `176.502 ms`, 3 chunks.
+- Live Shell-v2 + Groq SSE passed: provider first token `136.614 ms`, first visible `144.55 ms`, provider-to-SSE `1.641 ms`, transport-to-worker `6.295 ms`.
+- Gemini text live probe surfaced a quota/rate-limit response cleanly; Gemini Live voice still succeeded.
+- Memory probe passed with provider transport cleanup: `after_close.session_count=0`, peak RSS `30.891 MB`.
+- Visible UI e2e probe passed across chat, voice, system, tools, settings, calculator tool, screenshot unsupported state, and voice page controls.
+- Chat UI probe passed: 5 app open commands, 5 close commands, 8 tool commands, 2 agent commands, 0 failures.
+- Agents UI probe passed: `37/37` agents.
+- All-tools UI probe passed: `439` UI-visible items, `53` executed successfully, `292` safety-skipped, `10` expected not-ready, `0` errors.
+- Production release check passed with no blockers; warning only that local `.env` exists and must not be packaged.
+- Agent ecosystem audit passed; remaining findings are planned architecture gaps, not regressions.
+- Full test suite passed: `406 passed, 1 warning`.
+
+### Next Steps
+1. Add an in-app AI OS status panel that renders the platform supervisor domains with current score, risks, and next actions.
+2. Hydrate the memory store through validated agent executions so the memory domain moves from attention to ready.
+3. Unify screen/OCR/image observations into the agent context fabric so the multimodal domain becomes operational, not only available.
+4. Add a provider-variance dashboard that separates quota/rate-limit failures from transport failures and recommends fallback routing.
+5. Prototype persistent provider-native voice sessions only after adding explicit lifecycle, cleanup, and interruption tests.
+
+### Open Issues
+- Gemini text provider currently hits quota/rate-limit in live probes; Shell handles it cleanly, but provider availability is not guaranteed.
+- OpenAI provider is not registered in this local environment, so OpenAI live text streaming was skipped.
+- macOS reports this process is not trusted for Accessibility input monitoring; UI tests still passed, but real desktop-control polish needs Accessibility permission.
+- Python 3.9 / LibreSSL warnings remain from local runtime dependencies and should be addressed in a packaging/runtime upgrade.
+- The platform supervisor is read-only; it reports architecture readiness but does not yet drive an in-app status dashboard.

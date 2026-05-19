@@ -623,6 +623,25 @@ def _agent_first_orchestration_probe():
     return rows
 
 
+def _platform_supervisor_probe():
+    from core.platform_supervisor import build_platform_snapshot
+
+    snapshot = build_platform_snapshot(include_catalog=False)
+    return {
+        "score": snapshot.get("score"),
+        "status": snapshot.get("status"),
+        "snapshot_ms": snapshot.get("process", {}).get("snapshot_ms"),
+        "domains": [
+            {
+                "name": domain.get("name"),
+                "status": domain.get("status"),
+                "score": domain.get("score"),
+            }
+            for domain in snapshot.get("domains", [])
+        ],
+    }
+
+
 def _voice_adaptive_endpointing_probe():
     from shell_voice_listener_runtime import VoiceListenerThread
 
@@ -764,6 +783,7 @@ def main() -> int:
     samples.append(_measure("shell_v2.worker_cancel", _shell_v2_worker_cancel_probe))
     samples.append(_measure("shell_v2.runtime_reuse", _shell_v2_runtime_reuse_probe))
     samples.append(_measure("agent.first_orchestration", _agent_first_orchestration_probe))
+    samples.append(_measure("platform.supervisor_snapshot", _platform_supervisor_probe))
     samples.append(_measure("voice.turn_cancel", _voice_turn_cancel_probe))
     samples.append(_measure("voice.realtime_session", _realtime_voice_session_probe))
     samples.append(_measure("voice.adaptive_endpointing", _voice_adaptive_endpointing_probe))

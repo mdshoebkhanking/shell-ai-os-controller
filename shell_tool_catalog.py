@@ -108,7 +108,7 @@ def _category_for(module: str, func_name: str) -> str:
     buckets = [
         ("browser", ("browser", "youtube", "google", "web")),
         ("files", ("file", "pdf", "zip", "organizer", "downloader", "converter")),
-        ("system", ("system", "window", "keyboard", "mouse", "terminal", "screenshot")),
+        ("system", ("system", "window", "keyboard", "mouse", "terminal", "screenshot", "platform", "supervisor", "runtime")),
         ("communication", ("email", "whatsapp", "telegram", "social", "instagram")),
         ("ai", ("brain", "agent", "image", "ocr", "vision", "translator", "knowledge")),
         ("productivity", ("calendar", "scheduler", "productivity", "ppt", "text", "json")),
