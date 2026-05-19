@@ -99,3 +99,45 @@ def test_shell_v2_worker_records_real_sse_timing(monkeypatch) -> None:
     assert stream_done["server_metrics"]["chunks"] == 2
     assert stream_done["provider_metrics"]["selected_provider"] == "fake"
     assert stream_done["elapsed_ms"] >= first_chunk["elapsed_ms"]
+
+
+def test_shell_v2_worker_cancels_stream_on_interruption(monkeypatch) -> None:
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    from shell_ui.shell_cinematic_full import ShellV2Worker
+
+    def fake_urlopen(request, timeout=0):
+        assert request.full_url.endswith("/api/say-stream")
+        return _FakeSSEResponse(["A", "B", "C"], delay_s=0.001)
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    monkeypatch.setattr(ShellV2Worker, "SHELL_V2_URL", "http://127.0.0.1:8765")
+    monkeypatch.setattr(ShellV2Worker, "TIMEOUT_S", 3)
+
+    worker = ShellV2Worker("hello")
+    chunks: list[str] = []
+    replies: list[str] = []
+    done: list[bool] = []
+    errors: list[str] = []
+    events: list[tuple[str, dict]] = []
+
+    def _on_chunk(chunk: str) -> None:
+        chunks.append(chunk)
+        worker.requestInterruption()
+
+    worker.chunk_received.connect(_on_chunk)
+    worker.reply_ready.connect(replies.append)
+    worker.stream_done.connect(lambda: done.append(True))
+    worker.reply_error.connect(errors.append)
+    worker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+
+    worker.run()
+
+    assert chunks == ["A"]
+    assert replies == []
+    assert done == []
+    assert errors == []
+
+    cancelled = next(payload for event, payload in events if event == "stream_cancelled")
+    assert cancelled["chunks"] == 1
+    assert cancelled["chars"] == 1

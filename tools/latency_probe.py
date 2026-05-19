@@ -71,10 +71,21 @@ def _tts_playback_probe(text: str, timeout_s: float = 10.0):
 
     playback_events = [e for e in events if e.get("event") == "playback_started"]
     first_playback_ms = playback_events[0].get("elapsed_ms") if playback_events else None
+    queued_events = [e for e in events if e.get("event") == "queued"]
+    queue_to_playback_ms = None
+    if queued_events and playback_events:
+        try:
+            queue_to_playback_ms = round(
+                (float(playback_events[0]["ts"]) - float(queued_events[0]["ts"])) * 1000.0,
+                3,
+            )
+        except Exception:
+            queue_to_playback_ms = None
     return {
         "finished": bool(state["finished"]),
         "total_ms": total_ms,
         "first_playback_ms": first_playback_ms,
+        "queue_to_playback_ms": queue_to_playback_ms,
         "events": events,
     }
 
@@ -313,11 +324,310 @@ def _shell_v2_sse_client_probe():
         ShellV2Worker.TIMEOUT_S = old_timeout
 
 
+def _shell_v2_worker_cancel_probe():
+    from shell_ui.shell_cinematic_full import ShellV2Worker
+
+    class FakeSSEResponse:
+        status = 200
+
+        def __init__(self) -> None:
+            lines: list[bytes] = []
+            for idx, chunk in enumerate(["A", "B", "C"], start=1):
+                frame = f"event: delta\ndata: {json.dumps({'text': chunk, 'chunk_index': idx})}\n\n"
+                lines.extend(line.encode("utf-8") for line in frame.splitlines(keepends=True))
+            end = f"event: end\ndata: {json.dumps({'full_reply': 'ABC'})}\n\n"
+            lines.extend(line.encode("utf-8") for line in end.splitlines(keepends=True))
+            self._lines = lines
+            self._idx = 0
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def readline(self) -> bytes:
+            if self._idx >= len(self._lines):
+                return b""
+            line = self._lines[self._idx]
+            self._idx += 1
+            return line
+
+    old_url = ShellV2Worker.SHELL_V2_URL
+    old_timeout = ShellV2Worker.TIMEOUT_S
+    old_urlopen = urllib.request.urlopen
+
+    def fake_urlopen(request, timeout=0):
+        if not str(getattr(request, "full_url", "")).endswith("/api/say-stream"):
+            raise RuntimeError("probe expected Shell-v2 SSE endpoint")
+        return FakeSSEResponse()
+
+    urllib.request.urlopen = fake_urlopen
+    try:
+        ShellV2Worker.SHELL_V2_URL = "http://127.0.0.1:8765"
+        ShellV2Worker.TIMEOUT_S = 3
+        worker = ShellV2Worker("hello")
+        chunks: list[str] = []
+        events: list[dict[str, object]] = []
+        replies: list[str] = []
+        done: list[bool] = []
+
+        def _on_chunk(chunk):
+            chunks.append(str(chunk))
+            worker.requestInterruption()
+
+        def _latency(event, payload):
+            item = {"event": str(event)}
+            if isinstance(payload, dict):
+                item.update(payload)
+            events.append(item)
+
+        worker.chunk_received.connect(_on_chunk)
+        worker.reply_ready.connect(replies.append)
+        worker.stream_done.connect(lambda: done.append(True))
+        worker.latency_event.connect(_latency)
+        started = time.perf_counter()
+        worker.run()
+        total_ms = round((time.perf_counter() - started) * 1000.0, 3)
+        cancel_event = next((e for e in events if e.get("event") == "stream_cancelled"), {})
+        return {
+            "chunks": chunks,
+            "reply_count": len(replies),
+            "done": bool(done),
+            "total_ms": total_ms,
+            "cancel_event": cancel_event,
+            "events": events,
+        }
+    finally:
+        urllib.request.urlopen = old_urlopen
+        ShellV2Worker.SHELL_V2_URL = old_url
+        ShellV2Worker.TIMEOUT_S = old_timeout
+
+
+def _shell_v2_runtime_reuse_probe():
+    import asyncio
+
+    from brain.provider_transport import (
+        close_aiohttp_sessions,
+        provider_transport_stats,
+        set_session_factory_for_tests,
+    )
+    from shell_v2_runtime import ShellV2Runtime
+
+    class FakeSession:
+        closed = False
+
+        async def close(self):
+            self.closed = True
+
+    created: list[FakeSession] = []
+
+    class FakeBrain:
+        async def generate_response_stream(self, prompt: str, mode: str = "FAST"):
+            from brain.provider_transport import get_aiohttp_session
+
+            await get_aiohttp_session("shell_v2_reuse_probe", timeout_s=5)
+            yield prompt
+
+        def get_last_stream_metrics(self):
+            return {"selected_provider": "fake"}
+
+    started = time.perf_counter()
+    set_session_factory_for_tests(lambda owner, timeout_s: created.append(FakeSession()) or created[-1])
+    runtime = ShellV2Runtime(brain_factory=FakeBrain)
+    closed = 0
+    try:
+        first = list(runtime.stream_events("one"))
+        second = list(runtime.stream_events("two"))
+        stats_before_close = provider_transport_stats()
+        closed = runtime.close()
+        elapsed_ms = round((time.perf_counter() - started) * 1000.0, 3)
+        sessions = [
+            item for item in stats_before_close["sessions"]
+            if item["owner"] == "shell_v2_reuse_probe"
+        ]
+        return {
+            "elapsed_ms": elapsed_ms,
+            "first_events": [event for event, _payload in first],
+            "second_events": [event for event, _payload in second],
+            "created_sessions": len(created),
+            "closed_sessions": closed,
+            "reuse_session": bool(len(sessions) == 1 and sessions[0].get("uses") == 2),
+            "stats_before_close": stats_before_close,
+        }
+    finally:
+        set_session_factory_for_tests(None)
+        try:
+            if closed <= 0:
+                runtime.close()
+        except Exception:
+            pass
+        try:
+            asyncio.run(close_aiohttp_sessions())
+        except Exception:
+            pass
+
+
+def _voice_turn_cancel_probe():
+    from shell_ui.shell_cinematic_full import ShellHoloUI
+
+    class FakeSignal:
+        def __init__(self):
+            self.disconnects = 0
+
+        def disconnect(self):
+            self.disconnects += 1
+
+    class FakeWorker:
+        def __init__(self):
+            self.reply_ready = FakeSignal()
+            self.reply_error = FakeSignal()
+            self.chunk_received = FakeSignal()
+            self.stream_done = FakeSignal()
+            self.latency_event = FakeSignal()
+            self.interrupted = False
+
+        def isRunning(self):
+            return True
+
+        def requestInterruption(self):
+            self.interrupted = True
+
+    class FakeTTS:
+        def __init__(self):
+            self.stopped = False
+
+        def is_speaking(self):
+            return True
+
+        def stop_speaking(self):
+            self.stopped = True
+
+    class FakeSystemPage:
+        def __init__(self):
+            self.logs = []
+
+        def add_log_entry(self, *args):
+            self.logs.append(args)
+
+    ui = ShellHoloUI.__new__(ShellHoloUI)
+    ui._voice_turn_id = 7
+    ui._voice_streaming_text = "stale partial reply"
+    ui._voice_stream_spoken_upto = 8
+    ui._voice_turn_query_started = time.time()
+    ui._voice_first_chunk_seen = True
+    ui._backend_command_workers = []
+    ui._voice_backend_command_workers = []
+    ui._tts = FakeTTS()
+    ui._voice_worker = FakeWorker()
+    ui.system_page = FakeSystemPage()
+
+    started = time.perf_counter()
+    cancelled = ui._cancel_active_voice_reply("probe")
+    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 3)
+
+    signal_disconnects = sum(
+        getattr(ui._voice_worker, name).disconnects
+        for name in ("reply_ready", "reply_error", "chunk_received", "stream_done", "latency_event")
+    )
+    return {
+        "cancelled": bool(cancelled),
+        "elapsed_ms": elapsed_ms,
+        "turn_id": ui._voice_turn_id,
+        "turn_advanced": ui._voice_turn_id == 8,
+        "tts_stopped": ui._tts.stopped,
+        "worker_interrupted": ui._voice_worker.interrupted,
+        "signal_disconnects": signal_disconnects,
+        "stream_cleared": ui._voice_streaming_text == "" and ui._voice_stream_spoken_upto == 0,
+        "logs": len(ui.system_page.logs),
+    }
+
+
+def _realtime_voice_session_probe():
+    from shell_realtime_voice_session import RealtimeVoiceSession
+
+    started = time.perf_counter()
+    session = RealtimeVoiceSession(session_id="probe")
+    session.start()
+    session.user_speech_started()
+    prewarm_before = session.should_prewarm()
+    session.prewarm_started()
+    session.prewarm_done(elapsed_ms=2.5, shell_v2_ready=True, provider_count=7)
+    prewarm_after = session.should_prewarm()
+    session.user_speech_ended()
+    session.text_committed("hello", turn_id=3)
+    session.assistant_speech_started(transport="shell_v2")
+    session.interrupt("probe")
+    session.assistant_speech_done()
+    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 3)
+    snapshot = session.snapshot()
+    snapshot["control_overhead_ms"] = elapsed_ms
+    snapshot["prewarm_before"] = prewarm_before
+    snapshot["prewarm_after"] = prewarm_after
+    return snapshot
+
+
+def _voice_adaptive_endpointing_probe():
+    from shell_voice_listener_runtime import VoiceListenerThread
+
+    listener = VoiceListenerThread()
+    short_clean = listener._adaptive_speech_timeout(0.8, noise_floor=0.0)
+    medium_clean = listener._adaptive_speech_timeout(1.8, noise_floor=0.0)
+    long_clean = listener._adaptive_speech_timeout(6.0, noise_floor=0.0)
+    short_noisy = listener._adaptive_speech_timeout(
+        0.8,
+        noise_floor=listener._silence_threshold * 0.8,
+    )
+    hesitation_listener = VoiceListenerThread()
+    hesitation = hesitation_listener._remember_semantic_turn("um let me think", duration_s=0.8)
+    after_hesitation = hesitation_listener._adaptive_speech_timeout(0.8, noise_floor=0.0)
+    continuation_listener = VoiceListenerThread()
+    continuation = continuation_listener._remember_semantic_turn(
+        "can you open the file and",
+        duration_s=1.5,
+    )
+    after_continuation = continuation_listener._adaptive_speech_timeout(0.8, noise_floor=0.0)
+    command_listener = VoiceListenerThread()
+    command = command_listener._remember_semantic_turn("stop", duration_s=0.4)
+    after_short_command = command_listener._adaptive_speech_timeout(1.8, noise_floor=0.0)
+    patient_listener = VoiceListenerThread()
+    patient_listener._remember_semantic_turn("um let me think", duration_s=0.8)
+    patient_listener._remember_semantic_turn("can you open the file and", duration_s=1.5)
+    after_patient_rhythm = patient_listener._adaptive_speech_timeout(0.8, noise_floor=0.0)
+    fast_listener = VoiceListenerThread()
+    fast_listener._remember_semantic_turn("stop", duration_s=0.4)
+    fast_listener._remember_semantic_turn("yes", duration_s=0.4)
+    after_fast_rhythm = fast_listener._adaptive_speech_timeout(1.8, noise_floor=0.0)
+    return {
+        "adaptive_enabled": bool(listener._adaptive_endpointing),
+        "semantic_pacing_enabled": bool(listener._semantic_pacing),
+        "base_ms": round(listener._speech_timeout * 1000.0, 2),
+        "short_clean_ms": round(short_clean * 1000.0, 2),
+        "medium_clean_ms": round(medium_clean * 1000.0, 2),
+        "long_clean_ms": round(long_clean * 1000.0, 2),
+        "short_noisy_ms": round(short_noisy * 1000.0, 2),
+        "after_hesitation_ms": round(after_hesitation * 1000.0, 2),
+        "after_continuation_ms": round(after_continuation * 1000.0, 2),
+        "after_short_command_ms": round(after_short_command * 1000.0, 2),
+        "after_patient_rhythm_ms": round(after_patient_rhythm * 1000.0, 2),
+        "after_fast_rhythm_ms": round(after_fast_rhythm * 1000.0, 2),
+        "hesitation": hesitation,
+        "continuation": continuation,
+        "short_command": command,
+        "patient_rhythm": patient_listener._semantic_rhythm_profile,
+        "fast_rhythm": fast_listener._semantic_rhythm_profile,
+        "min_ms": round(listener._endpoint_min_s * 1000.0, 2),
+        "max_ms": round(listener._endpoint_max_s * 1000.0, 2),
+        "threshold": round(listener._silence_threshold, 4),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Measure Shell low-latency hot paths.")
     parser.add_argument("--ui", action="store_true", help="Also instantiate the PyQt UI offscreen.")
     parser.add_argument("--tts-playback", action="store_true", help="Play a short audible TTS sample and measure playback start.")
     parser.add_argument("--tts-text", default="Shell voice test. Awaaz aa rahi hai?")
+    parser.add_argument("--tts-timeout-s", type=float, default=20.0)
     parser.add_argument("--provider-runtime", action="store_true", help="Measure lazy AI provider runtime initialization.")
     parser.add_argument("--json-out", default="")
     args = parser.parse_args()
@@ -339,8 +649,12 @@ def main() -> int:
     samples.append(_measure("chat.fast_candidate", lambda: len(ShellHoloUI._fast_local_reply_candidate("hello") or "")))
     samples.append(_measure("chat.local_reply", lambda: len(ShellHoloUI._local_reply("hello"))))
     samples.append(_measure("tts.system_command", lambda: TTSSpeaker()._detect_system_tts_command()))
+    samples.append(_measure("tts.voice_identity", lambda: TTSSpeaker().voice_identity_snapshot()))
     if args.tts_playback:
-        samples.append(_measure("tts.playback_probe", lambda: _tts_playback_probe(args.tts_text)))
+        samples.append(_measure(
+            "tts.playback_probe",
+            lambda: _tts_playback_probe(args.tts_text, timeout_s=max(1.0, float(args.tts_timeout_s))),
+        ))
     samples.append(_measure("shell_v2.connect_1s", lambda: urllib.request.urlopen(
         urllib.request.Request(
             ShellV2Worker.SHELL_V2_URL + "/api/say",
@@ -365,18 +679,37 @@ def main() -> int:
             while time.time() < deadline:
                 app.processEvents()
                 time.sleep(0.01)
+            bridge_started = getattr(window, "_shell_v2_bridge", None) is not None
+            shell_v2_health_ok = False
+            if bridge_started:
+                try:
+                    shell_v2_health_ok = urllib.request.urlopen(
+                        ShellV2Worker.SHELL_V2_URL + "/health",
+                        timeout=0.5,
+                    ).status == 200
+                except Exception:
+                    shell_v2_health_ok = False
             window.close()
             app.processEvents()
-            return {"pages": window.pages.count()}
+            return {
+                "pages": window.pages.count(),
+                "shell_v2_bridge_started": bridge_started,
+                "shell_v2_health_ok": shell_v2_health_ok,
+            }
 
         samples.append(_measure("ui.init_first_paint", _ui_init))
 
     if args.provider_runtime:
         samples.append(_measure("ai.provider_runtime_init", _provider_runtime_probe))
         samples.append(_measure("ai.provider_transport_reuse", _provider_transport_probe))
-        samples.append(_measure("ai.streaming_first_token", _streaming_first_token_probe))
-        samples.append(_measure("ai.streaming_fallback", _streaming_fallback_probe))
-        samples.append(_measure("shell_v2.sse_client_stream", _shell_v2_sse_client_probe))
+    samples.append(_measure("ai.streaming_first_token", _streaming_first_token_probe))
+    samples.append(_measure("ai.streaming_fallback", _streaming_fallback_probe))
+    samples.append(_measure("shell_v2.sse_client_stream", _shell_v2_sse_client_probe))
+    samples.append(_measure("shell_v2.worker_cancel", _shell_v2_worker_cancel_probe))
+    samples.append(_measure("shell_v2.runtime_reuse", _shell_v2_runtime_reuse_probe))
+    samples.append(_measure("voice.turn_cancel", _voice_turn_cancel_probe))
+    samples.append(_measure("voice.realtime_session", _realtime_voice_session_probe))
+    samples.append(_measure("voice.adaptive_endpointing", _voice_adaptive_endpointing_probe))
 
     report = {
         "ok": all(sample["ok"] for sample in samples if sample["name"] != "shell_v2.connect_1s"),
@@ -386,6 +719,8 @@ def main() -> int:
             "edge_tts_available": _EDGE_TTS_AVAILABLE,
             "pyttsx3_available": bool(importlib.util.find_spec("pyttsx3")),
             "tts_engine": os.environ.get("SHELL_TTS_ENGINE", "fast"),
+            "tts_premium_voice_first": os.environ.get("SHELL_TTS_PREMIUM_FIRST", "1"),
+            "tts_cloud_fallback_allowed": os.environ.get("SHELL_CLOUD_TTS_LOCAL_FALLBACK", "0"),
         },
         "samples": samples,
     }

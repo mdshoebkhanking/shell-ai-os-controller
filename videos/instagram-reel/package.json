@@ -1,0 +1,24 @@
+{
+  "name": "shell-ai-instagram-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "60-second 9:16 Instagram reel for Shell AI OS Controller.",
+  "license": "Apache-2.0",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "still": "remotion still src/index.ts ShellInstagramReel --frame=900 --output=./out/frame-900.png",
+    "render": "remotion render src/index.ts ShellInstagramReel ../shell-ai-real-workflow-reel-60s.mp4 --codec=h264 --pixel-format=yuv420p"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.462",
+    "@remotion/media": "4.0.462",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "remotion": "4.0.462"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "typescript": "6.0.3"
+  }
+}

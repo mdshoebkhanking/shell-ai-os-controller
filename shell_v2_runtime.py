@@ -26,7 +26,7 @@ def _elapsed_ms(started: float) -> float:
 def _default_brain_factory() -> Any:
     from brain.core import MultiAIBrain
 
-    return MultiAIBrain()
+    return MultiAIBrain.get_instance()
 
 
 async def iter_shell_v2_events(
@@ -116,6 +116,8 @@ async def iter_shell_v2_events(
             },
             "provider_metrics": provider_metrics,
         }
+    except asyncio.CancelledError:
+        raise
     except Exception as exc:
         yield "error", {
             "message": str(exc)[:240],
@@ -327,12 +329,16 @@ class ShellV2BridgeHandler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-cache")
         self.send_header("Connection", "close")
         self.end_headers()
-        for event, payload in self.server.runtime.stream_events(text, agent=agent):
-            self.wfile.write(encode_sse_event(event, payload))
-            self.wfile.flush()
-            if event in {"end", "error"}:
-                break
-        self.close_connection = True
+        try:
+            for event, payload in self.server.runtime.stream_events(text, agent=agent):
+                self.wfile.write(encode_sse_event(event, payload))
+                self.wfile.flush()
+                if event in {"end", "error"}:
+                    break
+        except (BrokenPipeError, ConnectionResetError, OSError):
+            pass
+        finally:
+            self.close_connection = True
 
 
 @dataclass

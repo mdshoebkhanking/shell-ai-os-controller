@@ -65,6 +65,56 @@ def test_voice_page_replies_force_tts_even_when_chat_voice_off():
         assert "force=True" in src, name
 
 
+def test_voice_status_barge_in_stops_active_tts():
+    src = ast.get_source_segment(SRC, _function("_on_voice_status")) or ""
+    assert 'status == "HEARING YOU..."' in src
+    assert "_cancel_active_voice_reply" in src
+    cancel_src = ast.get_source_segment(SRC, _function("_cancel_active_voice_reply")) or ""
+    assert "stop_speaking()" in cancel_src
+    assert "_disconnect_voice_worker" in cancel_src
+    assert "_next_voice_turn_id()" in cancel_src
+
+
+def test_voice_worker_signals_are_turn_guarded():
+    src = "\n".join(
+        ast.get_source_segment(SRC, _function(name)) or ""
+        for name in (
+            "_on_voice_text",
+            "_start_voice_shell_v2_worker",
+            "_start_voice_inprocess_worker",
+        )
+    )
+    assert "turn_id = self._next_voice_turn_id()" in src
+    assert "_on_voice_ai_reply_for_turn" in src
+    assert "_on_voice_ai_error_for_turn" in src
+    assert "_on_voice_stream_chunk_for_turn" in src
+    assert "_on_voice_stream_done_for_turn" in src
+
+
+def test_voice_stale_turn_wrappers_ignore_old_signals():
+    for name in (
+        "_on_voice_ai_reply_for_turn",
+        "_on_voice_ai_error_for_turn",
+        "_on_voice_stream_chunk_for_turn",
+        "_on_voice_stream_done_for_turn",
+    ):
+        src = ast.get_source_segment(SRC, _function(name)) or ""
+        assert "_is_voice_turn_current" in src, name
+        assert "return" in src, name
+
+
+def test_voice_backend_commands_are_turn_guarded():
+    voice_src = ast.get_source_segment(SRC, _function("_on_voice_text")) or ""
+    run_src = ast.get_source_segment(SRC, _function("_try_run_backend_command")) or ""
+    cancel_src = ast.get_source_segment(SRC, _function("_cancel_active_voice_reply")) or ""
+
+    assert "turn_id=turn_id" in voice_src
+    assert "origin == \"voice\" and turn_id is not None" in run_src
+    assert "_on_backend_command_ready_for_voice_turn" in run_src
+    assert "_on_backend_command_error_for_voice_turn" in run_src
+    assert "_voice_backend_command_workers" in cancel_src
+
+
 def test_manual_bubble_speak_forces_tts():
     speaker = _voice_runtime_function("speak")
     assert any(arg.arg == "force" for arg in speaker.args.args)

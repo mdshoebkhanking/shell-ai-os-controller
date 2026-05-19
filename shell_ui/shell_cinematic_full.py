@@ -82,6 +82,7 @@ from shell_ai_runtime import (
     reload_brain_providers,
 )
 from shell_realtime_audio_runtime import LiveKitAudioClient
+from shell_realtime_voice_session import RealtimeVoiceSession
 
 
 def _load_socketio_client_class():
@@ -813,10 +814,24 @@ class ShellV2Worker(QThread):
         super().__init__(parent)
         self._message = message
         self._history = history or []
+        self._cancel_requested = False
 
     @staticmethod
     def stream_enabled() -> bool:
         return os.environ.get("SHELL_V2_STREAM", "1").strip().lower() in ("1", "true", "yes", "on")
+
+    def requestInterruption(self):
+        self._cancel_requested = True
+        try:
+            super().requestInterruption()
+        except Exception:
+            pass
+
+    def _is_cancel_requested(self):
+        try:
+            return bool(self._cancel_requested or self.isInterruptionRequested())
+        except Exception:
+            return bool(self._cancel_requested)
 
     def _emit_latency(self, event: str, started: float, **payload):
         try:
@@ -890,6 +905,16 @@ class ShellV2Worker(QThread):
                         cur_event: str | None = None
                         cur_data: list[str] = []
                         while True:
+                            if self._is_cancel_requested():
+                                self._emit_latency(
+                                    "stream_cancelled",
+                                    started,
+                                    chars=len(full_reply),
+                                    chunks=chunk_count,
+                                    sse_frames=sse_frames,
+                                    bytes=stream_bytes,
+                                )
+                                return
                             raw = sresp.readline()
                             if not raw:
                                 break
@@ -936,6 +961,16 @@ class ShellV2Worker(QThread):
                                                 self.chunk_received.emit(chunk)
                                             except Exception:
                                                 pass
+                                            if self._is_cancel_requested():
+                                                self._emit_latency(
+                                                    "stream_cancelled",
+                                                    started,
+                                                    chars=len(full_reply),
+                                                    chunks=chunk_count,
+                                                    sse_frames=sse_frames,
+                                                    bytes=stream_bytes,
+                                                )
+                                                return
                                     elif cur_event == "end":
                                         full_reply = str(ev_payload.get("full_reply") or full_reply)
                                         end_server_elapsed_ms = ev_payload.get("server_elapsed_ms")
@@ -959,6 +994,16 @@ class ShellV2Worker(QThread):
                     if saw_error:
                         self._emit_latency("stream_error", started, message=saw_error)
                         self.reply_error.emit(f"Shell-v2 stream error: {saw_error}")
+                        return
+                    if self._is_cancel_requested():
+                        self._emit_latency(
+                            "stream_cancelled",
+                            started,
+                            chars=len(full_reply),
+                            chunks=chunk_count,
+                            sse_frames=sse_frames,
+                            bytes=stream_bytes,
+                        )
                         return
                     if saw_end:
                         self._emit_latency(
@@ -1068,6 +1113,20 @@ class AIChatWorker(QThread):
         self._brain = brain
         self._message = message
         self._history = history or []
+        self._cancel_requested = False
+
+    def requestInterruption(self):
+        self._cancel_requested = True
+        try:
+            super().requestInterruption()
+        except Exception:
+            pass
+
+    def _is_cancel_requested(self):
+        try:
+            return bool(self._cancel_requested or self.isInterruptionRequested())
+        except Exception:
+            return bool(self._cancel_requested)
 
     def _emit_latency(self, event: str, started: float, **payload):
         try:
@@ -1140,12 +1199,16 @@ class AIChatWorker(QThread):
                 if hasattr(self._brain, 'generate_response_stream'):
                     collected = []
                     first_chunk_seen = False
+                    stream_cancelled = False
                     self._emit_latency("inprocess_stream_start", started, mode=mode)
                     async def _stream():
-                        nonlocal first_chunk_seen
+                        nonlocal first_chunk_seen, stream_cancelled
                         async for chunk in self._brain.generate_response_stream(
                             full_prompt, system_prompt=self._SYSTEM_PROMPT, mode=mode
                         ):
+                            if self._is_cancel_requested():
+                                stream_cancelled = True
+                                return
                             # Defence — drop sentinel error chunks so they
                             # never reach the user's chat bubble even if a
                             # future provider regresses and yields them.
@@ -1157,8 +1220,14 @@ class AIChatWorker(QThread):
                                     first_chunk_seen = True
                                     self._emit_latency("first_text_chunk", started, chars=len(str(chunk)))
                                 self.chunk_received.emit(chunk)
+                                if self._is_cancel_requested():
+                                    stream_cancelled = True
+                                    return
                     try:
                         loop.run_until_complete(_stream())
+                        if stream_cancelled or self._is_cancel_requested():
+                            self._emit_latency("stream_cancelled", started, chars=len("".join(collected)))
+                            return
                         reply = "".join(collected)
                         if reply and "All Brains Failed" not in reply:
                             self._emit_latency("stream_done", started, chars=len(reply))
@@ -1178,6 +1247,9 @@ class AIChatWorker(QThread):
                     reply = loop.run_until_complete(
                         self._brain.generate_response(full_prompt, system_prompt=self._SYSTEM_PROMPT, mode=mode)
                     )
+                if self._is_cancel_requested():
+                    self._emit_latency("nonstream_cancelled", started)
+                    return
             finally:
                 try:
                     if hasattr(self._brain, "close_provider_sessions"):
@@ -8335,19 +8407,19 @@ class SettingsPage(QWidget):
         # machine, the "Local" option is rendered disabled with a hint.
         self._build_voice_mode_card(col)
 
-        # Voice persona dropdown.
+        # Voice dropdown.
         card, lay = self._make_setting_card(
-            "Voice persona",
-            "The TTS voice Shell uses when speaking responses out loud.",
+            "Shell voice",
+            "The signature voice Shell uses when speaking responses out loud.",
         )
         personas = ["Aoede", "Puck", "Charon", "Kore", "Fenrir"]
         cb = self._styled_combo(personas)
         current_persona = str(self._read_setting(
-            "voice_persona", self._read_setting("tts_voice", "Aoede")))
+            "tts_voice", self._read_setting("voice_persona", "Aoede")))
         if current_persona in personas:
             cb.setCurrentText(current_persona)
         cb.currentTextChanged.connect(
-            lambda v: self._save_toggle("voice_persona", v)
+            lambda v: self._save_toggle("tts_voice", v)
         )
         lay.addWidget(cb)
         col.addWidget(card)
@@ -9148,6 +9220,7 @@ class SettingsPage(QWidget):
             "speech_rate": ("tts_rate",),
             "speech_volume": ("tts_volume",),
             "voice_persona": ("tts_voice",),
+            "tts_voice": ("voice_persona",),
         }.get(key, ()):
             cfg[alias] = is_on
         try:
@@ -9163,6 +9236,7 @@ class SettingsPage(QWidget):
             "speech_rate": ("tts_rate",),
             "speech_volume": ("tts_volume",),
             "voice_persona": ("tts_voice",),
+            "tts_voice": ("voice_persona",),
         }.get(key, ()):
             self._queue_backend_setting(alias, is_on)
 
@@ -10347,6 +10421,16 @@ class ShellHoloUI(QMainWindow):
         self._stream_render_timer.setSingleShot(True)
         self._stream_render_timer.timeout.connect(self._flush_stream_render)
         self._backend_command_workers = []
+        self._voice_backend_command_workers = []
+        self._shell_v2_bridge = None
+        self._voice_realtime_session = None
+        self._voice_realtime_prewarm_thread = None
+        self._voice_turn_id = 0
+        self._voice_turn_query_started = 0.0
+        self._voice_turn_hearing_ts = 0.0
+        self._voice_turn_processing_ts = 0.0
+        self._voice_first_chunk_seen = False
+        self._voice_stream_completed_turn_id = 0
 
         # Persistent chat history store (sidebar list + ~/.shell_chat_history).
         # Created before _build_ui so the SidebarNav can render the list.
@@ -10388,7 +10472,7 @@ class ShellHoloUI(QMainWindow):
                 self._tts.set_enabled(self._voice_output_enabled)
                 self._tts.set_rate(cfg.get("speech_rate", cfg.get("tts_rate", 108)))
                 self._tts.set_volume(cfg.get("speech_volume", cfg.get("tts_volume", 100)))
-                self._tts.set_voice(cfg.get("voice_persona", cfg.get("tts_voice", "aether")))
+                self._tts.set_voice(cfg.get("tts_voice", cfg.get("voice_persona", "Aoede")))
         except Exception as _e:
             logger.debug("ignored Exception: %s", _e)
         # Theme engine
@@ -11009,12 +11093,95 @@ class ShellHoloUI(QMainWindow):
             self._fast_local_reply_candidate("hello")
             if getattr(self, "_tts", None) is not None:
                 self._tts.warmup()
+            self._ensure_shell_v2_bridge()
             elapsed = int((_time.perf_counter() - started) * 1000)
             logger.info("Low-latency runtime warmup queued in %sms", elapsed)
             if hasattr(self, "system_page"):
                 self.system_page.add_log_entry("Latency Warmup", f"{elapsed}ms", "SUCCESS")
         except Exception as exc:
             logger.debug("low-latency warmup failed: %s", exc)
+
+    @staticmethod
+    def _shell_v2_autostart_enabled():
+        return str(os.environ.get("SHELL_V2_AUTOSTART", "1")).strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
+    def _shell_v2_local_endpoint():
+        try:
+            from urllib.parse import urlparse
+
+            parsed = urlparse(ShellV2Worker.SHELL_V2_URL)
+            host = (parsed.hostname or "").lower()
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            if parsed.scheme != "http":
+                return None
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                return None
+            if int(port) != 8765:
+                return None
+            return "127.0.0.1", int(port)
+        except Exception:
+            return None
+
+    def _ensure_shell_v2_bridge(self):
+        """Start the local Shell-v2 SSE bridge when the default endpoint is down."""
+        if not self._shell_v2_autostart_enabled():
+            return False
+        if getattr(self, "_shell_v2_bridge", None) is not None:
+            return True
+        endpoint = self._shell_v2_local_endpoint()
+        if endpoint is None:
+            return False
+
+        import urllib.error
+        import urllib.request
+
+        try:
+            timeout = max(0.03, min(0.5, float(os.environ.get("SHELL_V2_HEALTH_TIMEOUT_S", "0.12"))))
+        except Exception:
+            timeout = 0.12
+        health_url = ShellV2Worker.SHELL_V2_URL.rstrip("/") + "/health"
+        try:
+            with urllib.request.urlopen(health_url, timeout=timeout) as resp:
+                if int(getattr(resp, "status", 200) or 200) < 500:
+                    return False
+        except urllib.error.HTTPError:
+            return False
+        except urllib.error.URLError:
+            pass
+        except Exception:
+            pass
+
+        started = _time.perf_counter()
+        try:
+            from shell_v2_runtime import start_shell_v2_bridge
+
+            host, port = endpoint
+            mode = str(os.environ.get("SHELL_BRAIN_MODE") or "FAST").upper()
+            provider = str(os.environ.get("SHELL_V2_PROVIDER") or "").strip()
+            self._shell_v2_bridge = start_shell_v2_bridge(
+                host=host,
+                port=port,
+                provider=provider,
+                mode=mode if mode in {"FAST", "SMART", "CODER"} else "FAST",
+            )
+            elapsed = round((_time.perf_counter() - started) * 1000.0, 2)
+            try:
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record("shell_v2.autostart", elapsed)
+            except Exception:
+                pass
+            if hasattr(self, "system_page"):
+                self.system_page.add_log_entry("Shell-v2 Bridge", f"autostarted in {elapsed}ms", "SUCCESS")
+            return True
+        except Exception as exc:
+            logger.debug("Shell-v2 bridge autostart failed: %s", exc)
+            if hasattr(self, "system_page"):
+                try:
+                    self.system_page.add_log_entry("Shell-v2 Bridge", str(exc)[:80], "WARNING")
+                except Exception:
+                    pass
+            return False
 
     def _poll_system(self):
         """Collect system stats in background thread to avoid UI freeze."""
@@ -11362,10 +11529,12 @@ class ShellHoloUI(QMainWindow):
 
         if active:
             # START listening
+            self._start_realtime_voice_session()
             self._start_voice_listener()
         else:
             # STOP listening
             self._stop_voice_listener()
+            self._stop_realtime_voice_session()
 
         self.system_page.add_log_entry("Voice Session",
                                        "STARTED" if active else "STOPPED",
@@ -11380,6 +11549,10 @@ class ShellHoloUI(QMainWindow):
         self._voice_listener.amplitude_changed.connect(self._on_voice_amplitude)
         self._voice_listener.status_changed.connect(self._on_voice_status)
         self._voice_listener.error_occurred.connect(self._on_voice_error)
+        try:
+            self._voice_listener.latency_event.connect(self._on_voice_latency_event)
+        except Exception as _e:
+            logger.debug("voice latency signal wiring failed: %s", _e)
         self._voice_listener.start()
         self.voice_page._desc.setText("Listening... speak naturally")
         self.system_page.add_log_entry("Voice Listener", "Mic Active", "SUCCESS")
@@ -11392,18 +11565,227 @@ class ShellHoloUI(QMainWindow):
         self._voice_listener = None
         self.voice_page._desc.setText("Press Start Voice to begin voice conversation")
 
+    def _start_realtime_voice_session(self):
+        session = RealtimeVoiceSession()
+        session.start()
+        self._voice_realtime_session = session
+        try:
+            self.system_page.add_log_entry("Realtime Voice", f"session {session.session_id}", "SUCCESS")
+        except Exception as _e:
+            logger.debug("realtime voice session log failed: %s", _e)
+        return session
+
+    def _stop_realtime_voice_session(self):
+        session = getattr(self, "_voice_realtime_session", None)
+        if session is not None:
+            try:
+                session.stop()
+            except Exception:
+                pass
+        self._voice_realtime_session = None
+
+    @staticmethod
+    def _voice_shell_v2_enabled():
+        return str(os.environ.get("SHELL_VOICE_USE_SHELL_V2", "1")).strip().lower() in {"1", "true", "yes", "on"}
+
+    def _voice_shell_v2_health_ok(self, timeout=0.08):
+        import urllib.request
+
+        try:
+            with urllib.request.urlopen(ShellV2Worker.SHELL_V2_URL.rstrip("/") + "/health", timeout=timeout) as resp:
+                return int(getattr(resp, "status", 200) or 200) < 500
+        except Exception:
+            return False
+
+    def _voice_shell_v2_ready(self, *, start_bridge=True):
+        if not self._voice_shell_v2_enabled():
+            return False
+        if start_bridge:
+            try:
+                self._ensure_shell_v2_bridge()
+            except Exception as exc:
+                logger.debug("voice Shell-v2 bridge prepare failed: %s", exc)
+        endpoint = self._shell_v2_local_endpoint()
+        if endpoint is None:
+            return True
+        return self._voice_shell_v2_health_ok()
+
+    def _prewarm_realtime_voice_path(self, reason="speech_started"):
+        session = getattr(self, "_voice_realtime_session", None)
+        if session is None:
+            session = self._start_realtime_voice_session()
+        if not session.should_prewarm():
+            return False
+        session.prewarm_started()
+
+        import threading
+
+        def _run():
+            started = _time.perf_counter()
+            provider_count = 0
+            shell_v2_ready = False
+            try:
+                shell_v2_ready = self._voice_shell_v2_ready(start_bridge=False)
+            except Exception as exc:
+                logger.debug("voice Shell-v2 prewarm health failed: %s", exc)
+            try:
+                brain = get_brain()
+                provider_count = len(getattr(brain, "providers", {}) or {}) if brain else 0
+            except Exception as exc:
+                logger.debug("voice brain prewarm failed: %s", exc)
+            elapsed = round((_time.perf_counter() - started) * 1000.0, 3)
+            try:
+                session.prewarm_done(
+                    elapsed_ms=elapsed,
+                    shell_v2_ready=shell_v2_ready,
+                    provider_count=provider_count,
+                )
+            except Exception:
+                pass
+            try:
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record("voice.realtime_prewarm", elapsed)
+            except Exception:
+                pass
+            logger.info(
+                "Voice realtime prewarm %s in %.3fms (shell_v2=%s providers=%s)",
+                reason,
+                elapsed,
+                shell_v2_ready,
+                provider_count,
+            )
+
+        thread = threading.Thread(target=_run, name="voice-realtime-prewarm", daemon=True)
+        self._voice_realtime_prewarm_thread = thread
+        thread.start()
+        return True
+
     def _on_voice_amplitude(self, amp):
         """Update waveform from real mic input."""
         if self.orb:
             self.orb.set_energy(amp)
         self.voice_page.waveform.set_amplitude(amp)
 
+    def _next_voice_turn_id(self):
+        self._voice_turn_id = int(getattr(self, "_voice_turn_id", 0) or 0) + 1
+        return self._voice_turn_id
+
+    def _is_voice_turn_current(self, turn_id):
+        return int(turn_id or 0) == int(getattr(self, "_voice_turn_id", 0) or 0)
+
+    def _disconnect_voice_worker(self, *, request_interrupt=True):
+        worker = getattr(self, "_voice_worker", None)
+        if worker is None:
+            return False
+        for signal_name in ("reply_ready", "reply_error", "chunk_received", "stream_done", "latency_event"):
+            try:
+                getattr(worker, signal_name).disconnect()
+            except Exception:
+                pass
+        running = False
+        try:
+            running = bool(worker.isRunning())
+        except Exception:
+            running = False
+        if request_interrupt and running:
+            try:
+                worker.requestInterruption()
+            except Exception as _e:
+                logger.debug("voice worker interruption request failed: %s", _e)
+        return running
+
+    def _cancel_active_voice_reply(self, reason="barge-in"):
+        """Invalidate stale voice output immediately when the user speaks again."""
+        try:
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None:
+                session.interrupt(reason)
+        except Exception:
+            pass
+        active_tts = False
+        try:
+            active_tts = bool(getattr(self, "_tts", None) is not None and self._tts.is_speaking())
+            if getattr(self, "_tts", None) is not None:
+                self._tts.stop_speaking()
+        except Exception as _e:
+            logger.debug("voice TTS cancel failed: %s", _e)
+
+        active_worker = self._disconnect_voice_worker(request_interrupt=True)
+        active_backend = False
+        for worker in list(getattr(self, "_voice_backend_command_workers", []) or []):
+            try:
+                for signal_name in ("run_ready", "run_error", "finished"):
+                    try:
+                        getattr(worker, signal_name).disconnect()
+                    except Exception:
+                        pass
+                if worker is not None and worker.isRunning():
+                    active_backend = True
+                    worker.requestInterruption()
+            except Exception as _e:
+                logger.debug("voice backend command cancel failed: %s", _e)
+            self._forget_backend_command_worker(worker)
+        had_stream = bool(str(getattr(self, "_voice_streaming_text", "") or "").strip())
+        self._voice_streaming_text = ""
+        self._voice_stream_spoken_upto = 0
+        self._voice_turn_query_started = 0.0
+        self._voice_first_chunk_seen = False
+        self._next_voice_turn_id()
+
+        cancelled = bool(active_tts or active_worker or active_backend or had_stream)
+        if cancelled:
+            try:
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record(f"voice.{reason}.cancel", 0.0)
+            except Exception:
+                pass
+            try:
+                self.system_page.add_log_entry("Voice Barge-In", "Cancelled stale reply", "INFO")
+            except Exception as _e:
+                logger.debug("voice cancel log failed: %s", _e)
+        return cancelled
+
+    def _on_voice_latency_event(self, event, payload):
+        try:
+            logger.info("Voice listener latency %s %s", event, payload)
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None:
+                if event == "speech_started":
+                    session.user_speech_started()
+                    self._prewarm_realtime_voice_path("speech_started")
+                elif event in {"speech_ended", "speech_end_to_processing"}:
+                    session.user_speech_ended()
+            if isinstance(payload, dict) and "elapsed_ms" in payload:
+                try:
+                    from core.performance import LOW_LATENCY_RECORDER
+                    LOW_LATENCY_RECORDER.record(
+                        f"voice.listener.{event}",
+                        float(payload.get("elapsed_ms") or 0.0),
+                    )
+                except Exception:
+                    pass
+            if event in {"speech_end_to_processing", "speech_end_to_text", "recognition_done"} and hasattr(self, "system_page"):
+                elapsed = payload.get("elapsed_ms") if isinstance(payload, dict) else "?"
+                self.system_page.add_log_entry("Voice Latency", f"{event}: {elapsed}ms", "INFO")
+        except Exception as exc:
+            logger.debug("voice latency event failed: %s", exc)
+
     def _on_voice_status(self, status):
         """Update voice page status badge from listener."""
         self.voice_page.status_badge.setText(status)
         if status == "PROCESSING...":
+            self._voice_turn_processing_ts = _time.time()
             self.voice_page._desc.setText("Recognizing your speech...")
         elif status == "HEARING YOU...":
+            self._voice_turn_hearing_ts = _time.time()
+            try:
+                session = getattr(self, "_voice_realtime_session", None)
+                if session is not None:
+                    session.user_speech_started()
+            except Exception:
+                pass
+            self._prewarm_realtime_voice_path("hearing_you")
+            self._cancel_active_voice_reply("barge_in")
             self.voice_page._desc.setText("Hearing you... keep talking")
         else:
             self.voice_page._desc.setText("Listening... speak naturally")
@@ -11705,6 +12087,10 @@ class ShellHoloUI(QMainWindow):
             self._backend_command_workers.remove(worker)
         except ValueError:
             pass
+        try:
+            self._voice_backend_command_workers.remove(worker)
+        except ValueError:
+            pass
 
     def _sync_workspace_from_tool_result(self, result):
         try:
@@ -11733,7 +12119,19 @@ class ShellHoloUI(QMainWindow):
         title = item.get("title") or item.get("name") or item.get("id") or "Backend tool"
         self._finish_backend_command(f"{title} failed:\n{message}", origin, ok=False)
 
-    def _try_run_backend_command(self, text, origin="chat", record_user=False):
+    def _on_backend_command_ready_for_voice_turn(self, turn_id, result, item, worker):
+        if not self._is_voice_turn_current(turn_id):
+            self._forget_backend_command_worker(worker)
+            return
+        self._on_backend_command_ready(result, item, "voice", worker)
+
+    def _on_backend_command_error_for_voice_turn(self, turn_id, message, item, worker):
+        if not self._is_voice_turn_current(turn_id):
+            self._forget_backend_command_worker(worker)
+            return
+        self._on_backend_command_error(message, item, "voice", worker)
+
+    def _try_run_backend_command(self, text, origin="chat", record_user=False, turn_id=None):
         try:
             parsed = self._parse_backend_command(text)
         except Exception as exc:
@@ -11771,12 +12169,21 @@ class ShellHoloUI(QMainWindow):
 
         worker = BackendToolRunWorker(item, args, self)
         self._backend_command_workers.append(worker)
-        worker.run_ready.connect(
-            lambda result, it=item, org=origin, w=worker: self._on_backend_command_ready(result, it, org, w)
-        )
-        worker.run_error.connect(
-            lambda message, it=item, org=origin, w=worker: self._on_backend_command_error(message, it, org, w)
-        )
+        if origin == "voice" and turn_id is not None:
+            self._voice_backend_command_workers.append(worker)
+            worker.run_ready.connect(
+                lambda result, it=item, w=worker, tid=turn_id: self._on_backend_command_ready_for_voice_turn(tid, result, it, w)
+            )
+            worker.run_error.connect(
+                lambda message, it=item, w=worker, tid=turn_id: self._on_backend_command_error_for_voice_turn(tid, message, it, w)
+            )
+        else:
+            worker.run_ready.connect(
+                lambda result, it=item, org=origin, w=worker: self._on_backend_command_ready(result, it, org, w)
+            )
+            worker.run_error.connect(
+                lambda message, it=item, org=origin, w=worker: self._on_backend_command_error(message, it, org, w)
+            )
         worker.finished.connect(lambda w=worker: self._forget_backend_command_worker(w))
         worker.start()
         return True
@@ -11795,53 +12202,209 @@ class ShellHoloUI(QMainWindow):
 
     def _on_voice_text(self, text):
         """User spoke and text was recognized — send to AI pipeline."""
+        turn_id = self._next_voice_turn_id()
+        self._voice_turn_query_started = _time.time()
+        self._voice_first_chunk_seen = False
+        self._voice_stream_completed_turn_id = 0
+        try:
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None:
+                session.text_committed(text, turn_id)
+        except Exception:
+            pass
         # Show what user said on voice page
         self.voice_page.add_transcript("user", text)
         self.voice_page.status_badge.setText("THINKING...")
         self.voice_page._desc.setText("Processing your request...")
+        try:
+            if self._voice_turn_processing_ts:
+                elapsed = round((self._voice_turn_query_started - self._voice_turn_processing_ts) * 1000.0, 2)
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record("voice.processing_to_text", elapsed)
+        except Exception:
+            pass
 
-        if self._try_run_backend_command(text, origin="voice", record_user=True):
+        if self._try_run_backend_command(text, origin="voice", record_user=True, turn_id=turn_id):
             return
 
         fast_reply = self._fast_local_reply_candidate(text)
         if fast_reply is not None:
             self._chat_history.append(("user", text))
             self.top_bar.add_tokens(max(1, len(text) // 4))
-            QTimer.singleShot(0, lambda reply=fast_reply: self._on_voice_ai_reply(reply))
+            QTimer.singleShot(
+                0,
+                lambda reply=fast_reply, tid=turn_id: self._on_voice_ai_reply_for_turn(tid, reply),
+            )
             return
 
         # Also add to chat history
         self._chat_history.append(("user", text))
         self.top_bar.add_tokens(max(1, len(text) // 4))
 
-        # Send to AI (same pipeline as chat)
+        if self._start_voice_shell_v2_worker(text, turn_id):
+            return
+
+        self._start_voice_inprocess_worker(text, turn_id)
+
+    def _start_voice_shell_v2_worker(self, text, turn_id):
+        if not self._voice_shell_v2_ready(start_bridge=True):
+            return False
+        if hasattr(self, '_voice_worker') and self._voice_worker and self._voice_worker.isRunning():
+            self._disconnect_voice_worker(request_interrupt=True)
+        self._voice_streaming_text = ""
+        self._voice_stream_spoken_upto = 0
+        self._voice_worker = ShellV2Worker(text, history=self._chat_history, parent=self)
+        self._voice_worker.reply_ready.connect(
+            lambda reply, tid=turn_id: self._on_voice_shell_v2_reply_for_turn(tid, reply)
+        )
+        self._voice_worker.reply_error.connect(
+            lambda error, tid=turn_id, msg=text: self._on_voice_shell_v2_error_for_turn(tid, error, msg)
+        )
+        self._voice_worker.chunk_received.connect(
+            lambda chunk, tid=turn_id: self._on_voice_stream_chunk_for_turn(tid, chunk)
+        )
+        self._voice_worker.stream_done.connect(
+            lambda tid=turn_id: self._on_voice_stream_done_for_turn(tid)
+        )
+        self._voice_worker.latency_event.connect(
+            lambda event, payload, tid=turn_id: self._on_voice_ai_latency_event_for_turn(tid, event, payload)
+        )
+        self._voice_worker.start()
+        return True
+
+    def _start_voice_inprocess_worker(self, text, turn_id):
+        # Send to AI (same fallback pipeline as chat)
         brain = get_brain()
         if brain and getattr(brain, "providers", None):
             if hasattr(self, '_voice_worker') and self._voice_worker and self._voice_worker.isRunning():
-                try: self._voice_worker.reply_ready.disconnect()
-                except Exception as _e:
-                    logger.debug("ignored Exception: %s", _e)
-                try: self._voice_worker.reply_error.disconnect()
-                except Exception as _e:
-                    logger.debug("ignored Exception: %s", _e)
-                try: self._voice_worker.chunk_received.disconnect()
-                except Exception as _e:
-                    logger.debug("ignored Exception: %s", _e)
-                try: self._voice_worker.stream_done.disconnect()
-                except Exception as _e:
-                    logger.debug("ignored Exception: %s", _e)
+                self._disconnect_voice_worker(request_interrupt=True)
             self._voice_streaming_text = ""
             self._voice_stream_spoken_upto = 0
             self._voice_worker = AIChatWorker(brain, text, history=self._chat_history, parent=self)
-            self._voice_worker.reply_ready.connect(self._on_voice_ai_reply)
-            self._voice_worker.reply_error.connect(self._on_voice_ai_error)
-            self._voice_worker.chunk_received.connect(self._on_voice_stream_chunk)
-            self._voice_worker.stream_done.connect(self._on_voice_stream_done)
+            self._voice_worker.reply_ready.connect(
+                lambda reply, tid=turn_id: self._on_voice_ai_reply_for_turn(tid, reply)
+            )
+            self._voice_worker.reply_error.connect(
+                lambda error, tid=turn_id: self._on_voice_ai_error_for_turn(tid, error)
+            )
+            self._voice_worker.chunk_received.connect(
+                lambda chunk, tid=turn_id: self._on_voice_stream_chunk_for_turn(tid, chunk)
+            )
+            self._voice_worker.stream_done.connect(
+                lambda tid=turn_id: self._on_voice_stream_done_for_turn(tid)
+            )
+            self._voice_worker.latency_event.connect(
+                lambda event, payload, tid=turn_id: self._on_voice_ai_latency_event_for_turn(tid, event, payload)
+            )
             self._voice_worker.start()
         else:
             # Local fallback
             reply = self._local_reply(text)
-            self._on_voice_ai_reply(reply)
+            self._on_voice_ai_reply_for_turn(turn_id, reply)
+        return True
+
+    @staticmethod
+    def _voice_tts_threshold(name, default, minimum, maximum):
+        try:
+            value = int(os.environ.get(name, str(default)))
+        except Exception:
+            value = int(default)
+        return max(int(minimum), min(int(maximum), value))
+
+    @classmethod
+    def _voice_tts_next_segment(cls, text, spoken_upto):
+        """Return the next low-latency speakable segment from streaming text."""
+        full_text = str(text or "")
+        offset = max(0, int(spoken_upto or 0))
+        pending = full_text[offset:]
+        if not pending.strip():
+            return "", offset
+
+        first_segment = offset <= 0
+        min_chars = cls._voice_tts_threshold(
+            "SHELL_VOICE_TTS_FIRST_CHARS" if first_segment else "SHELL_VOICE_TTS_SEGMENT_CHARS",
+            28 if first_segment else 48,
+            12,
+            120,
+        )
+        hard_chars = cls._voice_tts_threshold(
+            "SHELL_VOICE_TTS_FIRST_HARD_CHARS" if first_segment else "SHELL_VOICE_TTS_HARD_CHARS",
+            96 if first_segment else 150,
+            min_chars,
+            320,
+        )
+        if len(pending) < min_chars:
+            return "", offset
+
+        match = re.search(
+            rf"(.{{{min_chars},}}?[.!?।,;:]\s+|.{{{hard_chars},}}?\s+)",
+            pending,
+            flags=re.S,
+        )
+        if not match:
+            return "", offset
+        segment = match.group(1).strip()
+        if not segment:
+            return "", offset
+        return segment, offset + len(match.group(1))
+
+    def _on_voice_ai_latency_event_for_turn(self, turn_id, event, payload):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        try:
+            logger.info("Voice AI latency %s %s", event, payload)
+            if isinstance(payload, dict) and "elapsed_ms" in payload:
+                try:
+                    from core.performance import LOW_LATENCY_RECORDER
+                    LOW_LATENCY_RECORDER.record(
+                        f"voice.ai.{event}",
+                        float(payload.get("elapsed_ms") or 0.0),
+                    )
+                except Exception:
+                    pass
+            if event in {"first_text_chunk", "stream_done", "nonstream_done"} and hasattr(self, "system_page"):
+                elapsed = payload.get("elapsed_ms") if isinstance(payload, dict) else "?"
+                self.system_page.add_log_entry("Voice AI Latency", f"{event}: {elapsed}ms", "INFO")
+        except Exception as exc:
+            logger.debug("voice ai latency event failed: %s", exc)
+
+    def _on_voice_stream_chunk_for_turn(self, turn_id, chunk):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        self._on_voice_stream_chunk(chunk)
+
+    def _on_voice_stream_done_for_turn(self, turn_id):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        self._voice_stream_completed_turn_id = int(turn_id or 0)
+        self._on_voice_stream_done()
+
+    def _on_voice_ai_reply_for_turn(self, turn_id, text):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        self._on_voice_ai_reply(text)
+
+    def _on_voice_shell_v2_reply_for_turn(self, turn_id, text):
+        if int(turn_id or 0) == int(getattr(self, "_voice_stream_completed_turn_id", 0) or 0):
+            return
+        self._on_voice_ai_reply_for_turn(turn_id, text)
+
+    def _on_voice_shell_v2_error_for_turn(self, turn_id, error, text):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        if str(getattr(self, "_voice_streaming_text", "") or "").strip():
+            self._on_voice_stream_done_for_turn(turn_id)
+            return
+        try:
+            self.system_page.add_log_entry("Voice Shell-v2", str(error)[:80], "WARNING")
+        except Exception:
+            pass
+        self._start_voice_inprocess_worker(text, turn_id)
+
+    def _on_voice_ai_error_for_turn(self, turn_id, error):
+        if not self._is_voice_turn_current(turn_id):
+            return
+        self._on_voice_ai_error(error)
 
     def _on_voice_stream_chunk(self, chunk):
         """Voice streaming: update state and queue sentence-sized TTS chunks."""
@@ -11850,18 +12413,27 @@ class ShellHoloUI(QMainWindow):
         self._voice_streaming_text = getattr(self, "_voice_streaming_text", "") + str(chunk)
         self.voice_page.status_badge.setText("SPEAKING")
         self.voice_page._desc.setText("Streaming reply...")
+        try:
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None and not getattr(self, "_voice_first_chunk_seen", False):
+                session.assistant_speech_started(transport="shell_v2")
+        except Exception:
+            pass
+        try:
+            started = float(getattr(self, "_voice_turn_query_started", 0.0) or 0.0)
+            if started and not getattr(self, "_voice_first_chunk_seen", False):
+                self._voice_first_chunk_seen = True
+                elapsed = round((_time.time() - started) * 1000.0, 2)
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record("voice.first_stream_chunk_visible", elapsed)
+        except Exception:
+            pass
 
         text = self._voice_streaming_text
         spoken_upto = int(getattr(self, "_voice_stream_spoken_upto", 0) or 0)
-        pending = text[spoken_upto:]
-        if len(pending) < 48:
-            return
-        match = re.search(r"(.{48,}?[.!?।]\s+|.{150,}?\s+)", pending, flags=re.S)
-        if not match:
-            return
-        segment = match.group(1).strip()
+        segment, next_offset = self._voice_tts_next_segment(text, spoken_upto)
         if segment:
-            self._voice_stream_spoken_upto = spoken_upto + len(match.group(1))
+            self._voice_stream_spoken_upto = next_offset
             self._tts.speak(segment, force=True)
 
     def _on_voice_stream_done(self):
@@ -11881,8 +12453,15 @@ class ShellHoloUI(QMainWindow):
             self._tts.speak(tail, force=True)
         self._voice_streaming_text = ""
         self._voice_stream_spoken_upto = 0
+        self._voice_first_chunk_seen = False
         self.voice_page.status_badge.setText("LISTENING")
         self.voice_page._desc.setText("Listening... speak naturally")
+        try:
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None:
+                session.assistant_speech_done()
+        except Exception:
+            pass
         self.system_page.add_log_entry("Voice Stream Reply", f"{len(text)} chars", "SUCCESS")
         try:
             self._record_agent_message(text)
@@ -11903,6 +12482,13 @@ class ShellHoloUI(QMainWindow):
         # Restore listening status
         self.voice_page.status_badge.setText("LISTENING")
         self.voice_page._desc.setText("Listening... speak naturally")
+        self._voice_first_chunk_seen = False
+        try:
+            session = getattr(self, "_voice_realtime_session", None)
+            if session is not None:
+                session.assistant_speech_done()
+        except Exception:
+            pass
         self.system_page.add_log_entry("Voice AI Reply", f"{len(text)} chars", "SUCCESS")
 
     def _on_voice_ai_error(self, error):
@@ -13014,10 +13600,39 @@ class ShellHoloUI(QMainWindow):
                     )
                 except Exception:
                     pass
+            voice_events = {
+                "tts_backend_selected",
+                "tts_fallback_activated",
+                "tts_fallback_blocked",
+                "gemini_tts_ready",
+                "openai_pcm_first_chunk",
+                "playback_started",
+            }
+            if event in voice_events and hasattr(self, "system_page") and isinstance(payload, dict):
+                backend = payload.get("backend") or payload.get("active_backend") or payload.get("engine", "")
+                voice = (
+                    payload.get("voice")
+                    or payload.get("active_voice")
+                    or payload.get("gemini_voice")
+                    or payload.get("openai_voice")
+                    or ""
+                )
+                mode = payload.get("voice_mode", "")
+                fallback = payload.get("to_backend", "")
+                detail = f"{event}: backend={backend} voice={voice} mode={mode}"
+                if fallback:
+                    detail += f" fallback_to={fallback}"
+                self.system_page.add_log_entry("Voice Identity", detail[:180], "WARN" if "fallback" in event else "INFO")
             if event in {"warmup", "playback_started", "finished"} and hasattr(self, "system_page"):
                 elapsed = payload.get("elapsed_ms") if isinstance(payload, dict) else "?"
                 engine = payload.get("engine", "") if isinstance(payload, dict) else ""
-                self.system_page.add_log_entry("TTS Latency", f"{event}: {elapsed}ms {engine}", "INFO")
+                backend = payload.get("backend") or payload.get("active_backend") if isinstance(payload, dict) else ""
+                voice = payload.get("voice") or payload.get("active_voice") if isinstance(payload, dict) else ""
+                self.system_page.add_log_entry(
+                    "TTS Latency",
+                    f"{event}: {elapsed}ms {engine} backend={backend} voice={voice}"[:180],
+                    "INFO",
+                )
         except Exception as exc:
             logger.debug("tts latency event failed: %s", exc)
 
@@ -13123,6 +13738,14 @@ class ShellHoloUI(QMainWindow):
             self._stop_backend_command_workers()
         except Exception as _e:
             logger.debug("backend command worker stop on close failed: %s", _e)
+
+        try:
+            bridge = getattr(self, "_shell_v2_bridge", None)
+            if bridge is not None:
+                bridge.close()
+                self._shell_v2_bridge = None
+        except Exception as _e:
+            logger.debug("Shell-v2 bridge close failed: %s", _e)
 
         if hasattr(self, "_tts") and self._tts:
             try:

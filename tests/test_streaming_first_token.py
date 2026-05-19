@@ -108,3 +108,45 @@ def test_ai_chat_worker_emits_first_token_latency() -> None:
     assert "stream_done" in event_names
     first_payload = next(payload for event, payload in events if event == "first_text_chunk")
     assert first_payload["elapsed_ms"] >= 0
+
+
+def test_ai_chat_worker_cancels_stream_on_interruption() -> None:
+    from shell_ui.shell_cinematic_full import AIChatWorker
+
+    class FakeBrain:
+        providers = {"fake": object()}
+
+        async def generate_response_stream(self, prompt, system_prompt=None, mode="SMART"):
+            yield "A"
+            yield "B"
+
+        async def close_provider_sessions(self):
+            self.closed = True
+
+    brain = FakeBrain()
+    worker = AIChatWorker(brain, "hello", history=[])
+    chunks = []
+    replies = []
+    errors = []
+    done = []
+    events = []
+
+    def _on_chunk(chunk: str) -> None:
+        chunks.append(chunk)
+        worker.requestInterruption()
+
+    worker.chunk_received.connect(_on_chunk)
+    worker.reply_ready.connect(replies.append)
+    worker.reply_error.connect(errors.append)
+    worker.stream_done.connect(lambda: done.append(True))
+    worker.latency_event.connect(lambda event, payload: events.append((event, payload)))
+
+    worker.run()
+
+    assert chunks == ["A"]
+    assert replies == []
+    assert errors == []
+    assert done == []
+    assert getattr(brain, "closed", False) is True
+    cancelled = next(payload for event, payload in events if event == "stream_cancelled")
+    assert cancelled["chars"] == 1
