@@ -922,3 +922,48 @@
 - macOS Accessibility permission is still not trusted in the current UI probe run, so real input-event monitoring remains constrained by OS settings.
 - OCR quality may be limited when optional OCR dependencies are missing.
 - Python 3.9 / LibreSSL warnings remain from the local runtime environment.
+
+## Session: 2026-05-19
+
+### Completed
+- Built the dedicated Desktop Agent loop foundation requested after the computer-control readiness cycle.
+- Added observe-preview-confirm-execute-verify architecture for desktop control without enabling free-running automation.
+- Added one-step-at-a-time Desktop Agent planning for screenshot, open app, close app, coordinate click, observed-element click, type text, and keyboard shortcut actions.
+- Added explicit approval enforcement: execution is blocked unless `approved=True`, and `dry_run=True` remains the default.
+- Added post-step verification requirements so each action asks for a fresh screenshot/OCR observation before continuing.
+- Exposed Desktop Agent planning and single-step execution as user-visible system tools.
+- Added deterministic natural-language routing for `desktop agent plan ...` commands.
+- Added readiness reporting for the `desktop_agent_loop` group.
+
+### Changes Made
+- Added `core/computer_control/agent_loop.py`.
+- Updated `core/computer_control/__init__.py` to export `DesktopAgentLoop`.
+- Updated `core/computer_control/readiness.py` with `desktop_agent_loop` readiness.
+- Updated `shell_computer_control.py` with `desktop_agent_plan_tool` and `desktop_agent_execute_step_tool`.
+- Updated `shell_nl_router.py` with Desktop Agent plan routing.
+- Updated `tests/test_computer_control_readiness.py` and `tests/test_platform_supervisor.py`.
+
+### Current State
+- Desktop Agent can plan `click Start Voice` from observed bounds into one guarded coordinate click with a fresh-screenshot verification requirement.
+- Desktop Agent can plan `open calculator`, but execution is blocked without explicit approval and dry-runs by default.
+- Computer-control platform score improved from `84` to `87`; status remains `attention` because real macOS Accessibility/Screen Recording permissions are still not trusted.
+- Offscreen e2e UI probe passed.
+- Visible e2e UI probe passed.
+- All-tools UI probe passed: `442` items, `53` executed successfully, `40` agent-readiness-only, `295` safety-skipped, `10` expected not-ready, `0` errors.
+- Latency probe passed; platform supervisor includes `computer_control` score `87`.
+- Memory probe passed with peak RSS `31.25 MB`.
+- Production release check passed with no blockers; warning remains for local `.env`.
+- Full test suite passed: `416 passed, 1 warning`.
+
+### Next Steps
+1. Add a visible Automation Audit timeline showing every Desktop Agent plan, approval gate, dry-run, execution, and verification requirement.
+2. Add an approval UI for Desktop Agent plans instead of requiring JSON/tool invocation.
+3. Implement a permission-aware `MacDesktopController` that reports Accessibility and Screen Recording trust state precisely.
+4. Add real post-step screenshot comparison for approved Desktop Agent execution.
+5. Validate Windows-MCP Desktop Agent execution on a real Windows machine.
+
+### Open Issues
+- The Desktop Agent loop is intentionally conservative and does not yet run multi-step autonomous workflows.
+- There is no dedicated UI approval timeline yet; plans are available through system tools and the readiness surface.
+- macOS Accessibility permission remains untrusted in probes, so real input monitoring/control is constrained by OS permissions.
+- Python 3.9 / LibreSSL warnings remain from the local runtime environment.

@@ -330,6 +330,27 @@ def _safety_group() -> dict[str, Any]:
     )
 
 
+def _desktop_agent_loop_group() -> dict[str, Any]:
+    checks = {
+        "desktop_agent_loop": _file_available("core", "computer_control", "agent_loop.py"),
+        "automation_preview_layer": _file_available("core", "automation", "layer.py"),
+        "vision_operating_layer": _file_available("core", "vision", "screen.py"),
+        "execution_gateway": _file_available("shell_tool_gateway.py"),
+        "status_tools": _file_available("shell_computer_control.py"),
+    }
+    return _group(
+        "desktop_agent_loop",
+        summary="Desktop Agent can observe, preview, require confirmation, dry-run, execute one step, and request verification.",
+        checks=checks,
+        status="ready" if all(checks.values()) else "attention",
+        score=_score_from_checks(checks),
+        signals=["observe-preview-confirm-execute-verify loop is available"],
+        risks=["execution is intentionally one-step-at-a-time and approval-gated"],
+        permissions=["explicit approval before any non-dry-run desktop action"],
+        next_actions=["Add a visible automation audit timeline and post-step screenshot comparison UI."],
+    )
+
+
 def _catalog_matches() -> dict[str, Any]:
     try:
         from shell_tool_catalog import discover_capabilities
@@ -363,6 +384,7 @@ def build_computer_control_snapshot(*, include_catalog: bool = True) -> dict[str
         _windows_mcp_group(system),
         _macos_group(system),
         _linux_group(system),
+        _desktop_agent_loop_group(),
         _safety_group(),
     ]
     weighted_groups = [group for group in groups if group["name"] not in {"macos_control", "linux_control", "windows_mcp"} or system in group["name"]]

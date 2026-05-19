@@ -364,6 +364,18 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             confidence=0.95,
         )
 
+    desktop_agent_match = re.match(
+        r"^(?:desktop|computer|screen)\s+agent\s*(?:plan|preview|control|:)?\s*(.+)$",
+        raw,
+        flags=re.I | re.S,
+    )
+    if desktop_agent_match:
+        return _route(
+            "shell_computer_control:desktop_agent_plan_tool",
+            {"goal": _strip_quotes(desktop_agent_match.group(1))},
+            confidence=0.93,
+        )
+
     if re.search(
         r"\b(platform|ai\s*os|shell|runtime|system)\s+(status|health|readiness|diagnostics?|dashboard)\b",
         lower,
