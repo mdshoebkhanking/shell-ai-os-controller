@@ -232,6 +232,8 @@ class TTSSpeaker(QThread):
             payload.setdefault("openai_voice", self._openai_tts_voice())
             payload.setdefault("persona", self._voice_persona_identity())
             payload.setdefault("premium_voice_first", self._premium_voice_first())
+            payload.setdefault("premium_streaming_voice", self._gemini_live_tts_enabled())
+            payload.setdefault("gemini_live_model", self._gemini_live_tts_model())
             payload.setdefault("cloud_fallback_allowed", self._cloud_fallback_allowed())
             payload.setdefault("active_backend", getattr(self, "_current_backend", ""))
             payload.setdefault("active_voice", getattr(self, "_current_voice_label", ""))
@@ -258,6 +260,8 @@ class TTSSpeaker(QThread):
             "openai_voice": self._openai_tts_voice(),
             "persona": self._voice_persona_identity(),
             "premium_voice_first": self._premium_voice_first(),
+            "premium_streaming_voice": self._gemini_live_tts_enabled(),
+            "gemini_live_model": self._gemini_live_tts_model(),
             "cloud_fallback_allowed": self._cloud_fallback_allowed(),
         }
 
@@ -282,6 +286,16 @@ class TTSSpeaker(QThread):
 
     def _premium_voice_first(self):
         return self._truthy_env("SHELL_TTS_PREMIUM_FIRST", "1")
+
+    def _gemini_live_tts_enabled(self):
+        return self._truthy_env("SHELL_GEMINI_LIVE_TTS", "1")
+
+    @staticmethod
+    def _gemini_live_tts_model():
+        return str(
+            os.environ.get("GEMINI_LIVE_TTS_MODEL", "gemini-3.1-flash-live-preview")
+            or "gemini-3.1-flash-live-preview"
+        ).strip()
 
     def run(self):
         while self._running:
@@ -337,11 +351,16 @@ class TTSSpeaker(QThread):
         voice_mode = self._voice_mode()
         latency_mode = self._latency_mode()
         premium_first = self._premium_voice_first()
+        live_requested = engine in {"gemini-live", "gemini-stream", "live", "live-pcm"}
 
         if engine in {"openai", "openai-stream", "openai-pcm", "pcm"}:
             return self._speak_openai_streaming_tts(text)
 
-        if engine in {"gemini", "cloud"} or voice_mode == "cloud":
+        if engine in {"gemini", "cloud"} or voice_mode == "cloud" or live_requested:
+            if (live_requested or self._gemini_live_tts_enabled()) and self._speak_gemini_live_tts(text):
+                return True
+            if self._stop_requested.is_set():
+                return True
             if self._speak_gemini_tts(text):
                 return True
             if self._stop_requested.is_set():
@@ -376,6 +395,10 @@ class TTSSpeaker(QThread):
             return True
 
         if voice_mode == "auto" and premium_first and self._gemini_tts_configured():
+            if self._gemini_live_tts_enabled() and self._speak_gemini_live_tts(text):
+                return True
+            if self._stop_requested.is_set():
+                return True
             if self._speak_gemini_tts(text):
                 return True
             if self._stop_requested.is_set():
@@ -538,7 +561,198 @@ class TTSSpeaker(QThread):
             logging.warning("OpenAI streaming TTS failed: %s", exc)
             return False
         finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
             loop.close()
+
+    def _speak_gemini_live_tts(self, text):
+        """Stream 24kHz PCM from Gemini Live with the configured Shell voice."""
+        if not self._gemini_tts_configured():
+            self._last_error = (
+                "Gemini Live voice is selected, but GOOGLE_API_KEY is missing or invalid. "
+                "Open Settings > API Keys and save a valid Google AI Studio key."
+            )
+            return False
+        try:
+            import asyncio
+            import numpy as np
+            from google import genai
+            from google.genai import types
+            from openai.helpers import LocalAudioPlayer
+            from shell_voice import build_persona_instruction, resolve_voice
+        except Exception as exc:
+            self._last_error = f"Gemini Live streaming voice dependencies unavailable: {exc}"
+            return False
+
+        started = _time.perf_counter()
+        voice_name = resolve_voice(getattr(self, "_gemini_voice_name", None))
+        model = self._gemini_live_tts_model()
+        self._mark_tts_backend("gemini_live_pcm", voice_name, True, started, model=model)
+
+        chunk_count = 0
+        byte_count = 0
+        client_refs = []
+
+        config = types.LiveConnectConfig(
+            response_modalities=["AUDIO"],
+            speech_config=types.SpeechConfig(
+                voice_config=types.VoiceConfig(
+                    prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                        voice_name=voice_name,
+                    )
+                )
+            ),
+            system_instruction=types.Content(
+                parts=[
+                    types.Part(
+                        text=(
+                            "You are Shell's premium text-to-speech voice. "
+                            "Read the provided content aloud exactly. "
+                            "Do not answer, add words, explain, summarize, or translate."
+                        )
+                    )
+                ]
+            ),
+        )
+
+        async def _pcm_buffers(client):
+            nonlocal chunk_count, byte_count
+            async with client.aio.live.connect(model=model, config=config) as session:
+                self._emit_latency(
+                    "gemini_live_connected",
+                    started,
+                    model=model,
+                    voice=voice_name,
+                )
+                await session.send_client_content(
+                    turns=types.Content(
+                        role="user",
+                        parts=[
+                            types.Part(
+                                text=build_persona_instruction(
+                                    text,
+                                    os.environ.get("VOICE_PERSONA"),
+                                )
+                            )
+                        ],
+                    ),
+                    turn_complete=True,
+                )
+                self._emit_latency(
+                    "gemini_live_prompt_sent",
+                    started,
+                    chars=len(text),
+                    model=model,
+                    voice=voice_name,
+                )
+                async for message in session.receive():
+                    if self._stop_requested.is_set():
+                        break
+                    server_content = getattr(message, "server_content", None)
+                    if bool(getattr(server_content, "interrupted", False)):
+                        self._emit_latency(
+                            "gemini_live_interrupted",
+                            started,
+                            chunks=chunk_count,
+                            bytes=byte_count,
+                            model=model,
+                            voice=voice_name,
+                        )
+                        break
+                    for chunk, mime_type in self._extract_gemini_live_audio(message):
+                        if self._stop_requested.is_set():
+                            break
+                        if not chunk:
+                            continue
+                        chunk_count += 1
+                        byte_count += len(chunk)
+                        if chunk_count == 1:
+                            self._emit_latency(
+                                "gemini_live_first_chunk",
+                                started,
+                                bytes=len(chunk),
+                                mime_type=mime_type,
+                                model=model,
+                                voice=voice_name,
+                            )
+                            self._emit_latency(
+                                "playback_started",
+                                started,
+                                command="gemini_live_pcm_stream",
+                                backend="gemini_live_pcm",
+                                voice=voice_name,
+                                model=model,
+                            )
+                        frames = np.frombuffer(chunk, dtype=np.int16)
+                        if frames.size:
+                            yield frames.reshape(-1, 1)
+                    if bool(getattr(server_content, "turn_complete", False)):
+                        break
+            yield None
+
+        async def _run_player():
+            client = genai.Client(api_key=(os.environ.get("GOOGLE_API_KEY") or "").strip())
+            client_refs.append(client)
+            try:
+                player = LocalAudioPlayer(should_stop=lambda: self._stop_requested.is_set())
+                await player.play_stream(_pcm_buffers(client))
+            finally:
+                try:
+                    await client.aio.aclose()
+                except Exception:
+                    pass
+
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(_run_player())
+            if chunk_count:
+                self._emit_latency(
+                    "gemini_live_done",
+                    started,
+                    chunks=chunk_count,
+                    bytes=byte_count,
+                    model=model,
+                    voice=voice_name,
+                )
+                return True
+            if self._stop_requested.is_set():
+                self._emit_latency(
+                    "gemini_live_cancelled",
+                    started,
+                    chunks=chunk_count,
+                    bytes=byte_count,
+                    model=model,
+                    voice=voice_name,
+                )
+                return True
+            self._last_error = "Gemini Live streaming voice returned no PCM audio."
+            return False
+        except Exception as exc:
+            self._last_error = f"Gemini Live streaming voice failed: {exc}"
+            logging.warning("Gemini Live streaming TTS failed: %s", exc)
+            return False
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            loop.close()
+            client_refs.clear()
+
+    @staticmethod
+    def _extract_gemini_live_audio(message):
+        direct = getattr(message, "data", None)
+        if direct:
+            yield bytes(direct), "audio/pcm;rate=24000"
+        server_content = getattr(message, "server_content", None)
+        model_turn = getattr(server_content, "model_turn", None) if server_content else None
+        for part in getattr(model_turn, "parts", None) or []:
+            inline = getattr(part, "inline_data", None)
+            data = getattr(inline, "data", None) if inline is not None else None
+            if data:
+                yield bytes(data), str(getattr(inline, "mime_type", "") or "")
 
     def _speak_gemini_tts(self, text):
         if not self._gemini_tts_configured():

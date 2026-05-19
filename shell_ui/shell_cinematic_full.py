@@ -13604,6 +13604,8 @@ class ShellHoloUI(QMainWindow):
                 "tts_backend_selected",
                 "tts_fallback_activated",
                 "tts_fallback_blocked",
+                "gemini_live_first_chunk",
+                "gemini_live_done",
                 "gemini_tts_ready",
                 "openai_pcm_first_chunk",
                 "playback_started",

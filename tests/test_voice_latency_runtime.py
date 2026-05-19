@@ -45,10 +45,36 @@ def test_cloud_voice_prioritizes_gemini_identity_even_instant_mode(monkeypatch):
         "_speak_system",
         lambda _text: (_ for _ in ()).throw(AssertionError("system fallback used")),
     )
+    monkeypatch.setattr(speaker, "_speak_gemini_live_tts", lambda _text: False)
     monkeypatch.setattr(speaker, "_speak_gemini_tts", lambda text: calls.append(text) or True)
 
     assert speaker._do_speak("hello") is True
     assert calls == ["hello"]
+
+
+def test_cloud_voice_prefers_gemini_live_streaming(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    speaker = TTSSpeaker()
+    calls = []
+    monkeypatch.setattr(speaker, "_speak_gemini_live_tts", lambda text: calls.append(("live", text)) or True)
+    monkeypatch.setattr(
+        speaker,
+        "_speak_gemini_tts",
+        lambda _text: (_ for _ in ()).throw(AssertionError("batch Gemini used before live")),
+    )
+    monkeypatch.setattr(
+        speaker,
+        "_speak_system",
+        lambda _text: (_ for _ in ()).throw(AssertionError("system fallback used")),
+    )
+
+    assert speaker._do_speak("hello") is True
+    assert calls == [("live", "hello")]
 
 
 def test_cloud_voice_fallback_is_logged_only_when_explicitly_allowed(monkeypatch):
@@ -62,6 +88,7 @@ def test_cloud_voice_fallback_is_logged_only_when_explicitly_allowed(monkeypatch
     speaker = TTSSpeaker()
     events = []
     speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+    monkeypatch.setattr(speaker, "_speak_gemini_live_tts", lambda _text: False)
     monkeypatch.setattr(speaker, "_speak_system", lambda _text: True)
 
     assert speaker._do_speak("hello") is True
@@ -99,6 +126,7 @@ def test_cloud_voice_fallback_blocked_is_logged(monkeypatch):
     speaker = TTSSpeaker()
     events = []
     speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+    monkeypatch.setattr(speaker, "_speak_gemini_live_tts", lambda _text: False)
 
     assert speaker._do_speak("hello") is False
     blocked = [payload for event, payload in events if event == "tts_fallback_blocked"]
@@ -121,6 +149,7 @@ def test_cloud_voice_cancel_does_not_emit_fallback_failure(monkeypatch):
     events = []
     speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
     speaker._stop_requested.set()
+    monkeypatch.setattr(speaker, "_speak_gemini_live_tts", lambda _text: False)
     monkeypatch.setattr(speaker, "_speak_gemini_tts", lambda _text: False)
     monkeypatch.setattr(
         speaker,
@@ -224,6 +253,107 @@ def test_openai_streaming_tts_uses_pcm_player(monkeypatch):
     selected_payloads = [payload for event, payload in events if event == "tts_backend_selected"]
     assert selected_payloads[0]["backend"] == "openai_pcm"
     assert selected_payloads[0]["voice"] == "coral"
+
+
+def test_gemini_live_streaming_tts_uses_aoede_pcm_player(monkeypatch):
+    import google.genai
+    import openai.helpers
+
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    consumed = []
+    connect_calls = []
+    sent_turns = []
+
+    class Inline:
+        data = b"\x00\x00" * 240
+        mime_type = "audio/pcm;rate=24000"
+
+    class Part:
+        inline_data = Inline()
+
+    class ModelTurn:
+        parts = [Part()]
+
+    class ServerContent:
+        model_turn = ModelTurn()
+        turn_complete = False
+        interrupted = False
+
+    class DoneServerContent:
+        model_turn = None
+        turn_complete = True
+        interrupted = False
+
+    class Message:
+        server_content = ServerContent()
+
+    class DoneMessage:
+        server_content = DoneServerContent()
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def send_client_content(self, **kwargs):
+            sent_turns.append(kwargs)
+
+        async def receive(self):
+            yield Message()
+            yield DoneMessage()
+
+    class FakeLive:
+        def connect(self, **kwargs):
+            connect_calls.append(kwargs)
+            return FakeSession()
+
+    class FakeAio:
+        def __init__(self):
+            self.live = FakeLive()
+
+        async def aclose(self):
+            pass
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+            self.aio = FakeAio()
+
+    class FakeLocalAudioPlayer:
+        def __init__(self, should_stop=None):
+            self.should_stop = should_stop
+
+        async def play_stream(self, stream):
+            async for buffer in stream:
+                if buffer is None:
+                    break
+                consumed.append(buffer)
+
+    monkeypatch.setattr(google.genai, "Client", FakeClient)
+    monkeypatch.setattr(openai.helpers, "LocalAudioPlayer", FakeLocalAudioPlayer)
+
+    speaker = TTSSpeaker()
+    events = []
+    speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+
+    assert speaker._speak_gemini_live_tts("hello") is True
+    assert len(consumed) == 1
+    assert connect_calls[0]["model"] == "gemini-3.1-flash-live-preview"
+    assert sent_turns
+    event_names = [event for event, _payload in events]
+    assert "tts_backend_selected" in event_names
+    assert "gemini_live_first_chunk" in event_names
+    assert "playback_started" in event_names
+    assert "gemini_live_done" in event_names
+    selected_payloads = [payload for event, payload in events if event == "tts_backend_selected"]
+    assert selected_payloads[0]["backend"] == "gemini_live_pcm"
+    assert selected_payloads[0]["voice"] == "Aoede"
 
 
 def test_set_voice_keeps_gemini_voice_name(monkeypatch):

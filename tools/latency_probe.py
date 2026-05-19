@@ -720,6 +720,8 @@ def main() -> int:
             "pyttsx3_available": bool(importlib.util.find_spec("pyttsx3")),
             "tts_engine": os.environ.get("SHELL_TTS_ENGINE", "fast"),
             "tts_premium_voice_first": os.environ.get("SHELL_TTS_PREMIUM_FIRST", "1"),
+            "tts_premium_streaming_voice": os.environ.get("SHELL_GEMINI_LIVE_TTS", "1"),
+            "gemini_live_tts_model": os.environ.get("GEMINI_LIVE_TTS_MODEL", "gemini-3.1-flash-live-preview"),
             "tts_cloud_fallback_allowed": os.environ.get("SHELL_CLOUD_TTS_LOCAL_FALLBACK", "0"),
         },
         "samples": samples,

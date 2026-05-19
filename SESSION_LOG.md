@@ -480,3 +480,45 @@
 - OpenAI streaming PCM support exists but is not the configured primary identity because the current Shell signature voice is Gemini Aoede and no OpenAI key is configured in this environment.
 - Human timbre judgment cannot be performed by the agent directly; audible playback was exercised on the desktop audio path, and telemetry confirms the active backend/voice.
 - System voice fallback is now blocked by default in cloud mode, which preserves identity but means audio will fail visibly if Gemini or audio output is unavailable unless `SHELL_CLOUD_TTS_LOCAL_FALLBACK=1` is explicitly set.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran a premium streaming voice cycle focused on reducing first-audio latency without sacrificing Shell's Aoede identity.
+- Researched Gemini Live audio output, OpenAI Realtime/TTS streaming patterns, low-buffer PCM playback, and provider-native voice-session behavior.
+- Verified the existing Google SDK exposes Live sessions through `client.aio.live.connect` and that the current working Live model for this environment is `gemini-3.1-flash-live-preview`.
+- Added a Gemini Live PCM streaming backend that locks `Aoede` through `speech_config.voice_config.prebuilt_voice_config.voice_name`.
+- Changed cloud TTS routing so Shell tries `gemini_live_pcm` first, falls back to premium batch Gemini only if needed, and still blocks system fallback unless explicitly allowed.
+- Added voice identity telemetry for `premium_streaming_voice` and `gemini_live_model`.
+- Added UI System Dashboard visibility for Gemini Live first chunk and completion events.
+- Fixed Gemini Live prompt behavior so the provider reads Shell's response text aloud instead of treating it as a new conversational prompt.
+- Fixed Gemini Live async cleanup by holding the SDK client until after the playback loop closes, preventing pending `aclose()` warnings in the final probe.
+
+### Changes Made
+- Updated `shell_voice_runtime.py` with `_speak_gemini_live_tts`, streamed PCM playback through `LocalAudioPlayer`, Live audio extraction, Live-first routing, and cleanup safeguards.
+- Updated `shell_ui/shell_cinematic_full.py` so Live first chunk / completion events appear in voice identity logs.
+- Updated `tools/latency_probe.py` to report `SHELL_GEMINI_LIVE_TTS` and `GEMINI_LIVE_TTS_MODEL`.
+- Updated `tests/test_voice_latency_runtime.py` with Live-first routing and fake Gemini Live PCM playback coverage.
+
+### Current State
+- Active voice identity probe: `configured_engine=fast`, `voice_mode=cloud`, `gemini_voice=Aoede`, `premium_voice_first=true`, `premium_streaming_voice=true`, `gemini_live_model=gemini-3.1-flash-live-preview`, `cloud_fallback_allowed=false`.
+- Baseline premium batch Gemini from the prior cycle: `queue_to_playback_ms=2932.134 ms`, Gemini audio ready at `2927.15 ms`.
+- Final audible Gemini Live probe: `backend=gemini_live_pcm`, `voice=Aoede`, first Live PCM chunk at `758.19 ms`, `playback_started=758.97 ms`, `queue_to_playback_ms=1355.331 ms`.
+- Full UI in-app voice validation: visible Shell UI launched, `_tts.speak(...)` used the same `gemini_live_pcm` backend, first chunk at `807.50 ms`, playback start at `808.20 ms`, no system fallback.
+- Streaming generated 30 chunks / 190,088 bytes in the final runtime probe and 42 chunks / 287,048 bytes in the full UI validation.
+- Interruption/realtime probes remained stable: `voice.turn_cancel=3.765 ms`, `shell_v2.worker_cancel=0.67 ms`, `voice.realtime_session` control overhead `0.053 ms`.
+- Targeted voice tests passed: `34 passed, 1 warning`.
+- Full test suite passed: `384 passed, 1 warning`.
+
+### Next Steps
+1. Reuse a persistent Gemini Live session across turns to remove the ~200 ms connection setup and reduce queue-to-playback overhead.
+2. Add adaptive first-audio measurement that ignores the initial 2-byte Live primer chunk and records first substantial PCM chunk / first audible energy.
+3. Build true duplex interruption propagation into the Gemini Live audio session so barge-in can interrupt provider generation, not just local playback.
+4. Add an optional short acknowledgement/backchannel system that preserves Aoede identity while hiding provider variance.
+5. Compare Gemini Live Aoede against OpenAI Realtime voices only as an optional alternate identity, not as a silent replacement.
+
+### Open Issues
+- First Live audio is now sub-second from backend selection, but queue-to-playback still includes about 600 ms of local TTS-thread / probe scheduling overhead.
+- Gemini Live sometimes emits a tiny 2-byte first PCM primer chunk; the current metric records it as first chunk, so future reporting should distinguish primer vs substantial audible audio.
+- The Live backend is still turn-scoped, not a persistent duplex session, so the next breakthrough is session reuse plus provider-native interruption.
+- Human timbre judgment remains limited to audible playback execution plus telemetry confirmation; the agent cannot personally perceive voice tone.
