@@ -559,6 +559,12 @@ class Assistant(Agent):
         except Exception as _e:
             logger.debug("Optional tool 'predictive' unavailable: %s", _e)
             _predictive_loaded = False
+        try:
+            from shell_agent_orchestrator import orchestrate_shell_goal_tool, list_orchestration_agents_tool
+            _agent_orchestrator_loaded = True
+        except Exception as _e:
+            logger.debug("Optional tool 'agent_orchestrator' unavailable: %s", _e)
+            _agent_orchestrator_loaded = False
         # ═══════ SHELL AI AGENTS ═══════
         try:
             from shell_agents import (
@@ -700,7 +706,14 @@ class Assistant(Agent):
             logger.debug("Optional tool 'terminal' unavailable: %s", _e)
             _terminal_loaded = False
         # ============ MASTER TOOLS LIST ============
-        tools_list = [
+        tools_list = []
+        if _agent_orchestrator_loaded:
+            tools_list.extend([
+                orchestrate_shell_goal_tool,
+                list_orchestration_agents_tool,
+            ])
+
+        tools_list.extend([
             # ═══════ Vision & UI ═══════
             read_screen_text_tool,
             extract_text_from_image,
@@ -836,7 +849,7 @@ class Assistant(Agent):
             
             # ═══════ Games ═══════
             game_logic_tool,
-        ]
+        ])
         
         # ═══════ WHATSAPP ECOSYSTEM (V7.0) ═══════
         if _whatsapp_ctrl_loaded:

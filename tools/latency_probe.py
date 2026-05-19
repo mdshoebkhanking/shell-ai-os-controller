@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import os
+import statistics
 import sys
 import time
 import urllib.request
@@ -593,6 +594,35 @@ def _realtime_voice_session_probe():
     return snapshot
 
 
+def _agent_first_orchestration_probe():
+    from core.agent_orchestrator import AgentFirstOrchestrator
+
+    prompts = [
+        "what is 2+3*4",
+        "open calculator",
+        "search google for pyqt qthread cleanup",
+        "developer agent fix login",
+    ]
+    orchestrator = AgentFirstOrchestrator()
+    rows = []
+    for prompt in prompts:
+        samples_ms = []
+        plan = orchestrator.orchestrate(prompt)
+        for _ in range(100):
+            started = time.perf_counter()
+            orchestrator.orchestrate(prompt)
+            samples_ms.append((time.perf_counter() - started) * 1000.0)
+        rows.append({
+            "prompt": prompt,
+            "agent": plan.selected_agent_id,
+            "capability": plan.capability,
+            "low_level_tool_id": plan.low_level_tool_id,
+            "median_ms": round(statistics.median(samples_ms), 4),
+            "p95_ms": round(sorted(samples_ms)[94], 4),
+        })
+    return rows
+
+
 def _voice_adaptive_endpointing_probe():
     from shell_voice_listener_runtime import VoiceListenerThread
 
@@ -733,6 +763,7 @@ def main() -> int:
     samples.append(_measure("shell_v2.sse_client_stream", _shell_v2_sse_client_probe))
     samples.append(_measure("shell_v2.worker_cancel", _shell_v2_worker_cancel_probe))
     samples.append(_measure("shell_v2.runtime_reuse", _shell_v2_runtime_reuse_probe))
+    samples.append(_measure("agent.first_orchestration", _agent_first_orchestration_probe))
     samples.append(_measure("voice.turn_cancel", _voice_turn_cancel_probe))
     samples.append(_measure("voice.realtime_session", _realtime_voice_session_probe))
     samples.append(_measure("voice.adaptive_endpointing", _voice_adaptive_endpointing_probe))

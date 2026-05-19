@@ -675,3 +675,49 @@
 - Provider first-token and premium voice first-audio variance are still much larger than local Shell-v2 transport overhead.
 - Shell is still PyQt-based today; Tauri migration should be a phased frontend/runtime program, not a direct replacement commit.
 - Future native sidecars need explicit IPC ownership, lifecycle supervision, crash recovery, telemetry, and cleanup tests before they can become production runtime paths.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran an agent-first architecture cycle focused on moving Shell from a static tool registry toward bounded multi-agent orchestration.
+- Researched current agent architecture patterns across OpenAI Agents SDK, Anthropic effective/managed agents, LangGraph-style supervisor routing, AutoGen, CrewAI, and OpenHands/OpenDevin.
+- Added a deterministic `AgentFirstOrchestrator` that wraps existing backend tools as internal capabilities owned by specialist agents.
+- Added 19 bounded orchestration agents, including realtime conversation, planner, voice, workflow, reasoning, research, browser, desktop automation, memory, vision, system monitoring, context, retrieval, coding, task execution, provider routing, multimodal, communication, and validator agents.
+- Added a user-facing orchestrator tool so complex tasks can enter through the agent supervisor before any low-level capability executes.
+- Updated Shell prompts so complex/cross-domain tasks prefer the agent orchestrator while simple one-step actions can still use direct tools.
+- Updated catalog classification and cache versioning so the orchestrator appears as an agent boundary, not another ordinary tool.
+- Extended latency and agent ecosystem probes to measure active agent-first orchestration.
+
+### Changes Made
+- Added `core/agent_orchestrator/` with the active agent-first routing layer and structured `AgentRoutePlan`.
+- Added `shell_agent_orchestrator.py` with `orchestrate_shell_goal_tool` and `list_orchestration_agents_tool`.
+- Updated `agent.py` to load the agent orchestrator ahead of the legacy static tool list.
+- Updated `shell_prompts.py` with agent-first guidance.
+- Updated `shell_tool_catalog.py` to classify the orchestrator as an agent boundary and invalidate old catalog cache.
+- Updated `tools/latency_probe.py` and `tools/agent_ecosystem_audit.py` for active orchestrator validation.
+- Added `tests/test_agent_first_orchestrator.py`.
+
+### Current State
+- Direct deterministic route baseline before this cycle: median `0.0335-0.0423 ms` for common commands.
+- Agent-first orchestration after this cycle: median `0.1338-0.2073 ms`, p95 max `0.2433 ms` across math, desktop, browser/search, and coding-agent prompts.
+- Measured overhead is roughly `0.10-0.17 ms`, which is low enough for realtime UI/voice routing while adding agent ownership, memory scopes, approval state, and traces.
+- Catalog now reports `455` total capabilities with `40` agents.
+- Active agent audit passes: `19` orchestration agents registered; reasoning routes through `reasoning_agent`; risky terminal capability requires approval and is not execution-allowed.
+- Realtime checks stayed stable: `shell_v2.worker_cancel=0.376 ms`, `voice.turn_cancel=1.197 ms`, realtime session control overhead `0.017 ms`.
+- Voice identity remains premium: Gemini `Aoede`, premium streaming voice enabled, cloud fallback disabled.
+- UI probes passed: agents `37/37`; all-tools probe `ok=true`, `438` UI-visible items, `53` executed successfully, `291` safety-skipped, `0` errors.
+- Full test suite passed: `402 passed, 1 warning`.
+- Production release check passed with no blockers; warning only that local `.env` exists and must not be packaged.
+
+### Next Steps
+1. Route more existing `/agent` UI flows through `AgentFirstOrchestrator` so users increasingly see agent plans instead of raw tool names.
+2. Add an agent trace panel showing selected agent, capability, approval state, memory scopes, and validation result.
+3. Add a durable task queue for long-running workflow/coding/research agents before enabling background autonomy.
+4. Add evaluator/validator passes for risky agent plans before execution, especially terminal, file-write, messaging, and desktop automation capabilities.
+5. Start converting high-level tool categories into capability packs owned by agents while keeping the low-level functions available internally.
+
+### Open Issues
+- Existing LiveKit still receives the legacy large tool list for compatibility; the agent orchestrator is now first-class but not yet the only execution gateway.
+- Background agents remain intentionally disabled until durable queues, cancellation, watchdogs, and UI-visible state are implemented.
+- Memory binding is structured but not yet connected to encrypted/vector long-term memory adapters.
+- Multi-agent collaboration is deterministic and bounded today; deeper LLM-based planning should be added only behind latency, safety, and observability gates.

@@ -118,6 +118,7 @@ def check_agent_contracts(findings: list[Finding]) -> dict[str, Any]:
 
 def check_existing_foundations(findings: list[Finding]) -> None:
     required = [
+        ("core/agent_orchestrator/orchestrator.py", "agent_architecture"),
         ("core/collaboration/team.py", "orchestration"),
         ("core/workflows/engine.py", "automation"),
         ("core/memory/fabric.py", "memory"),
@@ -130,6 +131,33 @@ def check_existing_foundations(findings: list[Finding]) -> None:
     for path, category in required:
         if not exists(path):
             findings.append(Finding("high", category, f"Required Phase 8 foundation is missing: {path}", "Keep agent, workflow, memory, tool, safety, marketplace, and SDK modules separated.", path))
+
+
+def check_active_agent_orchestrator(findings: list[Finding]) -> dict[str, Any]:
+    try:
+        from core.agent_orchestrator import AgentFirstOrchestrator
+    except Exception as exc:
+        findings.append(Finding("high", "agent_architecture", f"Agent-first orchestrator is unavailable: {exc}", "Keep active agent-first orchestration importable without provider startup.", "core/agent_orchestrator/orchestrator.py"))
+        return {"available": False}
+
+    orchestrator = AgentFirstOrchestrator()
+    math_plan = orchestrator.orchestrate("what is 2 + 3 * 4")
+    risky_plan = orchestrator.orchestrate("terminal echo hello")
+
+    if math_plan.selected_agent_id != "reasoning_agent" or math_plan.low_level_tool_id != "shell_calculator:calculate_tool":
+        findings.append(Finding("high", "agent_architecture", "Simple reasoning capability did not route through the Reasoning Agent.", "Tools should be internal capabilities owned by specialist agents.", "core/agent_orchestrator/orchestrator.py"))
+    if risky_plan.execution_allowed or not risky_plan.requires_approval:
+        findings.append(Finding("high", "agent_safety", "Risky terminal capability was allowed without explicit approval.", "Agent orchestration must keep dangerous capabilities approval-gated.", "core/agent_orchestrator/orchestrator.py"))
+
+    return {
+        "available": True,
+        "sample_agent": math_plan.selected_agent_id,
+        "sample_capability": math_plan.capability,
+        "sample_tool": math_plan.low_level_tool_id,
+        "risky_requires_approval": risky_plan.requires_approval,
+        "risky_execution_allowed": risky_plan.execution_allowed,
+        "registered_orchestration_agents": len(orchestrator.agents()),
+    }
 
 
 def check_sdk_permissions(findings: list[Finding]) -> None:
@@ -207,6 +235,7 @@ def build_report() -> dict[str, Any]:
     findings: list[Finding] = []
     contract_meta = check_agent_contracts(findings)
     check_existing_foundations(findings)
+    active_orchestrator_meta = check_active_agent_orchestrator(findings)
     check_sdk_permissions(findings)
     marketplace_meta = check_marketplace_template(findings)
     check_docs_and_ci(findings)
@@ -226,6 +255,7 @@ def build_report() -> dict[str, Any]:
             "long_term_ecosystem_score": 87,
         },
         "contract": contract_meta,
+        "active_orchestrator": active_orchestrator_meta,
         "marketplace": marketplace_meta,
         "finding_count": len(findings),
         "findings": [asdict(item) for item in findings],

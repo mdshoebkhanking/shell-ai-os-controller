@@ -17,7 +17,7 @@ from typing import Any, Optional, Union
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 _DISCOVER_TOOL_CACHE: dict[tuple[str, tuple[tuple[str, int, int], ...]], list[dict[str, Any]]] = {}
-_DISK_CACHE_VERSION = 1
+_DISK_CACHE_VERSION = 2
 _DISK_CACHE_PATH = PROJECT_ROOT / ".shell_runtime" / "tool_catalog_cache.json"
 
 _SKIP_DIRS = {
@@ -125,6 +125,8 @@ def _category_for(module: str, func_name: str) -> str:
 
 def _is_agent_tool(module: str, func_name: str) -> bool:
     blob = f"{module}.{func_name}".lower()
+    if module == "shell_agent_orchestrator":
+        return True
     return (
         module in {"shell_agents", "shell_extra_agents", "shell_agent_tools"}
         and ("agent" in func_name.lower() or "swarm" in blob)
