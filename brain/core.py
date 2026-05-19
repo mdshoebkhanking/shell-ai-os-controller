@@ -47,6 +47,29 @@ def _stream_fallback_timeout_s(mode: str = "SMART") -> float:
     return max(0.25, min(_provider_timeout_s(mode), requested))
 
 
+def _looks_like_provider_error_response(response: Any) -> bool:
+    """Return True when a provider returned an error string instead of raising."""
+    if not isinstance(response, str):
+        return False
+    value = response.strip().lower()
+    if not value:
+        return False
+    bad_prefixes = (
+        "error:",
+        "openai error:",
+        "mistral error:",
+        "gemini error:",
+        "groq error:",
+        "blackbox error:",
+        "blackbox ai error:",
+        "deepseek error:",
+        "openrouter error:",
+        "perplexity error:",
+        "sambanova error:",
+    )
+    return any(value.startswith(prefix) for prefix in bad_prefixes)
+
+
 # ---------------------------------------------------------------------------
 # ResponseQualityScorer
 # ---------------------------------------------------------------------------
@@ -532,23 +555,8 @@ class MultiAIBrain:
 
                 if not response:
                     raise Exception(f"{provider_name} returned empty response")
-                if isinstance(response, str):
-                    rs = response.strip()
-                    # Providers historically return their failures as
-                    # strings prefixed with "Error:", "<Provider> Error:",
-                    # "<Provider> AI error:", etc., instead of raising.
-                    # Normalise: any of those = treat as failure so the
-                    # fallback chain gets to try the next provider.
-                    rs_low = rs.lower()
-                    bad_prefixes = (
-                        "error:", "openai error", "mistral error",
-                        "gemini error", "groq error", "blackbox error",
-                        "blackbox ai error",
-                        "deepseek error", "openrouter error",
-                        "perplexity error", "sambanova error",
-                    )
-                    if any(rs_low.startswith(p) for p in bad_prefixes):
-                        raise Exception(response)
+                if _looks_like_provider_error_response(response):
+                    raise Exception(response)
                 # Skip stub/placeholder responses
                 if "integration via unofficial API is pending" in str(response):
                     raise Exception(f"{provider_name} is a stub provider")
@@ -664,18 +672,23 @@ class MultiAIBrain:
                     async for chunk in provider.generate_response_stream_async(
                         messages=messages, model=model_name
                     ):
-                        collected.append(chunk)
+                        chunk_text = str(chunk)
+                        if not collected and _looks_like_provider_error_response(chunk_text):
+                            raise Exception(chunk_text)
+                        collected.append(chunk_text)
                         metrics["chunks"] += 1
                         if metrics["first_token_ms"] is None:
                             metrics["first_token_ms"] = round((time.perf_counter() - stream_started) * 1000.0, 3)
                             metrics["selected_provider"] = provider_name
-                        yield chunk
+                        yield chunk_text
 
                     full_response = "".join(collected)
                     latency = time.time() - start
 
                     if not full_response.strip():
                         raise Exception(f"{provider_name} stream returned empty")
+                    if _looks_like_provider_error_response(full_response):
+                        raise Exception(full_response)
 
                     self.health.record_success(provider_name, latency)
                     input_tok = self.estimate_tokens(compressed_prompt)
@@ -706,6 +719,8 @@ class MultiAIBrain:
 
                 if not response or "integration via unofficial API is pending" in str(response):
                     raise Exception(f"{provider_name} returned invalid response")
+                if _looks_like_provider_error_response(response):
+                    raise Exception(str(response))
 
                 self.health.record_success(provider_name, latency)
                 input_tok = self.estimate_tokens(compressed_prompt)

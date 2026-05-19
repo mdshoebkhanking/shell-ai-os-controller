@@ -967,3 +967,50 @@
 - There is no dedicated UI approval timeline yet; plans are available through system tools and the readiness surface.
 - macOS Accessibility permission remains untrusted in probes, so real input monitoring/control is constrained by OS permissions.
 - Python 3.9 / LibreSSL warnings remain from the local runtime environment.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran a real-tester QA cycle across full pytest, visible/offscreen UI, chat workflows, voice, agents, tools, Shell-v2 streaming, latency, memory, release, repo, platform, and live provider probes.
+- Validated visible Shell UI pages: Chat, Voice, System, Agents, Tools, and Settings.
+- Validated chat-driven macOS app open/close flows, calculator/text tools, external integration status, OpenClaw search, agent-browser open/snapshot/close, and agent routing.
+- Validated premium voice path: `gemini_live_pcm`, Aoede voice, premium voice first, cloud fallback disabled, first audible chunk around `780 ms`.
+- Found a real streaming QA/runtime issue: provider error strings from fallback text providers could be treated as successful streaming chunks.
+- Fixed streaming provider error normalization so Gemini/OpenAI/etc. error strings trigger fallback/failure instead of appearing as valid assistant output.
+- Tightened live provider probe so provider error chunks no longer false-pass.
+
+### Changes Made
+- Updated `brain/core.py` with shared provider-error detection for normal chat, streaming providers, and non-streaming streaming fallback.
+- Updated `tools/live_provider_stream_probe.py` with `provider_error` detection and stricter `ok` semantics.
+- Updated `tests/test_streaming_first_token.py` with coverage for non-streaming fallback error strings and true-streaming first error chunks.
+
+### Current State
+- Full test suite passed: `418 passed, 1 warning`.
+- Targeted streaming tests passed: `6 passed`.
+- Offscreen e2e UI probe passed after the fix.
+- Visible e2e UI probe passed before the fix.
+- Visible chat workflow probe passed: `5` apps opened, `5` apps closed, `8` tool commands, `2` agent commands, `0` failures.
+- Agents UI probe passed: `37/37`.
+- All-tools UI probe passed after the fix: `442` total, `53` executed successfully, `295` safety-skipped, `10` expected not-ready, `0` errors.
+- Shell-v2 elevated bridge probe passed after the fix: first visible `17.27 ms`, provider-to-SSE `1.052 ms`, completion `39.49 ms`.
+- Latency probe passed; sandbox-only `shell_v2.connect_1s` network sample remains blocked unless elevated.
+- Memory probe passed after the fix: peak RSS `31.484 MB`.
+- Production release check passed with no blockers; warning remains for local `.env`.
+- Production readiness passed: `100/100`.
+- Repo audit passed: `100/100`.
+- Live Gemini text provider probe now correctly fails on quota/rate-limit response instead of false-passing.
+- Live Groq provider probe passed: first chunk `169.384 ms`, `17` chunks, completion `219.868 ms`.
+
+### Next Steps
+1. Add provider-health UI so quota/rate-limit states are visible to users before a provider is selected.
+2. Prefer a healthy streaming text provider automatically when Gemini text is quota-limited while preserving Gemini Live/Aoede for voice.
+3. Add signed-release setup documentation/actions for Apple Developer ID notarization and Windows Authenticode.
+4. Run Windows acceptance on a real Windows desktop/RDP host.
+5. Upgrade local runtime packaging away from Python 3.9/LibreSSL warnings.
+
+### Open Issues
+- Gemini text generation key is currently quota/rate-limited; Groq live text streaming is healthy.
+- Signing/notarization remains blocked without Apple Developer ID/notary credentials and Windows signing tooling/credentials.
+- Windows acceptance is blocked on this macOS host by design; elevated non-Windows probe validates hub/UI/voice/agents but cannot replace real Windows UAT.
+- macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
+- Python 3.9 / LibreSSL warnings remain from the local runtime environment.

@@ -21,6 +21,22 @@ PROVIDER_KEYS = {
 }
 
 
+def _looks_like_provider_error(text: str) -> bool:
+    value = str(text or "").strip().lower()
+    bad_prefixes = (
+        "error:",
+        "openai error:",
+        "gemini error:",
+        "groq error:",
+        "deepseek error:",
+        "openrouter error:",
+        "sambanova error:",
+        "mistral error:",
+        "perplexity error:",
+    )
+    return any(value.startswith(prefix) for prefix in bad_prefixes)
+
+
 def _load_env() -> None:
     try:
         from dotenv import load_dotenv
@@ -102,16 +118,19 @@ async def _run_provider_stream(provider_name: str, prompt: str, mode: str) -> di
             for idx in range(1, len(chunk_times_ms))
         ]
         metrics = brain.get_last_stream_metrics()
+        full_reply = "".join(chunks)
+        provider_error = _looks_like_provider_error(full_reply)
         return {
-            "ok": bool(chunks),
+            "ok": bool(chunks) and not provider_error,
             "provider": provider_name,
             "mode": mode,
             "key_present": _key_present(provider_name),
             "chunk_count": len(chunks),
-            "char_count": len("".join(chunks)),
+            "char_count": len(full_reply),
             "first_chunk_ms": chunk_times_ms[0] if chunk_times_ms else None,
             "completion_ms": chunk_times_ms[-1] if chunk_times_ms else None,
             "chunk_times_ms": chunk_times_ms[:50],
+            "provider_error": provider_error,
             "cadence": {
                 "interval_count": len(intervals),
                 "avg_interval_ms": round(statistics.mean(intervals), 3) if intervals else None,
@@ -121,7 +140,7 @@ async def _run_provider_stream(provider_name: str, prompt: str, mode: str) -> di
             "brain_metrics": metrics,
             "transport_before_close": transport_before_close,
             "closed_sessions": closed_sessions,
-            "preview": "".join(chunks)[:160],
+            "preview": full_reply[:160],
         }
     finally:
         SmartRouter.get_provider_sequence = original_sequence

@@ -80,6 +80,67 @@ def test_brain_stream_fallback_timeout_moves_to_next_provider(monkeypatch) -> No
     assert any("slow fallback" in err for err in metrics["errors"])
 
 
+def test_brain_stream_fallback_rejects_provider_error_string(monkeypatch) -> None:
+    from brain.router import SmartRouter
+
+    class ErrorProvider:
+        async def generate_response_async(self, messages, model=None):
+            return "Gemini Error: quota or rate limit reached. Try again later."
+
+    class FastProvider:
+        async def generate_response_async(self, messages, model=None):
+            return "healthy fallback"
+
+    monkeypatch.setattr(SmartRouter, "get_provider_sequence", staticmethod(lambda mode="SMART": ["bad", "fast"]))
+    monkeypatch.setattr(SmartRouter, "get_model_for_provider", staticmethod(lambda mode, provider_name: "fake-model"))
+
+    async def scenario():
+        brain = _brain_with_providers({"bad": ErrorProvider(), "fast": FastProvider()})
+        chunks = []
+        async for chunk in brain.generate_response_stream("hello", mode="FAST"):
+            chunks.append(chunk)
+        return chunks, brain.get_last_stream_metrics()
+
+    chunks, metrics = asyncio.run(scenario())
+
+    assert chunks == ["healthy fallback"]
+    assert metrics["providers_attempted"] == ["bad", "fast"]
+    assert metrics["selected_provider"] == "fast"
+    assert any("bad fallback" in err and "Gemini Error" in err for err in metrics["errors"])
+
+
+def test_brain_true_stream_rejects_provider_error_chunk(monkeypatch) -> None:
+    from brain.router import SmartRouter
+
+    class ErrorStreamingProvider:
+        async def generate_response_stream_async(self, messages, model=None):
+            yield "OpenAI Error: rate limit"
+
+        def supports_streaming(self):
+            return True
+
+    class FastProvider:
+        async def generate_response_async(self, messages, model=None):
+            return "healthy fallback"
+
+    monkeypatch.setattr(SmartRouter, "get_provider_sequence", staticmethod(lambda mode="SMART": ["bad_stream", "fast"]))
+    monkeypatch.setattr(SmartRouter, "get_model_for_provider", staticmethod(lambda mode, provider_name: "fake-model"))
+
+    async def scenario():
+        brain = _brain_with_providers({"bad_stream": ErrorStreamingProvider(), "fast": FastProvider()})
+        chunks = []
+        async for chunk in brain.generate_response_stream("hello", mode="FAST"):
+            chunks.append(chunk)
+        return chunks, brain.get_last_stream_metrics()
+
+    chunks, metrics = asyncio.run(scenario())
+
+    assert chunks == ["healthy fallback"]
+    assert metrics["providers_attempted"] == ["bad_stream", "fast"]
+    assert metrics["selected_provider"] == "fast"
+    assert any("bad_stream stream" in err and "OpenAI Error" in err for err in metrics["errors"])
+
+
 def test_ai_chat_worker_emits_first_token_latency() -> None:
     from shell_ui.shell_cinematic_full import AIChatWorker
 
