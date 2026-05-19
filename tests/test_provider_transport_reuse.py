@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import types
 
 
 class FakeResponse:
@@ -131,3 +132,48 @@ def test_missing_provider_key_does_not_create_transport(monkeypatch) -> None:
             await close_aiohttp_sessions()
 
     asyncio.run(scenario())
+
+
+def test_tool_gateway_sync_closes_provider_transport(monkeypatch) -> None:
+    from brain.provider_transport import (
+        close_aiohttp_sessions,
+        provider_transport_stats,
+        set_session_factory_for_tests,
+    )
+    import shell_tool_gateway
+
+    module = types.ModuleType("_shell_gateway_cleanup_probe")
+    created: list[FakeSession] = []
+
+    async def probe_tool():
+        from brain.provider_transport import get_aiohttp_session
+
+        await get_aiohttp_session("gateway_probe", timeout_s=3)
+        return "ok"
+
+    module.probe_tool = probe_tool
+    monkeypatch.setitem(sys.modules, module.__name__, module)
+    monkeypatch.setattr(shell_tool_gateway, "CapabilityRegistry", None)
+    monkeypatch.setattr(
+        shell_tool_gateway,
+        "_catalog_index",
+        lambda: {
+            f"{module.__name__}:probe_tool": {
+                "id": f"{module.__name__}:probe_tool",
+                "name": "probe_tool",
+                "params": [],
+            }
+        },
+    )
+
+    set_session_factory_for_tests(lambda owner, timeout_s: created.append(FakeSession(owner, timeout_s)) or created[-1])
+    try:
+        result = shell_tool_gateway.execute_tool_sync(f"{module.__name__}:probe_tool", {})
+        assert result["status"] == "success"
+        assert result["result"] == "ok"
+        assert len(created) == 1
+        assert created[0].closed is True
+        assert provider_transport_stats()["session_count"] == 0
+    finally:
+        set_session_factory_for_tests(None)
+        asyncio.run(close_aiohttp_sessions())

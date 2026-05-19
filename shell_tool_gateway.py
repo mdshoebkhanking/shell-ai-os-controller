@@ -228,6 +228,12 @@ def execute_tool_sync(tool_id: str, args: Any = None) -> dict[str, Any]:
         policy.set_event_loop(loop)
         return loop.run_until_complete(execute_tool(tool_id, args))
     finally:
+        try:
+            from brain.provider_transport import close_aiohttp_sessions
+
+            loop.run_until_complete(close_aiohttp_sessions())
+        except Exception:
+            pass
         pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
         if pending:
             for task in pending:

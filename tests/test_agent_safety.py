@@ -55,6 +55,58 @@ def test_agent_provider_failure_is_human_readable(monkeypatch):
     assert "degraded mode" in result
 
 
+def test_shell_agent_missing_tool_uses_reasoning_fallback():
+    from shell_agents import ShellAgent
+
+    class ProbeAgent(ShellAgent):
+        async def _ai_think(self, prompt, system_prompt=None, mode=None):
+            if system_prompt and "create an execution plan" in system_prompt:
+                return '[{"step":1,"action":"Suggest one UI test idea","tool":"Selenium","params":{"prompt":"one idea"}}]'
+            return "Check that the chat input sends a message and the reply bubble appears."
+
+    agent = ProbeAgent("ProbeAgent", "tester", "testing", [])
+    result = asyncio.run(agent.execute("return one short UI test idea"))
+
+    assert "Tool 'Selenium' not found" not in result
+    assert "Check that the chat input sends a message" in result
+    assert "(success | 1/1 steps" in result
+
+
+def test_testing_agent_short_test_idea_stays_short():
+    from shell_agents import TestingAgent
+
+    result = asyncio.run(TestingAgent().execute("return one short UI test idea"))
+
+    assert "layout shift" in result
+    assert "Example Code" not in result
+    assert "Selenium" not in result
+    assert len(result) < 260
+
+
+def test_shell_agents_ui_smoke_fast_path_avoids_provider():
+    from shell_agents import WebsiteBuilderAgent
+
+    result = asyncio.run(WebsiteBuilderAgent().execute("UI smoke test only: suggest one tiny homepage section in one sentence."))
+
+    assert "compact hero status section" in result
+    assert "degraded mode" not in result
+    assert len(result) < 260
+
+
+def test_extra_agents_ui_smoke_fast_path_avoids_provider():
+    import shell_extra_agents
+
+    result = asyncio.run(
+        shell_extra_agents._ask_brain(
+            "UI smoke test only: give one packing tip.",
+            "You are TravelAgent.",
+        )
+    )
+
+    assert "versatile outfit" in result
+    assert "degraded mode" not in result
+
+
 def test_extra_agent_provider_failure_is_human_readable(monkeypatch):
     import shell_extra_agents
 

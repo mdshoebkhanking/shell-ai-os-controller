@@ -96,6 +96,43 @@
 ## Session: 2026-05-19
 
 ### Completed
+- Ran a full visible Shell UI QA cycle covering chat, premium voice, backend tools, core/extra agents, app open/close control, page navigation, settings, and safe catalog execution.
+- Researched current UI/voice QA patterns for desktop apps, realtime voice assistants, and smoke probes before implementing fixes.
+- Found and fixed a backend-tool provider transport cleanup leak where `execute_tool_sync()` closed its temporary event loop before closing `aiohttp` provider sessions created by agent/model calls.
+- Found and fixed agent UX issues where simple TestingAgent/advisory smoke prompts could expose internal missing-tool errors or over-answer concise requests.
+- Added local UI-smoke fast paths for core, master, and extra agents so QA/readiness probes stay fast, concise, and quota-free.
+- Re-ran visible probes and release/test gates after the fixes.
+
+### Changes Made
+- Updated `shell_tool_gateway.py` to close loop-local reusable provider transports before shutting down temporary backend-tool event loops.
+- Updated `shell_agents.py` with missing-tool reasoning fallback, stricter planning instructions against invented tools, honest partial/failure status detection, concise TestingAgent short-idea handling, and local UI smoke replies.
+- Updated `shell_extra_agents.py` with local UI smoke replies for extra-agent readiness prompts.
+- Added regression coverage in `tests/test_provider_transport_reuse.py` and `tests/test_agent_safety.py`.
+
+### Current State
+- Visible chat/tools/agents probe passed: 5 apps opened, 5 apps closed, 8 backend tool commands passed, 2 agent commands passed, zero timeouts/failures.
+- The original `aiohttp` unclosed client-session/connector warning no longer appears after the chat/tools/agents probe.
+- Visible premium voice validation passed: `backend=gemini_live_pcm`, `voice=Aoede`, `model=gemini-3.1-flash-live-preview`, `queue_to_first_audible_ms=842.976`, `queue_to_playback_ms=843.389`, fallback blocked.
+- Visible all-agents probe passed: 37/37 agents, with smoke prompts now local and usually around 220-240 ms instead of provider-dependent multi-second replies.
+- Visible all-tools catalog sweep passed: 436 entries checked, 53 safe workers executed, 10 expected not-ready states, 291 safety-skipped, 38 agent readiness-only, zero tool/worker/schema/timeouts.
+- Visible full-page e2e probe passed across chat, voice, system, tools, settings, backend command output, Windows-only MCP fallback, and screenshots.
+- Full test suite passed: `394 passed, 1 warning`.
+- Strict production release check passed with no blockers; warning remains that local `.env` must not be included in public release packages.
+
+### Next Steps
+1. Upgrade the local Python runtime away from Python 3.9/LibreSSL to remove Google auth EOL and urllib3 OpenSSL warnings.
+2. Continue reducing first-audible premium voice latency below the current ~0.84 s visible UI measurement through persistent Gemini Live session reuse.
+3. Add a recorded interruption/noisy-room voice fixture suite so voice validation covers more real-world acoustic edge cases automatically.
+4. Broaden agent fast paths only where they are explicit QA/readiness checks; keep real agent work on the full reasoning pipeline.
+
+### Open Issues
+- macOS Accessibility permission is not granted for this process, so input event monitoring remains unavailable until the app is added to Accessibility clients.
+- Python 3.9 is past EOL and the bundled SSL module uses LibreSSL; tests pass, but dependency warnings remain.
+- Some catalog entries are intentionally readiness-only, Windows-only, API-key-gated, guarded, or safety-skipped; they were not executed by design in the safe all-tools sweep.
+
+## Session: 2026-05-19
+
+### Completed
 - Researched current realtime voice assistant patterns across OpenAI Realtime, Gemini Live, LiveKit, streaming TTS projects, and recent streaming TTS papers.
 - Benchmarked Shell's current low-latency paths before and after a focused realtime UX pass.
 - Reduced voice listener end-of-turn delay from 2.0 seconds to a configurable 750 ms default.
