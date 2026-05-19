@@ -100,6 +100,7 @@ class ShellPlatformSupervisor:
             self._voice_domain(),
             self._agent_domain(),
             self._memory_domain(),
+            self._computer_control_domain(),
             self._multimodal_domain(),
             self._packaging_domain(deep=deep_packaging),
             self._hybrid_domain(),
@@ -292,6 +293,42 @@ class ShellPlatformSupervisor:
             ["Bind agent plans to scoped memory writes after validated executions."],
         )
 
+    def _computer_control_domain(self) -> PlatformDomainStatus:
+        risks: list[str] = []
+        metrics: dict[str, Any] = {}
+        signals: list[str] = []
+        next_actions: list[str] = []
+        try:
+            from core.computer_control import build_computer_control_snapshot
+
+            snapshot = build_computer_control_snapshot(include_catalog=False)
+            groups = [dict(item) for item in snapshot.get("groups", []) if isinstance(item, dict)]
+            group_status = {str(item.get("name") or ""): str(item.get("status") or "unknown") for item in groups}
+            metrics = {
+                "platform": snapshot.get("platform"),
+                "score": snapshot.get("score"),
+                "group_status": group_status,
+                "policy": snapshot.get("control_policy", {}),
+                "snapshot_ms": snapshot.get("snapshot_ms"),
+            }
+            signals = list(snapshot.get("signals") or [])[:6]
+            risks = list(snapshot.get("risks") or [])[:6]
+            next_actions = list(snapshot.get("next_actions") or [])[:3]
+        except Exception as exc:
+            risks.append(f"computer-control readiness probe unavailable: {type(exc).__name__}")
+        score = int(metrics.get("score") or (62 if risks else 88))
+        status = "ready" if score >= 88 and not risks else "attention" if score >= 62 else "blocked"
+        return PlatformDomainStatus(
+            "computer_control",
+            status,
+            score,
+            "Computer-control readiness is visible with OS-specific capability, permission, and safety gates.",
+            metrics,
+            signals,
+            risks,
+            next_actions or ["Move desktop control into an observe-preview-confirm-execute-verify agent loop."],
+        )
+
     def _multimodal_domain(self) -> PlatformDomainStatus:
         expected = {
             "screen": ROOT / "shell_screen_vision.py",
@@ -441,6 +478,7 @@ class ShellPlatformSupervisor:
                 recommendations.append(f"{domain.name}: {domain.next_actions[0]}")
         recommendations.extend([
             "Keep premium voice identity and real first-audible telemetry as release gates.",
+            "Keep full-computer control observe-first, permission-aware, and user-confirmed before autonomous execution.",
             "Make realtime session state visible in UI diagnostics before adding duplex provider sessions.",
             "Treat Rust/Go migration as bottleneck-led extraction, not a rewrite.",
         ])

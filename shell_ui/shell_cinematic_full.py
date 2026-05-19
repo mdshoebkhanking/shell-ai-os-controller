@@ -7257,7 +7257,7 @@ class SystemPage(QWidget):
         if self._platform_worker and self._platform_worker.isRunning():
             return
         self._platform_status.setText("Checking")
-        self._platform_summary.setText("Reading realtime, voice, agents, memory and capability state...")
+        self._platform_summary.setText("Reading realtime, voice, agents, computer-control, memory and capability state...")
         self._platform_refresh_btn.setEnabled(False)
         self._platform_worker = PlatformStatusWorker(self)
         self._platform_worker.status_ready.connect(self._on_platform_status_ready)
@@ -7286,6 +7286,8 @@ class SystemPage(QWidget):
         cap_metrics = capabilities.get("metrics", {}) if isinstance(capabilities.get("metrics"), dict) else {}
         voice = by_name.get("voice", {})
         voice_metrics = voice.get("metrics", {}) if isinstance(voice.get("metrics"), dict) else {}
+        computer = by_name.get("computer_control", {})
+        computer_metrics = computer.get("metrics", {}) if isinstance(computer.get("metrics"), dict) else {}
         process = data.get("process", {}) if isinstance(data.get("process"), dict) else {}
 
         total = cap_metrics.get("total", "--")
@@ -7295,6 +7297,7 @@ class SystemPage(QWidget):
             f"{total} capabilities · {kind_counts.get('tool', '--')} tools · "
             f"{kind_counts.get('agent', '--')} agents · {ready_counts.get('ready', '--')} ready · "
             f"Voice {voice_metrics.get('gemini_voice', 'unknown')} · "
+            f"Computer {computer_metrics.get('platform', 'unknown')} {computer_metrics.get('score', '--')} · "
             f"Snapshot {process.get('snapshot_ms', '--')}ms"
         )
         self._platform_summary.setText(summary)
@@ -7325,6 +7328,7 @@ class SystemPage(QWidget):
                 "realtime",
                 "voice",
                 "agents",
+                "computer_control",
                 "memory",
                 "multimodal",
                 "packaging",

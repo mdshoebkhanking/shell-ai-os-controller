@@ -17,6 +17,7 @@ def test_platform_supervisor_snapshot_covers_ai_os_domains():
         "voice",
         "agents",
         "memory",
+        "computer_control",
         "multimodal",
         "packaging",
         "hybrid_runtime",
@@ -24,6 +25,8 @@ def test_platform_supervisor_snapshot_covers_ai_os_domains():
     assert domains["voice"]["metrics"]["gemini_voice"] == "Aoede"
     assert domains["voice"]["metrics"]["premium_voice_first"] is True
     assert domains["agents"]["metrics"]["risky_terminal_blocked"] is True
+    assert domains["computer_control"]["metrics"]["policy"]["default_mode"] == "observe_then_confirm"
+    assert domains["computer_control"]["metrics"]["platform"] in {"macos", "windows", "linux", "unknown"}
 
 
 def test_platform_supervisor_tool_is_redacted(monkeypatch):

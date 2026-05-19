@@ -352,6 +352,19 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     lower = raw.lower()
 
     if re.search(
+        r"\b(computer|desktop|screen)\s+(control|automation|readiness|status|health|diagnostics?|capabilit(?:y|ies))\b",
+        lower,
+    ) or re.search(
+        r"\b(control|automation|readiness|status|health|diagnostics?)\s+(of\s+)?(computer|desktop|screen)\b",
+        lower,
+    ) or re.search(r"\b(can\s+shell|shell)\s+control\s+(my\s+)?(computer|desktop|pc|mac|windows)\b", lower):
+        return _route(
+            "shell_computer_control:computer_control_status_tool",
+            {"include_catalog": True},
+            confidence=0.95,
+        )
+
+    if re.search(
         r"\b(platform|ai\s*os|shell|runtime|system)\s+(status|health|readiness|diagnostics?|dashboard)\b",
         lower,
     ) or re.search(r"\b(status|health|readiness|diagnostics?)\s+(of\s+)?(platform|ai\s*os|shell|runtime)\b", lower):

@@ -880,3 +880,45 @@
 - Direct-run gating is intentionally conservative: unsafe/not-ready tools must go through chat orchestration or readiness repair.
 - macOS Accessibility permission is still not granted, so some desktop-control capabilities remain constrained by OS trust settings.
 - Python 3.9 / LibreSSL warnings remain from local runtime dependencies.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran a safe first full-computer-control platform cycle focused on observability, readiness, and policy gates before adding any broader autonomous OS execution.
+- Researched current computer-use architecture and safety patterns from OpenAI, Anthropic, Microsoft UI Automation, Apple Accessibility, and recent desktop-vision research.
+- Added a unified computer-control readiness layer that reports OS-specific app control, input control, screen understanding, clipboard, Windows-MCP, macOS, Linux, and safety states.
+- Added a user-visible Computer Control Status backend tool and deterministic natural-language route.
+- Surfaced Computer Control in the AI OS Status panel so the UI now shows real desktop-control readiness alongside realtime, voice, agents, memory, packaging, hybrid runtime, and capabilities.
+- Updated e2e UI validation so the System page fails if Computer Control readiness disappears.
+
+### Changes Made
+- Added `core/computer_control/readiness.py` and `core/computer_control/__init__.py`.
+- Added `shell_computer_control.py` with `computer_control_status_tool`.
+- Updated `core/platform_supervisor/supervisor.py` with a `computer_control` platform domain.
+- Updated `shell_nl_router.py` with desktop/computer/screen control readiness routing while preserving AI OS status routing.
+- Updated `shell_ui/shell_cinematic_full.py` System page summary and domain chips.
+- Updated `tests/test_computer_control_readiness.py`, `tests/test_platform_supervisor.py`, and `tools/e2e_ui_probe.py`.
+
+### Current State
+- Computer-control snapshot on this machine reports `attention`, score `84`, platform `macos`.
+- macOS app control and screen understanding are visible; input control remains intentionally attention-gated because Accessibility/Screen Recording trust must be granted by the user.
+- Safety policy is explicit: observe first, no silent fallback, direct control requires confirmation, high-impact actions stay gated.
+- Offscreen e2e UI probe passed and confirmed Computer Control appears in the System page.
+- All-tools UI probe passed: `440` items, `53` executed successfully, `40` agent-readiness-only, `293` safety-skipped, `10` expected not-ready, `0` errors.
+- Latency probe passed; platform supervisor now includes `computer_control` score `84` and status `attention`.
+- Memory probe passed with peak RSS `30.891 MB`.
+- Production release check passed with no blockers; warning remains for local `.env`.
+- Full test suite passed: `413 passed, 1 warning`.
+
+### Next Steps
+1. Build a dedicated Desktop Agent plan loop: observe screen, propose actions, require confirmation, execute one step, capture screenshot, verify outcome.
+2. Replace the placeholder macOS desktop adapter with a permission-aware `MacDesktopController` that reports Accessibility and Screen Recording state accurately.
+3. Add an Automation Audit timeline in the UI for every screenshot, click, type, clipboard, app launch, and terminal-sensitive proposal.
+4. Validate Windows-MCP end to end on a real Windows machine before claiming full Windows desktop control.
+5. Prototype Linux X11 and Wayland adapters separately instead of assuming a single Linux desktop automation path.
+
+### Open Issues
+- This cycle intentionally added readiness and safety visibility, not new autonomous desktop execution.
+- macOS Accessibility permission is still not trusted in the current UI probe run, so real input-event monitoring remains constrained by OS settings.
+- OCR quality may be limited when optional OCR dependencies are missing.
+- Python 3.9 / LibreSSL warnings remain from the local runtime environment.
