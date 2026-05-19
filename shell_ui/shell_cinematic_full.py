@@ -7286,6 +7286,8 @@ class SystemPage(QWidget):
         cap_metrics = capabilities.get("metrics", {}) if isinstance(capabilities.get("metrics"), dict) else {}
         voice = by_name.get("voice", {})
         voice_metrics = voice.get("metrics", {}) if isinstance(voice.get("metrics"), dict) else {}
+        providers = by_name.get("providers", {})
+        provider_metrics = providers.get("metrics", {}) if isinstance(providers.get("metrics"), dict) else {}
         computer = by_name.get("computer_control", {})
         computer_metrics = computer.get("metrics", {}) if isinstance(computer.get("metrics"), dict) else {}
         process = data.get("process", {}) if isinstance(data.get("process"), dict) else {}
@@ -7293,9 +7295,13 @@ class SystemPage(QWidget):
         total = cap_metrics.get("total", "--")
         kind_counts = cap_metrics.get("by_kind", {}) if isinstance(cap_metrics.get("by_kind"), dict) else {}
         ready_counts = cap_metrics.get("readiness", {}) if isinstance(cap_metrics.get("readiness"), dict) else {}
+        configured_provider_keys = provider_metrics.get("configured_key_count", "--")
+        loaded_provider_count = provider_metrics.get("loaded_provider_count", "--")
+        lazy_label = "lazy" if provider_metrics.get("lazy_loading_preserved") else "loaded"
         summary = (
             f"{total} capabilities · {kind_counts.get('tool', '--')} tools · "
             f"{kind_counts.get('agent', '--')} agents · {ready_counts.get('ready', '--')} ready · "
+            f"Providers {configured_provider_keys} keys · {loaded_provider_count} loaded · {lazy_label} · "
             f"Voice {voice_metrics.get('gemini_voice', 'unknown')} · "
             f"Computer {computer_metrics.get('platform', 'unknown')} {computer_metrics.get('score', '--')} · "
             f"Snapshot {process.get('snapshot_ms', '--')}ms"
@@ -7327,6 +7333,7 @@ class SystemPage(QWidget):
             if domain.get("name") in {
                 "realtime",
                 "voice",
+                "providers",
                 "agents",
                 "computer_control",
                 "memory",

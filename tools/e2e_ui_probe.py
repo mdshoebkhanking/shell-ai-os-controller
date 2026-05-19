@@ -107,6 +107,7 @@ def main() -> int:
             "panel_visible": "AI OS Status" in system_text,
             "score_visible": "READY" in system_text or "ATTENTION" in system_text or "OPTIMAL" in system_text,
             "capabilities_visible": "capabilities" in system_text.lower(),
+            "providers_visible": "providers" in system_text.lower(),
             "computer_control_visible": "computer control" in system_text.lower(),
             "voice_identity_visible": "Aoede" in system_text,
         }

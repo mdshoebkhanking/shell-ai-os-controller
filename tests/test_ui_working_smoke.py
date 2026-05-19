@@ -86,6 +86,17 @@ def test_system_page_renders_ai_os_platform_status():
                 "metrics": {"gemini_voice": "Aoede"},
                 "risks": [],
             },
+            {
+                "name": "providers",
+                "status": "ready",
+                "score": 92,
+                "metrics": {
+                    "configured_key_count": 2,
+                    "loaded_provider_count": 1,
+                    "lazy_loading_preserved": True,
+                },
+                "risks": [],
+            },
             {"name": "agents", "status": "ready", "score": 93, "risks": []},
             {
                 "name": "capabilities",
@@ -106,7 +117,9 @@ def test_system_page_renders_ai_os_platform_status():
     assert "AI OS Status" in text
     assert "READY · 88" in text
     assert "456 capabilities" in text
+    assert "Providers 2 keys · 1 loaded · lazy" in text
     assert "Voice Aoede" in text
+    assert "Providers" in text
     assert "Capabilities" in text
     page._tick_timer.stop()
     page._proc_timer.stop()

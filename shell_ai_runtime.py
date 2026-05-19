@@ -29,6 +29,7 @@ def _provider_key_names() -> tuple[str, ...]:
         "OPENAI_API_KEY",
         "OPENROUTER_API_KEY",
         "GROQ_API_KEY",
+        "MISTRAL_API_KEY",
         "DEEPSEEK_API_KEY",
         "PERPLEXITY_API_KEY",
         "SAMBANOVA_API_KEY",
@@ -36,8 +37,33 @@ def _provider_key_names() -> tuple[str, ...]:
     )
 
 
+def provider_key_names() -> tuple[str, ...]:
+    """Provider env keys Shell treats as LLM/runtime-capable credentials.
+
+    Key names are safe to expose in diagnostics; values are never returned.
+    """
+    return _provider_key_names()
+
+
+def _looks_configured_secret(value: str) -> bool:
+    low = str(value or "").strip().lower()
+    return bool(low) and not (
+        low.startswith("your_")
+        or low.startswith("replace_")
+        or low in {"changeme", "change_me", "paste_key_here", "api_key", "token", "password", "none", "null"}
+    )
+
+
+def configured_ai_key_names() -> list[str]:
+    return [
+        name
+        for name in _provider_key_names()
+        if _looks_configured_secret(os.environ.get(name, ""))
+    ]
+
+
 def has_configured_ai_key() -> bool:
-    return any(str(os.environ.get(name, "")).strip() for name in _provider_key_names())
+    return bool(configured_ai_key_names())
 
 
 def get_brain():
@@ -85,6 +111,24 @@ def brain_provider_names(*, load: bool = False) -> list[str]:
     return list((getattr(brain, "providers", {}) or {}).keys()) if brain is not None else []
 
 
+def provider_runtime_snapshot(*, load: bool = False) -> dict[str, object]:
+    """Return redacted provider readiness without hydrating providers by default."""
+    providers = brain_provider_names(load=load)
+    metrics = brain_load_metrics()
+    keys = configured_ai_key_names()
+    return {
+        "configured_key_count": len(keys),
+        "configured_keys": keys,
+        "has_configured_key": bool(keys),
+        "brain_loaded": bool(metrics.get("loaded")),
+        "brain_load_ms": metrics.get("load_ms"),
+        "brain_load_error": metrics.get("error") or "",
+        "loaded_provider_count": len(providers),
+        "loaded_providers": providers,
+        "has_loaded_provider": bool(providers),
+    }
+
+
 def reload_brain_providers() -> bool:
     brain = get_brain()
     if brain is None or not hasattr(brain, "reload_providers"):
@@ -97,8 +141,11 @@ __all__ = [
     "brain_has_providers",
     "brain_load_metrics",
     "brain_provider_names",
+    "configured_ai_key_names",
     "get_brain",
     "has_configured_ai_key",
     "is_brain_loaded",
+    "provider_key_names",
+    "provider_runtime_snapshot",
     "reload_brain_providers",
 ]

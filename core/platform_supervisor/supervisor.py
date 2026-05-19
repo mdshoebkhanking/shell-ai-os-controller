@@ -98,6 +98,7 @@ class ShellPlatformSupervisor:
         domains = [
             self._realtime_domain(),
             self._voice_domain(),
+            self._provider_domain(),
             self._agent_domain(),
             self._memory_domain(),
             self._computer_control_domain(),
@@ -222,6 +223,67 @@ class ShellPlatformSupervisor:
             signals,
             risks,
             ["Keep measuring real first-audible latency and migrate premium speech to provider-native streaming where possible."],
+        )
+
+    def _provider_domain(self) -> PlatformDomainStatus:
+        metrics: dict[str, Any] = {}
+        risks: list[str] = []
+        signals: list[str] = []
+        try:
+            from shell_ai_runtime import provider_key_names, provider_runtime_snapshot
+
+            runtime = provider_runtime_snapshot(load=False)
+            provider_keys = set(provider_key_names())
+            configured_keys = set(runtime.get("configured_keys") or [])
+            try:
+                from shell_api_manager import list_api_keys
+
+                configured_keys.update(
+                    str(row.get("name") or "")
+                    for row in list_api_keys()
+                    if row.get("name") in provider_keys and row.get("set") is True
+                )
+            except Exception:
+                pass
+
+            loaded_providers = list(runtime.get("loaded_providers") or [])
+            brain_loaded = bool(runtime.get("brain_loaded"))
+            metrics = {
+                "configured_key_count": len(configured_keys),
+                "configured_keys": sorted(configured_keys),
+                "loaded_provider_count": len(loaded_providers),
+                "loaded_providers": loaded_providers,
+                "brain_loaded": brain_loaded,
+                "brain_load_ms": runtime.get("brain_load_ms"),
+                "lazy_loading_preserved": not brain_loaded,
+            }
+            if configured_keys:
+                signals.append("provider credentials are configured without exposing secret values")
+            else:
+                risks.append("no LLM provider API key is configured")
+            if brain_loaded and loaded_providers:
+                signals.append("AI brain provider graph is loaded")
+            elif brain_loaded:
+                risks.append("AI brain is loaded but has no active providers")
+            else:
+                signals.append("provider graph remains lazy until the first real AI turn")
+        except Exception as exc:
+            risks.append(f"provider readiness probe unavailable: {type(exc).__name__}")
+
+        score = 92
+        if not metrics.get("configured_key_count"):
+            score -= 22
+        if metrics.get("brain_loaded") and not metrics.get("loaded_provider_count"):
+            score -= 18
+        return PlatformDomainStatus(
+            "providers",
+            "ready" if not risks else "attention",
+            _bounded_score(score),
+            "AI provider readiness is visible while preserving lazy startup and secret redaction.",
+            metrics,
+            signals,
+            risks,
+            ["Use live provider health telemetry to distinguish quota, auth, and transient provider failures."],
         )
 
     def _agent_domain(self) -> PlatformDomainStatus:

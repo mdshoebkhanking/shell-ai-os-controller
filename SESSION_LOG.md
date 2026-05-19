@@ -1045,3 +1045,39 @@
 - macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
 - Python 3.9 / LibreSSL warnings remain from the local runtime environment.
 - Local `.env` exists and must not be included in public release packages.
+
+## Session: 2026-05-19
+
+### Completed
+- Added a provider/voice observability cycle so the System page now shows whether provider credentials are configured, whether the AI brain provider graph is loaded, and whether lazy startup is preserved.
+- Added a dedicated `providers` domain to the AI OS platform supervisor snapshot.
+- Added redacted provider runtime diagnostics that expose key names/counts and loaded provider names without exposing secret values.
+- Verified the System UI visually; the status card now shows `Providers 4 keys · 0 loaded · lazy · Voice Aoede` on this machine.
+
+### Changes Made
+- Updated `shell_ai_runtime.py` with redacted provider key/runtime snapshot helpers.
+- Updated `core/platform_supervisor/supervisor.py` with a provider readiness domain.
+- Updated `shell_ui/shell_cinematic_full.py` to render provider status in the AI OS Status summary and domain chip grid.
+- Updated `tools/e2e_ui_probe.py` to require provider status visibility.
+- Added `tests/test_provider_runtime_snapshot.py`.
+- Updated platform/UI smoke tests for provider-domain coverage.
+
+### Current State
+- Targeted provider/platform/UI tests passed: `16 passed`.
+- Offscreen e2e UI probe passed and verified provider status, Aoede voice identity, agents, tools, chat, and voice page behavior.
+- Latency probe passed with UI/provider runtime enabled; provider runtime init `2.829 ms`, provider transport reuse `0.595 ms`, platform snapshot score `88`.
+- Memory probe passed with provider runtime/transport enabled; peak RSS `219.094 MB`, provider transport cleanup verified.
+- Full test suite passed: `421 passed, 1 warning`.
+- Production release check passed with no blockers; warning remains for local `.env`.
+
+### Next Steps
+1. Add live provider-health classification in the UI for quota-limited, auth-failed, and transient provider states.
+2. Prefer healthy streaming text providers automatically while preserving Gemini Live/Aoede for premium voice identity.
+3. Add a voice playback telemetry panel showing active backend, voice, queued segments, suppressed final replies, and first-audible timing.
+4. Add a dedicated diagnostics page for macOS Accessibility/Screen Recording permissions and audio-device readiness.
+
+### Open Issues
+- Gemini text provider can still be quota-limited even when premium Gemini Live/Aoede voice works.
+- macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
+- Python 3.9 / LibreSSL warnings remain from the local runtime environment.
+- Local `.env` exists and must not be included in public release packages.
