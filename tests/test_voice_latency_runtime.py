@@ -30,6 +30,22 @@ def test_tts_speak_reports_no_audio_output(monkeypatch):
     assert speaker._do_speak("hello") is False
 
 
+def test_tts_warmup_requests_are_deduped(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    speaker = TTSSpeaker()
+    speaker._warmup_in_progress = True
+    speaker.warmup()
+    assert speaker._warmup_requested is False
+
+    speaker._warmup_in_progress = False
+    speaker._warmup_completed = True
+    speaker.warmup()
+    assert speaker._warmup_requested is False
+
+
 def test_cloud_voice_prioritizes_gemini_identity_even_instant_mode(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
@@ -237,6 +253,7 @@ def test_openai_streaming_tts_uses_pcm_player(monkeypatch):
     monkeypatch.setattr(openai.helpers, "LocalAudioPlayer", FakeLocalAudioPlayer)
 
     speaker = TTSSpeaker()
+    monkeypatch.setattr(speaker, "_audio_output_available_for_pcm_playback", lambda: True)
     speaker._engine = "openai-stream"
     events = []
     speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
@@ -339,6 +356,7 @@ def test_gemini_live_streaming_tts_uses_aoede_pcm_player(monkeypatch):
     monkeypatch.setattr(openai.helpers, "LocalAudioPlayer", FakeLocalAudioPlayer)
 
     speaker = TTSSpeaker()
+    monkeypatch.setattr(speaker, "_audio_output_available_for_pcm_playback", lambda: True)
     events = []
     speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
 
@@ -354,6 +372,119 @@ def test_gemini_live_streaming_tts_uses_aoede_pcm_player(monkeypatch):
     selected_payloads = [payload for event, payload in events if event == "tts_backend_selected"]
     assert selected_payloads[0]["backend"] == "gemini_live_pcm"
     assert selected_payloads[0]["voice"] == "Aoede"
+
+
+def test_gemini_live_streaming_reports_first_audible_chunk_after_primer(monkeypatch):
+    import google.genai
+    import openai.helpers
+
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+    monkeypatch.setenv("SHELL_GEMINI_LIVE_FIRST_AUDIBLE_BYTES", "480")
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    consumed = []
+
+    class PrimerMessage:
+        data = b"\x00\x00"
+        server_content = None
+
+    class AudioMessage:
+        data = b"\x00\x00" * 240
+        server_content = None
+
+    class DoneServerContent:
+        model_turn = None
+        turn_complete = True
+        interrupted = False
+
+    class DoneMessage:
+        data = None
+        server_content = DoneServerContent()
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def send_client_content(self, **_kwargs):
+            pass
+
+        async def receive(self):
+            yield PrimerMessage()
+            yield AudioMessage()
+            yield DoneMessage()
+
+    class FakeLive:
+        def connect(self, **_kwargs):
+            return FakeSession()
+
+    class FakeAio:
+        def __init__(self):
+            self.live = FakeLive()
+
+        async def aclose(self):
+            pass
+
+    class FakeClient:
+        def __init__(self, api_key=None):
+            self.api_key = api_key
+            self.aio = FakeAio()
+
+    class FakeLocalAudioPlayer:
+        def __init__(self, should_stop=None):
+            self.should_stop = should_stop
+
+        async def play_stream(self, stream):
+            async for buffer in stream:
+                if buffer is None:
+                    break
+                consumed.append(buffer)
+
+    monkeypatch.setattr(google.genai, "Client", FakeClient)
+    monkeypatch.setattr(openai.helpers, "LocalAudioPlayer", FakeLocalAudioPlayer)
+
+    speaker = TTSSpeaker()
+    monkeypatch.setattr(speaker, "_audio_output_available_for_pcm_playback", lambda: True)
+    events = []
+    speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+
+    assert speaker._speak_gemini_live_tts("hello") is True
+    assert len(consumed) == 2
+    first_chunk = [payload for event, payload in events if event == "gemini_live_first_chunk"][0]
+    first_audible = [
+        payload for event, payload in events if event == "gemini_live_first_audible_chunk"
+    ][0]
+    playback = [payload for event, payload in events if event == "playback_started"][0]
+
+    assert first_chunk["bytes"] == 2
+    assert first_chunk["primer_chunk"] is True
+    assert first_audible["cumulative_bytes"] >= 480
+    assert first_audible["chunk_index"] == 2
+    assert playback["chunk_index"] == 2
+
+
+def test_gemini_live_streaming_preflights_pcm_audio_before_network(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    speaker = TTSSpeaker()
+    speaker._last_error = "no pcm output"
+    monkeypatch.setattr(speaker, "_audio_output_available_for_pcm_playback", lambda: False)
+    events = []
+    speaker.latency_event.connect(lambda event, payload: events.append((event, dict(payload))))
+
+    assert speaker._speak_gemini_live_tts("hello") is False
+    unavailable = [payload for event, payload in events if event == "pcm_audio_unavailable"]
+    assert unavailable
+    assert unavailable[0]["backend"] == "gemini_live_pcm"
+    assert unavailable[0]["voice"] == "Aoede"
+    assert "tts_backend_selected" not in [event for event, _payload in events]
 
 
 def test_set_voice_keeps_gemini_voice_name(monkeypatch):

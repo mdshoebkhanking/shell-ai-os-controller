@@ -84,6 +84,8 @@ class TTSSpeaker(QThread):
         self._engine = os.environ.get("SHELL_TTS_ENGINE", "fast").strip().lower() or "fast"
         self._current_process = None
         self._warmup_requested = False
+        self._warmup_in_progress = False
+        self._warmup_completed = False
         self._system_tts_command = None
         self._pyttsx3_engine = None
         self._pyttsx3_failed = False
@@ -92,6 +94,7 @@ class TTSSpeaker(QThread):
         self._speaking = False
         self._current_backend = ""
         self._current_voice_label = ""
+        self._streaming_voice_runtime_ready = False
         self._audio_output_probe_ok = None
         self._audio_output_probe_error = ""
         self._audio_output_probe_until = 0.0
@@ -191,6 +194,8 @@ class TTSSpeaker(QThread):
 
     def warmup(self):
         """Wake the TTS thread and cache the chosen local speech path."""
+        if self._warmup_in_progress or self._warmup_completed:
+            return
         self._warmup_requested = True
         self._wake.set()
 
@@ -326,13 +331,20 @@ class TTSSpeaker(QThread):
             else:
                 if self._warmup_requested:
                     self._warmup_requested = False
+                    self._warmup_in_progress = True
                     started = _time.perf_counter()
-                    self._system_tts_command = self._detect_system_tts_command()
-                    if self._system_tts_command == "pyttsx3":
-                        self._prepare_pyttsx3()
-                    elif self._system_tts_command in {"say", "afplay"}:
-                        self._mac_audio_output_available(force=True)
-                    self._emit_latency("warmup", started)
+                    try:
+                        self._system_tts_command = self._detect_system_tts_command()
+                        if self._system_tts_command == "pyttsx3":
+                            self._prepare_pyttsx3()
+                        elif self._system_tts_command in {"say", "afplay"}:
+                            self._mac_audio_output_available(force=True)
+                        self._prewarm_streaming_voice_runtime(started)
+                        self._emit_latency("warmup", started)
+                    finally:
+                        self._warmup_requested = False
+                        self._warmup_in_progress = False
+                        self._warmup_completed = True
                 self._wake.wait(0.02)
                 self._wake.clear()
 
@@ -471,11 +483,66 @@ class TTSSpeaker(QThread):
         }
         return voice if voice in allowed else "coral"
 
+    def _prewarm_streaming_voice_runtime(self, started=None):
+        if self._streaming_voice_runtime_ready:
+            return True
+        engine = str(getattr(self, "_engine", "") or "").strip().lower()
+        wants_gemini_live = (
+            self._gemini_live_tts_enabled()
+            and self._gemini_tts_configured()
+            and (self._voice_mode() in {"cloud", "auto"} or engine in {"gemini-live", "gemini-stream", "live", "live-pcm"})
+        )
+        wants_openai_pcm = engine in {"openai", "openai-stream", "openai-pcm", "pcm"} and self._openai_tts_configured()
+        if not wants_gemini_live and not wants_openai_pcm:
+            return False
+        started = started or _time.perf_counter()
+        provider_prewarm = self._truthy_env("SHELL_TTS_PROVIDER_PREWARM", "0")
+        try:
+            import asyncio  # noqa: F401
+            import numpy  # noqa: F401
+            from openai.helpers import LocalAudioPlayer  # noqa: F401
+            from shell_voice import build_persona_instruction, resolve_voice  # noqa: F401
+            if provider_prewarm and wants_gemini_live:
+                from google import genai  # noqa: F401
+                from google.genai import types  # noqa: F401
+            if provider_prewarm and wants_openai_pcm:
+                from openai import AsyncOpenAI  # noqa: F401
+            self._streaming_voice_runtime_ready = True
+            self._emit_latency(
+                "streaming_voice_runtime_ready",
+                started,
+                gemini_live=bool(wants_gemini_live),
+                openai_pcm=bool(wants_openai_pcm),
+                provider_modules=bool(provider_prewarm),
+            )
+            return True
+        except Exception as exc:
+            self._emit_latency(
+                "streaming_voice_runtime_prewarm_failed",
+                started,
+                error=str(exc),
+                gemini_live=bool(wants_gemini_live),
+                openai_pcm=bool(wants_openai_pcm),
+                provider_modules=bool(provider_prewarm),
+            )
+            return False
+
     def _speak_openai_streaming_tts(self, text):
         """Stream raw 24kHz PCM from OpenAI TTS directly to the local audio device."""
         if not self._openai_tts_configured():
             self._last_error = (
                 "OpenAI streaming voice is selected, but OPENAI_API_KEY is missing or invalid."
+            )
+            return False
+        started = _time.perf_counter()
+        voice = self._openai_tts_voice()
+        if not self._audio_output_available_for_pcm_playback():
+            self._emit_voice_event(
+                "pcm_audio_unavailable",
+                started,
+                backend="openai_pcm",
+                voice=voice,
+                reason=self._last_error,
             )
             return False
         try:
@@ -487,9 +554,7 @@ class TTSSpeaker(QThread):
             self._last_error = f"OpenAI streaming voice dependencies unavailable: {exc}"
             return False
 
-        started = _time.perf_counter()
         model = os.environ.get("OPENAI_TTS_MODEL", "gpt-4o-mini-tts")
-        voice = self._openai_tts_voice()
         instructions = os.environ.get(
             "OPENAI_TTS_INSTRUCTIONS",
             "Speak naturally, warmly, and conversationally with low latency.",
@@ -575,6 +640,17 @@ class TTSSpeaker(QThread):
                 "Open Settings > API Keys and save a valid Google AI Studio key."
             )
             return False
+        started = _time.perf_counter()
+        voice_name = self._gemini_voice_identity()
+        if not self._audio_output_available_for_pcm_playback():
+            self._emit_voice_event(
+                "pcm_audio_unavailable",
+                started,
+                backend="gemini_live_pcm",
+                voice=voice_name,
+                reason=self._last_error,
+            )
+            return False
         try:
             import asyncio
             import numpy as np
@@ -586,14 +662,24 @@ class TTSSpeaker(QThread):
             self._last_error = f"Gemini Live streaming voice dependencies unavailable: {exc}"
             return False
 
-        started = _time.perf_counter()
         voice_name = resolve_voice(getattr(self, "_gemini_voice_name", None))
         model = self._gemini_live_tts_model()
         self._mark_tts_backend("gemini_live_pcm", voice_name, True, started, model=model)
 
         chunk_count = 0
         byte_count = 0
+        first_audible_emitted = False
         client_refs = []
+        try:
+            audible_chunk_bytes = max(
+                2,
+                min(
+                    9600,
+                    int(os.environ.get("SHELL_GEMINI_LIVE_FIRST_AUDIBLE_BYTES", "480")),
+                ),
+            )
+        except Exception:
+            audible_chunk_bytes = 480
 
         config = types.LiveConnectConfig(
             response_modalities=["AUDIO"],
@@ -618,7 +704,7 @@ class TTSSpeaker(QThread):
         )
 
         async def _pcm_buffers(client):
-            nonlocal chunk_count, byte_count
+            nonlocal chunk_count, byte_count, first_audible_emitted
             async with client.aio.live.connect(model=model, config=config) as session:
                 self._emit_latency(
                     "gemini_live_connected",
@@ -673,6 +759,21 @@ class TTSSpeaker(QThread):
                                 "gemini_live_first_chunk",
                                 started,
                                 bytes=len(chunk),
+                                audible_threshold_bytes=audible_chunk_bytes,
+                                primer_chunk=len(chunk) < audible_chunk_bytes,
+                                mime_type=mime_type,
+                                model=model,
+                                voice=voice_name,
+                            )
+                        if not first_audible_emitted and byte_count >= audible_chunk_bytes:
+                            first_audible_emitted = True
+                            self._emit_latency(
+                                "gemini_live_first_audible_chunk",
+                                started,
+                                bytes=len(chunk),
+                                cumulative_bytes=byte_count,
+                                chunk_index=chunk_count,
+                                audible_threshold_bytes=audible_chunk_bytes,
                                 mime_type=mime_type,
                                 model=model,
                                 voice=voice_name,
@@ -682,6 +783,9 @@ class TTSSpeaker(QThread):
                                 started,
                                 command="gemini_live_pcm_stream",
                                 backend="gemini_live_pcm",
+                                bytes=len(chunk),
+                                cumulative_bytes=byte_count,
+                                chunk_index=chunk_count,
                                 voice=voice_name,
                                 model=model,
                             )
@@ -713,6 +817,7 @@ class TTSSpeaker(QThread):
                     started,
                     chunks=chunk_count,
                     bytes=byte_count,
+                    audible_started=first_audible_emitted,
                     model=model,
                     voice=voice_name,
                 )
@@ -818,6 +923,14 @@ class TTSSpeaker(QThread):
             return False
 
     def _audio_output_available_for_file_playback(self):
+        import platform
+
+        system = platform.system().lower()
+        if system == "darwin":
+            return self._mac_audio_output_available()
+        return True
+
+    def _audio_output_available_for_pcm_playback(self):
         import platform
 
         system = platform.system().lower()

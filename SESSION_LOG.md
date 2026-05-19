@@ -522,3 +522,45 @@
 - Gemini Live sometimes emits a tiny 2-byte first PCM primer chunk; the current metric records it as first chunk, so future reporting should distinguish primer vs substantial audible audio.
 - The Live backend is still turn-scoped, not a persistent duplex session, so the next breakthrough is session reuse plus provider-native interruption.
 - Human timbre judgment remains limited to audible playback execution plus telemetry confirmation; the agent cannot personally perceive voice tone.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran an autonomous realtime voice QA cycle focused on premium first-audio truthfulness, startup warmup behavior, cleanup stability, and full UI audible validation.
+- Researched current realtime voice patterns around Gemini Live VAD/interruption, OpenAI Realtime semantic/server VAD, LiveKit interruption handling, Pipecat smart turn detection, and 2026 voice-agent pipelining papers.
+- Found that Gemini Live can emit a tiny 2-byte PCM primer before meaningful audio, so the previous first-chunk metric overstated perceived first-audio responsiveness.
+- Added first-audible PCM telemetry so Shell now distinguishes `gemini_live_first_chunk` from `gemini_live_first_audible_chunk`.
+- Found that no-audio environments could trigger `LocalAudioPlayer` failures plus pending asyncio generator/task noise; added PCM audio preflight before opening provider streams.
+- Found duplicate TTS warmup requests in the full UI path could delay the first real utterance; deduped warmup while preserving idle startup laziness.
+- Added a reusable full UI voice validation probe for future audible-route QA.
+
+### Changes Made
+- Updated `shell_voice_runtime.py` with PCM playback preflight, first-audible Gemini Live telemetry, warmup deduplication, and local streaming-runtime prewarm that keeps heavy provider modules opt-in via `SHELL_TTS_PROVIDER_PREWARM=1`.
+- Updated `tools/latency_probe.py` to report `first_audible_ms`, `queue_to_first_audible_ms`, warmup completion, and warmup wait time.
+- Updated `shell_ui/shell_cinematic_full.py` so first-audible and streaming runtime readiness events appear in voice identity logs.
+- Added `tools/voice_ui_validation_probe.py` for real Shell UI TTS validation with backend, voice, model, first-audible, queue-to-audio, and identity reporting.
+- Updated `tests/test_voice_latency_runtime.py` for warmup dedupe, PCM preflight, and primer-vs-audible chunk behavior.
+
+### Current State
+- No-audio sandbox probe now exits cleanly through `pcm_audio_unavailable` and blocked fallback; it no longer opens a Gemini stream or leaks asyncio cleanup warnings.
+- Accurate audible metric discovered the previous `gemini_live_first_chunk` was a 2-byte primer packet; real first audible audio is now tracked at `gemini_live_first_audible_chunk`.
+- Pre-provider-warmup audible probe: first substantial PCM was `1505.13 ms`, queue-to-first-audible `1506.334 ms`.
+- Provider-module prewarm experiment: backend selection dropped from `614.57 ms` to `0.08 ms`, Gemini Live connect from `825.42 ms` to `193.50 ms`, and first substantial PCM from `1505.13 ms` to `799.29 ms`; heavy provider-module prewarm remains opt-in to avoid idle startup network-stack imports.
+- Default full UI validation after warmup dedupe: `backend=gemini_live_pcm`, `voice=Aoede`, `model=gemini-3.1-flash-live-preview`, `queue_to_first_audible_ms=1192.254`, `queue_to_playback_ms=1193.121`, no system fallback.
+- Full UI validation with duplicate warmup before the dedupe showed `queue_to_first_audible_ms=1656.085`; after dedupe the default full UI path measured `1192.254 ms`.
+- Targeted voice tests passed: `33 passed, 1 warning`.
+- Idle startup regression test passed: `1 passed`.
+- Full test suite passed: `387 passed, 1 warning`.
+
+### Next Steps
+1. Move provider-module prewarm from opt-in env to an explicit user-intent trigger, such as voice-session start or microphone activation, so Shell can get the ~800 ms first-audible path without violating idle startup laziness.
+2. Reuse a persistent Gemini Live session across turns to remove the ~200 ms connection setup.
+3. Add provider-native interruption/truncation for Gemini Live so barge-in cancels provider generation, not only local playback.
+4. Add first-audible energy detection instead of byte thresholding, so silence and primer packets are distinguished more precisely.
+5. Build recorded noisy-room/interruption fixtures and run them through the new full UI voice validation tooling.
+
+### Open Issues
+- Default first audible Aoede in full UI is now honest and stable but still around 1.2 seconds; the opt-in provider prewarm path shows a route toward ~0.8 seconds without changing voice identity.
+- Provider-first-audio variance remains visible between runs, even with local warmup fixed.
+- Gemini Live remains turn-scoped rather than a persistent duplex session.
+- Human timbre judgment still requires the user’s ear; telemetry confirms `gemini_live_pcm` and `Aoede`, but the agent cannot directly perceive audio quality.

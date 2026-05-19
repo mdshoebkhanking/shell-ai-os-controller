@@ -52,10 +52,17 @@ def _tts_playback_probe(text: str, timeout_s: float = 10.0):
     speaker.speaking_finished.connect(lambda: state.__setitem__("finished", True))
     speaker.start()
     speaker.warmup()
-    warm_deadline = time.time() + 1.0
+    try:
+        warmup_wait_s = max(1.0, min(5.0, float(os.environ.get("SHELL_TTS_WARMUP_WAIT_S", "3"))))
+    except Exception:
+        warmup_wait_s = 3.0
+    warm_started = time.perf_counter()
+    warm_deadline = time.time() + warmup_wait_s
     while time.time() < warm_deadline and not any(e.get("event") == "warmup" for e in events):
         app.processEvents()
         time.sleep(0.01)
+    warmup_wait_ms = round((time.perf_counter() - warm_started) * 1000.0, 3)
+    warmup_completed = any(e.get("event") == "warmup" for e in events)
 
     started = time.perf_counter()
     speaker.speak(text, force=True)
@@ -71,8 +78,15 @@ def _tts_playback_probe(text: str, timeout_s: float = 10.0):
 
     playback_events = [e for e in events if e.get("event") == "playback_started"]
     first_playback_ms = playback_events[0].get("elapsed_ms") if playback_events else None
+    audible_events = [
+        e
+        for e in events
+        if e.get("event") in {"gemini_live_first_audible_chunk", "openai_pcm_first_chunk"}
+    ]
+    first_audible_ms = audible_events[0].get("elapsed_ms") if audible_events else first_playback_ms
     queued_events = [e for e in events if e.get("event") == "queued"]
     queue_to_playback_ms = None
+    queue_to_first_audible_ms = None
     if queued_events and playback_events:
         try:
             queue_to_playback_ms = round(
@@ -81,11 +95,23 @@ def _tts_playback_probe(text: str, timeout_s: float = 10.0):
             )
         except Exception:
             queue_to_playback_ms = None
+    if queued_events and audible_events:
+        try:
+            queue_to_first_audible_ms = round(
+                (float(audible_events[0]["ts"]) - float(queued_events[0]["ts"])) * 1000.0,
+                3,
+            )
+        except Exception:
+            queue_to_first_audible_ms = None
     return {
         "finished": bool(state["finished"]),
         "total_ms": total_ms,
         "first_playback_ms": first_playback_ms,
+        "first_audible_ms": first_audible_ms,
         "queue_to_playback_ms": queue_to_playback_ms,
+        "queue_to_first_audible_ms": queue_to_first_audible_ms,
+        "warmup_completed": warmup_completed,
+        "warmup_wait_ms": warmup_wait_ms,
         "events": events,
     }
 
