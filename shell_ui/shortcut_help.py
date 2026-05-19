@@ -86,7 +86,9 @@ SHORTCUTS: List[Shortcut] = [
     Shortcut(["Ctrl", "1"],        "Go to Chat page",            "Navigation"),
     Shortcut(["Ctrl", "2"],        "Go to Voice page",           "Navigation"),
     Shortcut(["Ctrl", "3"],        "Go to System page",          "Navigation"),
-    Shortcut(["Ctrl", "4"],        "Go to Settings page",        "Navigation"),
+    Shortcut(["Ctrl", "4"],        "Go to Agents page",          "Navigation"),
+    Shortcut(["Ctrl", "5"],        "Go to Tools page",           "Navigation"),
+    Shortcut(["Ctrl", "6"],        "Go to Settings page",        "Navigation"),
 
     # ---- Help -----------------------------------------------------------
     Shortcut(["?"],                "Toggle this shortcut help",  "Help"),

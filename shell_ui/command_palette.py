@@ -437,7 +437,7 @@ class CommandPalette(QWidget):
     def _register_builtin_actions(self):
         """Populate the starter set so the palette is useful out-of-the-box."""
         starter = [
-            # ---- Navigate (5) ----
+            # ---- Navigate (6) ----
             Action(id="page.chat", title="Go to Chat",
                    subtitle="Switch to the chat / conversation page",
                    icon="\U0001F4AC", shortcut="Ctrl+1", category="Navigate",
@@ -450,13 +450,17 @@ class CommandPalette(QWidget):
                    subtitle="Switch to the system dashboard",
                    icon="\U0001F4CA", shortcut="Ctrl+3", category="Navigate",
                    keywords=["system", "stats", "dashboard", "cpu", "ram"]),
+            Action(id="page.agents", title="Go to Agents",
+                   subtitle="Switch to agent orchestration",
+                   icon="\U0001F9E0", shortcut="Ctrl+4", category="Navigate",
+                   keywords=["agents", "orchestration", "planner", "memory", "workflow"]),
             Action(id="page.tools", title="Go to Tools",
                    subtitle="Switch to backend tools and MCP actions",
-                   icon="\U0001F6E0", shortcut="Ctrl+4", category="Navigate",
+                   icon="\U0001F6E0", shortcut="Ctrl+5", category="Navigate",
                    keywords=["tools", "mcp", "backend", "actions", "features"]),
             Action(id="page.settings", title="Go to Settings",
                    subtitle="Switch to the settings page",
-                   icon="⚙️", shortcut="Ctrl+5", category="Navigate",
+                   icon="⚙️", shortcut="Ctrl+6", category="Navigate",
                    keywords=["settings", "config", "prefs"]),
 
             # ---- Theme (4) ----
@@ -756,6 +760,8 @@ if __name__ == "__main__":
         "page.chat":     _make_cb("switch to chat page"),
         "page.voice":    _make_cb("switch to voice page"),
         "page.system":   _make_cb("switch to system page"),
+        "page.agents":   _make_cb("switch to agents page"),
+        "page.tools":    _make_cb("switch to tools page"),
         "page.settings": _make_cb("switch to settings page"),
         "theme.dark":    _make_cb("theme DARK"),
         "theme.light":   _make_cb("theme LIGHT"),

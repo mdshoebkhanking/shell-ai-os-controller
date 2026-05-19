@@ -113,6 +113,65 @@ def test_system_page_renders_ai_os_platform_status():
     page.close()
 
 
+def test_agents_page_renders_real_orchestration_state():
+    app = _app()
+    from PyQt6.QtWidgets import QLabel
+    from shell_ui.shell_cinematic_full import AgentsPage
+
+    page = AgentsPage()
+    page._on_agents_ready({
+        "orchestration_agents": [
+            {
+                "agent_id": "reasoning_agent",
+                "name": "Reasoning Agent",
+                "role": "executor",
+                "autonomy_level": "assisted",
+                "capabilities": [{"name": "capability.reasoning", "risk_level": "safe"}],
+            },
+            {
+                "agent_id": "coding_agent",
+                "name": "Coding Agent",
+                "role": "executor",
+                "autonomy_level": "manual",
+                "capabilities": [{"name": "capability.coding", "risk_level": "caution"}],
+            },
+        ],
+        "agent_tools": 40,
+        "readiness": {"READY": 37, "BLOCKED_BY_SAFETY": 3},
+        "safety": {"normal": 30, "guarded": 10},
+        "routes": [
+            {
+                "goal": "what is 2 + 3 * 4",
+                "selected_agent_name": "Reasoning Agent",
+                "selected_agent_id": "reasoning_agent",
+                "capability": "capability.reasoning",
+                "requires_approval": False,
+                "execution_allowed": True,
+                "risk_level": "safe",
+            },
+            {
+                "goal": "terminal echo hello",
+                "selected_agent_name": "Coding Agent",
+                "selected_agent_id": "coding_agent",
+                "capability": "capability.coding",
+                "requires_approval": True,
+                "execution_allowed": False,
+                "risk_level": "dangerous",
+            },
+        ],
+    })
+    app.processEvents()
+
+    text = "\n".join(lbl.text() for lbl in page.findChildren(QLabel))
+    assert "Agents" in text
+    assert "2 orchestration agents" in text
+    assert "40 agent tools" in text
+    assert "Reasoning Agent" in text
+    assert "terminal echo hello" in text
+    assert "Approval" in text
+    page.close()
+
+
 def test_system_telemetry_does_not_fabricate_random_stats():
     src_path = Path(__file__).resolve().parents[1] / "shell_ui" / "shell_cinematic_full.py"
     src = src_path.read_text(encoding="utf-8")
@@ -140,6 +199,7 @@ def test_shell_start_page_env_hook_exists_for_ui_qa():
 
     assert "SHELL_START_PAGE" in src
     assert '"voice": 1' in src
+    assert '"agents": 3' in src
 
 
 def test_chat_stream_scroll_is_coalesced_and_user_safe():

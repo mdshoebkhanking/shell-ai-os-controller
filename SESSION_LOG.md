@@ -806,3 +806,40 @@
 - Agent orchestration, provider routing, voice diagnostics, and memory state still need dedicated UI panels to fully match backend reality.
 - macOS Accessibility permission is still not granted, so some real desktop automation capabilities are constrained by OS trust settings.
 - Python 3.9 / LibreSSL warnings remain and should be handled in a packaging/runtime modernization cycle.
+
+## Session: 2026-05-19
+
+### Completed
+- Added a dedicated first-class Agents page so the UI now exposes Shell's real agent-first orchestration layer instead of hiding it inside generic Tools commands.
+- Wired Agents into the sidebar, top-bar context labels, start-page environment hook, command palette, shortcut help, and end-to-end UI probe.
+- Connected the Agents page to the real `AgentFirstOrchestrator` and capability catalog through a lazy Qt worker.
+- Rendered orchestration agents, agent-tool counts, readiness totals, approval-gate state, and deterministic routing checks.
+- Validated that Tools and Settings still route correctly after inserting Agents at page index `3`.
+
+### Changes Made
+- Updated `shell_ui/shell_cinematic_full.py` with `AgentStatusWorker`, `AgentsPage`, live stack wiring, context labels, start-map support, and updated keyboard-help labels.
+- Updated `shell_ui/command_palette.py` with a `Go to Agents` action and shifted Tools/Settings shortcuts.
+- Updated `shell_ui/shortcut_help.py` with Agents, Tools, and Settings navigation entries.
+- Updated `tools/e2e_ui_probe.py` to validate the Agents page and shifted page indexes.
+- Updated `tests/test_ui_working_smoke.py` with direct Agents page rendering coverage and `SHELL_START_PAGE=agents` coverage.
+
+### Current State
+- Agents page renders the real backend agent layer: `19` orchestration agents, agent-tool totals, approval state, and route checks.
+- Offscreen e2e UI probe passed across chat, voice, system, agents, tools, settings, calculator tool, Windows-MCP unsupported state, and text chat.
+- Visible e2e UI probe passed across chat, voice, system, agents, tools, settings, calculator tool, Windows-MCP unsupported state, and text chat.
+- Dedicated agents UI probe passed: `37/37` agent commands.
+- All-tools UI probe passed: `439` UI-visible items, `53` executed successfully, `40` agent-readiness-only, `292` safety-skipped, `10` expected not-ready, `0` errors.
+- Production release check passed with no blockers; warnings remain for local `.env` and mac audio.
+- Full test suite passed: `408 passed, 1 warning`.
+
+### Next Steps
+1. Upgrade the Tools/MCP page into capability-group views: Ready, Needs API Key, Missing Dependency, Windows Only, Safety Blocked, Experimental.
+2. Add a Voice Diagnostics page for active TTS engine, Aoede identity, first-audible latency, interruption timing, and fallback state.
+3. Add a Provider Routing page showing Gemini/Groq/OpenAI availability, first-token latency, quota/rate-limit state, and fallback decisions.
+4. Add a Memory/Context page for local memory namespaces, record counts, recent memories, and reset/export controls.
+5. Add drill-down actions from System and Agents cards into the relevant diagnostic pages.
+
+### Open Issues
+- Agents page is currently read-only; it exposes orchestration state but does not yet allow controlled agent execution from the dashboard.
+- macOS Accessibility permission is still not granted, so real desktop-control polish remains constrained by OS trust settings.
+- Python 3.9 / LibreSSL warnings remain from local runtime dependencies.

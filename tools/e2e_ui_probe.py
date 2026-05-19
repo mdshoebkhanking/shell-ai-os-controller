@@ -86,7 +86,7 @@ def main() -> int:
         "errors": [],
     }
     screens_dir = Path(args.screens_dir)
-    page_names = ["chat", "voice", "system", "tools", "settings"]
+    page_names = ["chat", "voice", "system", "agents", "tools", "settings"]
 
     try:
         for idx, name in enumerate(page_names):
@@ -112,6 +112,20 @@ def main() -> int:
         if not all(report["commands"]["system_platform_status"].values()):
             report["ok"] = False
             report["errors"].append("system platform status panel did not render expected backend state")
+
+        window._on_page_change(3)
+        _process_events(app, 1.0)
+        agents_text = "\n".join(lbl.text() for lbl in window.agents_page.findChildren(QLabel))
+        report["commands"]["agents_page"] = {
+            "panel_visible": "Agents" in agents_text,
+            "orchestration_visible": "orchestration agents" in agents_text.lower(),
+            "agent_tools_visible": "agent tools" in agents_text.lower(),
+            "routing_visible": "terminal echo hello" in agents_text or "Routing Checks" in agents_text,
+            "approval_visible": "approval" in agents_text.lower(),
+        }
+        if not all(report["commands"]["agents_page"].values()):
+            report["ok"] = False
+            report["errors"].append("agents page did not render expected orchestration state")
 
         window._on_page_change(1)
         _process_events(app, 0.2)

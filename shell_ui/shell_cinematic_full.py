@@ -2114,11 +2114,12 @@ class SidebarNav(QWidget):
         ("Chat", 0, "chat"),
         ("Voice", 1, "voice"),
         ("System", 2, "system"),
-        ("Tools", 3, "tools"),
-        ("Settings", 4, "settings"),
+        ("Agents", 3, "agent"),
+        ("Tools", 4, "tools"),
+        ("Settings", 5, "settings"),
     ]
 
-    CONTEXT_LABELS = ["CORE INTERFACE", "VOICE CORE", "SYSTEM DASHBOARD", "TOOLS / MCP", "CONFIGURATION"]
+    CONTEXT_LABELS = ["CORE INTERFACE", "VOICE CORE", "SYSTEM DASHBOARD", "AGENT ORCHESTRATION", "TOOLS / MCP", "CONFIGURATION"]
 
     def __init__(self, parent=None, history_store=None):
         super().__init__(parent)
@@ -7637,6 +7638,325 @@ class PlatformStatusWorker(QThread):
             self.status_error.emit(str(exc))
 
 
+class AgentStatusWorker(QThread):
+    agents_ready = pyqtSignal(object)
+    agents_error = pyqtSignal(str)
+
+    def run(self):
+        try:
+            from core.agent_orchestrator import AgentFirstOrchestrator
+            from shell_tool_catalog import discover_capabilities
+
+            orchestrator = AgentFirstOrchestrator()
+            agents = orchestrator.agents()
+            prompts = [
+                "what is 2 + 3 * 4",
+                "open calculator",
+                "search google for pyqt qthread cleanup",
+                "terminal echo hello",
+            ]
+            routes = [orchestrator.orchestrate(prompt).to_dict() for prompt in prompts]
+            catalog = discover_capabilities().get("catalog", [])
+            agent_tools = [row for row in catalog if row.get("kind") == "agent"]
+            readiness: dict[str, int] = {}
+            safety: dict[str, int] = {}
+            for row in agent_tools:
+                state = "READY"
+                ready = row.get("readiness")
+                if isinstance(ready, dict):
+                    state = str(ready.get("state") or state)
+                readiness[state] = readiness.get(state, 0) + 1
+                level = str(row.get("safety_level") or row.get("risk") or "normal")
+                safety[level] = safety.get(level, 0) + 1
+            self.agents_ready.emit({
+                "orchestration_agents": agents,
+                "agent_tools": len(agent_tools),
+                "readiness": readiness,
+                "safety": safety,
+                "routes": routes,
+            })
+        except Exception as exc:
+            self.agents_error.emit(str(exc))
+
+
+class AgentsPage(QWidget):
+    """Visible agent orchestration dashboard backed by the real agent layer."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet("background:transparent; border:none;")
+        self._agent_worker = None
+        self._auto_loaded = False
+        self._build_ui()
+
+    def _build_ui(self):
+        from shell_ui import design_tokens as DT
+        from shell_ui.widgets import Card, H1, H2
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(DT.S.xl, DT.S.sm, DT.S.xl, DT.S.xs)
+        outer.setSpacing(DT.S.sm)
+
+        header = QHBoxLayout()
+        header.setSpacing(DT.S.md)
+        header.addWidget(H1("Agents"))
+        header.addStretch(1)
+        self._status = QLabel("Checking")
+        self._status.setObjectName("agentsStatusPill")
+        self._status.setStyleSheet(
+            f"#agentsStatusPill {{ color:{DT.C.text}; background:{DT.C.accent_soft}; "
+            f"border:1px solid {DT.C.border_strong}; border-radius:{DT.R.sm}px; "
+            f"padding:5px 10px; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; font-weight:800; }}"
+        )
+        header.addWidget(self._status)
+        self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_btn.setStyleSheet(
+            f"QPushButton {{ color:{DT.C.text_muted}; background:transparent; "
+            f"border:1px solid {DT.C.border_strong}; border-radius:{DT.R.sm}px; "
+            f"padding:5px 12px; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; font-weight:700; }} "
+            f"QPushButton:hover {{ color:{DT.C.text}; border:1px solid {DT.C.accent}; "
+            f"background:{DT.C.accent_soft}; }}"
+        )
+        self._refresh_btn.clicked.connect(self.refresh_agents)
+        header.addWidget(self._refresh_btn)
+        outer.addLayout(header)
+
+        self._summary = QLabel("Agent state will appear here.")
+        self._summary.setWordWrap(True)
+        self._summary.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; border:none; background:transparent;"
+        )
+        outer.addWidget(self._summary)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet(
+            f"QScrollArea {{ background:transparent; border:none; }} "
+            f"QScrollBar:vertical {{ width:6px; background:transparent; }} "
+            f"QScrollBar::handle:vertical {{ background:{DT.C.surface_2}; border-radius:3px; }} "
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }"
+        )
+        content = QWidget()
+        content.setStyleSheet("background:transparent;border:none;")
+        content_lay = QVBoxLayout(content)
+        content_lay.setContentsMargins(0, 0, DT.S.sm, 0)
+        content_lay.setSpacing(DT.S.md)
+
+        metrics_row = QHBoxLayout()
+        metrics_row.setSpacing(DT.S.md)
+        self._metric_agents = self._metric_card("Orchestrators", "--")
+        self._metric_tools = self._metric_card("Agent Tools", "--")
+        self._metric_ready = self._metric_card("Ready Tools", "--")
+        self._metric_approval = self._metric_card("Approval Gate", "--")
+        for card in (self._metric_agents, self._metric_tools, self._metric_ready, self._metric_approval):
+            metrics_row.addWidget(card)
+        content_lay.addLayout(metrics_row)
+
+        agents_card = Card(glass=True, elevated=True, padded=True)
+        agents_lay = agents_card.layout()
+        agents_lay.addWidget(H2("Orchestration Agents"))
+        self._agents_grid = QGridLayout()
+        self._agents_grid.setContentsMargins(0, 0, 0, 0)
+        self._agents_grid.setSpacing(DT.S.sm)
+        agents_lay.addLayout(self._agents_grid)
+        content_lay.addWidget(agents_card)
+
+        routes_card = Card(glass=True, elevated=True, padded=True)
+        routes_lay = routes_card.layout()
+        routes_lay.addWidget(H2("Routing Checks"))
+        self._routes_lay = QVBoxLayout()
+        self._routes_lay.setContentsMargins(0, 0, 0, 0)
+        self._routes_lay.setSpacing(DT.S.xs)
+        routes_lay.addLayout(self._routes_lay)
+        content_lay.addWidget(routes_card)
+
+        scroll.setWidget(content)
+        outer.addWidget(scroll, 1)
+
+    def _metric_card(self, label, value):
+        from shell_ui import design_tokens as DT
+        from shell_ui.widgets import Card
+
+        card = Card(glass=True, elevated=False, padded=True)
+        lay = card.layout()
+        value_lbl = QLabel(str(value))
+        value_lbl.setObjectName("metricValue")
+        value_lbl.setStyleSheet(
+            f"color:{DT.C.text}; font-family:'{DT.T.family_mono}'; "
+            f"font-size:22px; font-weight:900; border:none; background:transparent;"
+        )
+        label_lbl = QLabel(str(label))
+        label_lbl.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.small_size}px; font-weight:700; border:none; background:transparent;"
+        )
+        lay.addWidget(value_lbl)
+        lay.addWidget(label_lbl)
+        card._value_lbl = value_lbl
+        return card
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self._auto_loaded:
+            self._auto_loaded = True
+            QTimer.singleShot(80, self.refresh_agents)
+
+    def closeEvent(self, event):
+        worker = getattr(self, "_agent_worker", None)
+        if worker is not None and worker.isRunning():
+            try:
+                worker.wait(500)
+            except Exception:
+                pass
+        super().closeEvent(event)
+
+    def refresh_agents(self):
+        if self._agent_worker and self._agent_worker.isRunning():
+            return
+        self._status.setText("Checking")
+        self._summary.setText("Reading agent orchestrator, capability catalog and approval gates...")
+        self._refresh_btn.setEnabled(False)
+        self._agent_worker = AgentStatusWorker(self)
+        self._agent_worker.agents_ready.connect(self._on_agents_ready)
+        self._agent_worker.agents_error.connect(self._on_agents_error)
+        self._agent_worker.finished.connect(lambda: self._refresh_btn.setEnabled(True))
+        self._agent_worker.start()
+
+    def _on_agents_ready(self, payload):
+        data = dict(payload or {})
+        agents = [dict(item) for item in data.get("orchestration_agents", []) if isinstance(item, dict)]
+        routes = [dict(item) for item in data.get("routes", []) if isinstance(item, dict)]
+        readiness = data.get("readiness", {}) if isinstance(data.get("readiness"), dict) else {}
+        blocked_route = next((route for route in routes if route.get("requires_approval")), None)
+        approval_state = "Blocked" if blocked_route and not blocked_route.get("execution_allowed") else "Ready"
+        self._status.setText(f"READY · {len(agents)}")
+        self._summary.setText(
+            f"{len(agents)} orchestration agents · {data.get('agent_tools', 0)} agent tools · "
+            f"{readiness.get('READY', 0)} ready · Terminal approval {approval_state.lower()}"
+        )
+        self._metric_agents._value_lbl.setText(str(len(agents)))
+        self._metric_tools._value_lbl.setText(str(data.get("agent_tools", 0)))
+        self._metric_ready._value_lbl.setText(str(readiness.get("READY", 0)))
+        self._metric_approval._value_lbl.setText(approval_state)
+        self._render_agents(agents)
+        self._render_routes(routes)
+
+    def _on_agents_error(self, message):
+        self._status.setText("UNAVAILABLE")
+        self._summary.setText(str(message)[:220])
+
+    def _render_agents(self, agents):
+        while self._agents_grid.count():
+            item = self._agents_grid.takeAt(0)
+            w = item.widget() if item else None
+            if w is not None:
+                w.deleteLater()
+        for idx, agent in enumerate(agents[:24]):
+            self._agents_grid.addWidget(self._make_agent_card(agent), idx // 3, idx % 3)
+
+    def _make_agent_card(self, agent):
+        from shell_ui import design_tokens as DT
+
+        role = str(agent.get("role") or "agent")
+        risk = "safe"
+        capabilities = agent.get("capabilities", []) if isinstance(agent.get("capabilities"), list) else []
+        if any(str(cap.get("risk_level") or "") in {"dangerous", "critical"} for cap in capabilities if isinstance(cap, dict)):
+            risk = "dangerous"
+        elif any(str(cap.get("risk_level") or "") == "caution" for cap in capabilities if isinstance(cap, dict)):
+            risk = "caution"
+        color = self._risk_tone(risk)
+        card = QFrame()
+        card.setStyleSheet(
+            f"QFrame {{ background:{DT.C.surface_2}; border:1px solid {DT.C.border}; "
+            f"border-left:3px solid {color}; border-radius:{DT.R.sm}px; }}"
+        )
+        lay = QVBoxLayout(card)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(3)
+        name = QLabel(str(agent.get("name") or agent.get("agent_id") or "Agent"))
+        name.setWordWrap(True)
+        name.setStyleSheet(
+            f"color:{DT.C.text}; font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:800; border:none; background:transparent;"
+        )
+        lay.addWidget(name)
+        meta = QLabel(f"{role.upper()} · {str(agent.get('autonomy_level') or 'assisted')}")
+        meta.setWordWrap(True)
+        meta.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family_mono}'; "
+            f"font-size:{DT.T.small_size}px; border:none; background:transparent;"
+        )
+        lay.addWidget(meta)
+        cap_names = [
+            str(cap.get("name") or "").replace("capability.", "")
+            for cap in capabilities
+            if isinstance(cap, dict)
+        ]
+        caps = QLabel(", ".join(cap_names[:3]) or "capability")
+        caps.setWordWrap(True)
+        caps.setStyleSheet(
+            f"color:{color}; font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:700; border:none; background:transparent;"
+        )
+        lay.addWidget(caps)
+        return card
+
+    def _render_routes(self, routes):
+        while self._routes_lay.count():
+            item = self._routes_lay.takeAt(0)
+            w = item.widget() if item else None
+            if w is not None:
+                w.deleteLater()
+        for route in routes:
+            self._routes_lay.addWidget(self._make_route_row(route))
+
+    def _make_route_row(self, route):
+        from shell_ui import design_tokens as DT
+
+        row = QFrame()
+        status = "approval blocked" if route.get("requires_approval") and not route.get("execution_allowed") else str(route.get("status") or "planned")
+        tone = self._risk_tone(str(route.get("risk_level") or "safe"))
+        row.setStyleSheet(f"QFrame {{ background:transparent; border-bottom:1px solid {DT.C.border}; }}")
+        lay = QHBoxLayout(row)
+        lay.setContentsMargins(0, 6, 0, 6)
+        lay.setSpacing(DT.S.sm)
+        prompt = QLabel(str(route.get("goal") or "")[:54])
+        prompt.setStyleSheet(
+            f"color:{DT.C.text}; font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:700; border:none; background:transparent;"
+        )
+        lay.addWidget(prompt, 3)
+        agent = QLabel(str(route.get("selected_agent_name") or route.get("selected_agent_id") or "Agent"))
+        agent.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family}'; font-size:{DT.T.small_size}px; "
+            f"border:none; background:transparent;"
+        )
+        lay.addWidget(agent, 2)
+        state = QLabel(status.upper())
+        state.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        state.setStyleSheet(
+            f"color:{tone}; font-family:'{DT.T.family_mono}'; font-size:{DT.T.small_size}px; "
+            f"font-weight:800; border:none; background:transparent;"
+        )
+        lay.addWidget(state, 2)
+        return row
+
+    def _risk_tone(self, risk):
+        from shell_ui import design_tokens as DT
+
+        value = str(risk or "").lower()
+        if value in {"dangerous", "critical"}:
+            return DT.C.error
+        if value == "caution":
+            return DT.C.warning
+        return DT.C.success
+
+
 class BackendToolCatalogWorker(QThread):
     catalog_ready = pyqtSignal(object)
     catalog_error = pyqtSignal(str)
@@ -10788,6 +11108,7 @@ class ShellHoloUI(QMainWindow):
         self.chat_page = ChatPage()
         self.voice_page = VoicePage()
         self.system_page = SystemPage()
+        self.agents_page = AgentsPage()
         self.tools_page = BackendToolsPage()
         self.settings_page = SettingsPage()
 
@@ -10800,6 +11121,7 @@ class ShellHoloUI(QMainWindow):
         self.pages.addWidget(self.chat_page)
         self.pages.addWidget(self.voice_page)
         self.pages.addWidget(self.system_page)
+        self.pages.addWidget(self.agents_page)
         self.pages.addWidget(self.tools_page)
         self.pages.addWidget(self.settings_page)
 
@@ -10852,13 +11174,13 @@ class ShellHoloUI(QMainWindow):
                 # the Settings page so the click does *something*
                 # rather than vanishing into the void.
                 try:
-                    self.pages.setCurrentIndex(4)
+                    self.pages.setCurrentIndex(5)
                 except Exception as _ee:
                     logger.debug("avatar profile failed: %s", _ee)
 
             def _cb_avatar_settings():
                 try:
-                    self.pages.setCurrentIndex(4)
+                    self.pages.setCurrentIndex(5)
                 except Exception as _ee:
                     logger.debug("avatar settings failed: %s", _ee)
 
@@ -11038,12 +11360,13 @@ class ShellHoloUI(QMainWindow):
                 return _go
 
             cmdp_callbacks = {
-                # Pages — match StackedWidget order: chat=0, voice=1, system=2, settings=3.
+                # Pages — match StackedWidget order: chat=0, voice=1, system=2, agents=3, tools=4, settings=5.
                 "page.chat":     _cb_page(0),
                 "page.voice":    _cb_page(1),
                 "page.system":   _cb_page(2),
-                "page.tools":     _cb_page(3),
-                "page.settings":  _cb_page(4),
+                "page.agents":   _cb_page(3),
+                "page.tools":    _cb_page(4),
+                "page.settings": _cb_page(5),
                 # Themes — keys must match ThemeEngine.THEMES.
                 "theme.dark":     _cb_theme("DARK"),
                 "theme.light":    _cb_theme("LIGHT"),
@@ -11062,8 +11385,8 @@ class ShellHoloUI(QMainWindow):
                 # Settings deep-links — jump to the Settings page; user can
                 # locate the row visually. (Granular scroll-to-section can be
                 # added later without changing the palette wiring.)
-                "settings.reply_language": _cb_page(4),
-                "settings.api_keys":       _cb_page(4),
+                "settings.reply_language": _cb_page(5),
+                "settings.api_keys":       _cb_page(5),
                 # Quick-launcher control.
                 "ql.toggle": _cb_quick_launcher_toggle,
             }
@@ -11147,8 +11470,8 @@ class ShellHoloUI(QMainWindow):
         self._voice_worker = None
 
         # Start on chat page by default. Tests/manual QA can start directly
-        # on a specific page with SHELL_START_PAGE=voice/system/tools/settings.
-        start_map = {"chat": 0, "voice": 1, "system": 2, "tools": 3, "settings": 4}
+        # on a specific page with SHELL_START_PAGE=voice/system/agents/tools/settings.
+        start_map = {"chat": 0, "voice": 1, "system": 2, "agents": 3, "tools": 4, "settings": 5}
         self._initial_page_index = start_map.get(
             (os.environ.get("SHELL_START_PAGE") or "").strip().lower(),
             0,
@@ -11185,7 +11508,7 @@ class ShellHoloUI(QMainWindow):
             try:
                 self.sidebar._active = target
                 self.sidebar._apply_styles()
-                contexts = ["Chat", "Voice", "System", "Tools", "Settings"]
+                contexts = ["Chat", "Voice", "System", "Agents", "Tools", "Settings"]
                 if target < len(contexts):
                     self.top_bar.set_context(contexts[target])
             except Exception as _style_e:
@@ -11203,7 +11526,7 @@ class ShellHoloUI(QMainWindow):
         # Step 2 — defer everything else.
         def _post_swap():
             try:
-                contexts = ["Chat", "Voice", "System", "Tools", "Settings"]
+                contexts = ["Chat", "Voice", "System", "Agents", "Tools", "Settings"]
                 if idx < len(contexts):
                     self.top_bar.set_context(contexts[idx])
             except Exception as _e:
@@ -13390,7 +13713,9 @@ class ShellHoloUI(QMainWindow):
                 ("Ctrl+1", "Chat Page"),
                 ("Ctrl+2", "Voice Page"),
                 ("Ctrl+3", "System Dashboard"),
-                ("Ctrl+4", "Settings"),
+                ("Ctrl+4", "Agents"),
+                ("Ctrl+5", "Tools"),
+                ("Ctrl+6", "Settings"),
                 ("Ctrl+N", "New Session"),
                 ("Ctrl+L", "Focus Chat Input"),
                 ("Ctrl+/", "Toggle This Overlay"),
