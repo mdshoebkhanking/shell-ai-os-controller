@@ -46,6 +46,26 @@ def test_tts_warmup_requests_are_deduped(monkeypatch):
     assert speaker._warmup_requested is False
 
 
+def test_tts_voice_intent_prewarm_requests_provider_modules(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    speaker = TTSSpeaker()
+    calls = []
+    monkeypatch.setattr(
+        speaker,
+        "_prewarm_streaming_voice_runtime",
+        lambda started, provider_modules=None, reason="": calls.append(
+            (provider_modules, reason, isinstance(started, float))
+        )
+        or True,
+    )
+
+    assert speaker.prewarm_for_voice_intent("voice_session_start", provider_modules=True) is True
+    assert calls == [(True, "voice_session_start", True)]
+
+
 def test_cloud_voice_prioritizes_gemini_identity_even_instant_mode(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")

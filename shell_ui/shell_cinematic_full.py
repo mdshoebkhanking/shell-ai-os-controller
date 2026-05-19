@@ -10425,6 +10425,7 @@ class ShellHoloUI(QMainWindow):
         self._shell_v2_bridge = None
         self._voice_realtime_session = None
         self._voice_realtime_prewarm_thread = None
+        self._voice_tts_prewarm_thread = None
         self._voice_turn_id = 0
         self._voice_turn_query_started = 0.0
         self._voice_turn_hearing_ts = 0.0
@@ -11530,6 +11531,7 @@ class ShellHoloUI(QMainWindow):
         if active:
             # START listening
             self._start_realtime_voice_session()
+            self._prewarm_voice_tts_for_intent("voice_session_start", provider_modules=True)
             self._start_voice_listener()
         else:
             # STOP listening
@@ -11624,10 +11626,22 @@ class ShellHoloUI(QMainWindow):
             started = _time.perf_counter()
             provider_count = 0
             shell_v2_ready = False
+            tts_ready = False
             try:
                 shell_v2_ready = self._voice_shell_v2_ready(start_bridge=False)
             except Exception as exc:
                 logger.debug("voice Shell-v2 prewarm health failed: %s", exc)
+            try:
+                tts = getattr(self, "_tts", None)
+                if tts is not None and hasattr(tts, "prewarm_for_voice_intent"):
+                    tts_ready = bool(
+                        tts.prewarm_for_voice_intent(
+                            reason=reason,
+                            provider_modules=True,
+                        )
+                    )
+            except Exception as exc:
+                logger.debug("voice TTS intent prewarm failed: %s", exc)
             try:
                 brain = get_brain()
                 provider_count = len(getattr(brain, "providers", {}) or {}) if brain else 0
@@ -11645,18 +11659,59 @@ class ShellHoloUI(QMainWindow):
             try:
                 from core.performance import LOW_LATENCY_RECORDER
                 LOW_LATENCY_RECORDER.record("voice.realtime_prewarm", elapsed)
+                if tts_ready:
+                    LOW_LATENCY_RECORDER.record("voice.tts_intent_prewarm.ready", elapsed)
             except Exception:
                 pass
             logger.info(
-                "Voice realtime prewarm %s in %.3fms (shell_v2=%s providers=%s)",
+                "Voice realtime prewarm %s in %.3fms (shell_v2=%s tts=%s providers=%s)",
                 reason,
                 elapsed,
                 shell_v2_ready,
+                tts_ready,
                 provider_count,
             )
 
         thread = threading.Thread(target=_run, name="voice-realtime-prewarm", daemon=True)
         self._voice_realtime_prewarm_thread = thread
+        thread.start()
+        return True
+
+    def _prewarm_voice_tts_for_intent(self, reason="voice_intent", *, provider_modules=True):
+        """Warm premium voice dependencies after explicit voice intent."""
+        tts = getattr(self, "_tts", None)
+        if tts is None or not hasattr(tts, "prewarm_for_voice_intent"):
+            return False
+        import threading
+
+        def _run():
+            started = _time.perf_counter()
+            ok = False
+            try:
+                ok = bool(
+                    tts.prewarm_for_voice_intent(
+                        reason=reason,
+                        provider_modules=provider_modules,
+                    )
+                )
+            except Exception as exc:
+                logger.debug("voice intent TTS prewarm failed: %s", exc)
+            elapsed = round((_time.perf_counter() - started) * 1000.0, 3)
+            try:
+                from core.performance import LOW_LATENCY_RECORDER
+                LOW_LATENCY_RECORDER.record("voice.tts_intent_prewarm", elapsed)
+            except Exception:
+                pass
+            logger.info(
+                "Voice TTS intent prewarm %s in %.3fms (ok=%s provider_modules=%s)",
+                reason,
+                elapsed,
+                ok,
+                bool(provider_modules),
+            )
+
+        thread = threading.Thread(target=_run, name="voice-tts-intent-prewarm", daemon=True)
+        self._voice_tts_prewarm_thread = thread
         thread.start()
         return True
 

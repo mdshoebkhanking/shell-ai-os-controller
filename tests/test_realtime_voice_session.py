@@ -96,6 +96,41 @@ def test_voice_text_prefers_persistent_shell_v2_path(monkeypatch) -> None:
     assert ui._voice_realtime_session.state == "thinking"
 
 
+def test_realtime_voice_prewarm_triggers_tts_intent(monkeypatch) -> None:
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+
+    import shell_ui.shell_cinematic_full as ui_module
+    from shell_realtime_voice_session import RealtimeVoiceSession
+    from shell_ui.shell_cinematic_full import ShellHoloUI
+
+    class _Brain:
+        providers = {"probe": object()}
+
+    class _TTS:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def prewarm_for_voice_intent(self, *, reason: str, provider_modules: bool) -> bool:
+            self.calls.append((reason, provider_modules))
+            return True
+
+    ui = ShellHoloUI.__new__(ShellHoloUI)
+    ui._voice_realtime_session = RealtimeVoiceSession(session_id="voice")
+    ui._voice_realtime_session.start()
+    ui._voice_realtime_prewarm_thread = None
+    ui._tts = _TTS()
+    ui._voice_shell_v2_ready = lambda start_bridge=False: False
+    monkeypatch.setattr(ui_module, "get_brain", lambda: _Brain())
+
+    assert ShellHoloUI._prewarm_realtime_voice_path(ui, "speech_started") is True
+    ui._voice_realtime_prewarm_thread.join(2.0)
+
+    assert ui._tts.calls == [("speech_started", True)]
+    snap = ui._voice_realtime_session.snapshot()
+    assert snap["prewarm_count"] == 1
+    assert snap["provider_count"] == 1
+
+
 def test_shell_v2_voice_reply_does_not_duplicate_stream_done(monkeypatch) -> None:
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
@@ -128,4 +163,3 @@ def test_shell_v2_voice_error_falls_back_to_inprocess(monkeypatch) -> None:
 
     assert calls == [("hello", 2)]
     assert ui.system_page.logs
-

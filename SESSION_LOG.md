@@ -564,3 +564,41 @@
 - Provider-first-audio variance remains visible between runs, even with local warmup fixed.
 - Gemini Live remains turn-scoped rather than a persistent duplex session.
 - Human timbre judgment still requires the user’s ear; telemetry confirms `gemini_live_pcm` and `Aoede`, but the agent cannot directly perceive audio quality.
+
+## Session: 2026-05-19
+
+### Completed
+- Ran an intent-based predictive prewarm cycle focused on moving provider/runtime hydration from passive startup to explicit voice intent.
+- Researched current realtime voice-agent patterns: LiveKit preemptive generation and turn handling, Gemini Live low-latency stateful audio sessions, OpenAI Realtime turn detection, and Pipecat speech-start / smart-turn behavior.
+- Added a public TTS intent-prewarm path that can import provider modules only after user voice intent, without changing idle startup behavior.
+- Wired explicit voice-session start and speech-start prewarm into the premium voice runtime.
+- Extended the full UI voice validation probe with `--intent-prewarm` to measure the real user-intent path.
+- Fixed a background-thread UI mutation discovered during visible validation; prewarm threads now log instead of directly touching Qt widgets.
+
+### Changes Made
+- Updated `shell_voice_runtime.py` with provider-module-aware `prewarm_for_voice_intent(...)`, separate local/provider readiness flags, and deduped prewarm locking.
+- Updated `shell_ui/shell_cinematic_full.py` so voice-session start triggers predictive TTS prewarm, and the existing speech-start realtime prewarm also warms the premium voice runtime.
+- Updated `tools/voice_ui_validation_probe.py` with `--intent-prewarm` and intent prewarm wait reporting.
+- Updated realtime/voice tests to cover provider-module intent prewarm and speech-start TTS hydration.
+
+### Current State
+- Idle startup remains lightweight: `test_ui_idle_startup_does_not_autostart_socketio` passed, so `socketio`, `engineio`, `aiohttp`, and `brain.core` are still not loaded by passive UI startup.
+- Default full UI baseline from prior cycle: `queue_to_first_audible_ms=1192.254`, `queue_to_playback_ms=1193.121`.
+- Intent-prewarm visible UI validation: `backend=gemini_live_pcm`, `voice=Aoede`, `model=gemini-3.1-flash-live-preview`, `intent_prewarm_wait_ms=375.927`, `queue_to_first_audible_ms=866.993`, `queue_to_playback_ms=867.398`, no system fallback.
+- Intent-prewarm removed the provider import/backend-selection penalty: `tts_backend_selected` occurred at `0.09 ms`, Gemini Live connected at `193.79 ms`, and first substantial audible PCM arrived at `866.8 ms`.
+- No-audio cleanup probe still exits through `pcm_audio_unavailable` and blocked fallback, with no provider stream opened and no async cleanup noise.
+- Targeted predictive/voice tests passed: `40 passed, 1 warning`.
+- Full test suite passed: `389 passed, 1 warning`.
+
+### Next Steps
+1. Promote intent prewarm from the validation probe into more real UX triggers: microphone button hover/focus, active voice session start, and high-confidence VAD onset.
+2. Add persistent Gemini Live session reuse after voice-session start to remove the remaining ~190-220 ms connection setup.
+3. Add a small prewarm state indicator in System/Voice telemetry without direct background-thread UI writes.
+4. Add interruption tests while provider modules are prewarming to ensure barge-in cannot race with hydration.
+5. Measure multi-turn voice sessions to confirm the second and third turns stay warm without leaking provider/session state.
+
+### Open Issues
+- Intent prewarm improves first-audible latency to the ~0.87 s range in visible UI validation, but provider first-audio variance remains.
+- Gemini Live is still turn-scoped; provider modules are warm, but the actual Live WebSocket is not yet persistent across voice turns.
+- Intent prewarm currently imports provider modules but does not open a provider audio session, which is the safer first step but not the final realtime-duplex architecture.
+- Human timbre judgment still requires user verification; telemetry confirms the Aoede premium route.

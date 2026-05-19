@@ -33,6 +33,11 @@ def main() -> int:
     parser.add_argument("--tts-text", default="Shell full UI premium voice validation.")
     parser.add_argument("--timeout-s", type=float, default=18.0)
     parser.add_argument("--warmup-timeout-s", type=float, default=5.0)
+    parser.add_argument(
+        "--intent-prewarm",
+        action="store_true",
+        help="Simulate explicit voice intent before speaking.",
+    )
     parser.add_argument("--json-out", default="/private/tmp/shell_voice_ui_validation.json")
     parser.add_argument("--visible", action="store_true", help="Render using the real display.")
     args = parser.parse_args()
@@ -72,6 +77,21 @@ def main() -> int:
         _process_events(app, 0.03)
     warmup_wait_ms = round((time.perf_counter() - warm_started) * 1000.0, 3)
 
+    intent_prewarm_wait_ms = None
+    if args.intent_prewarm:
+        intent_started = time.perf_counter()
+        window._prewarm_voice_tts_for_intent("probe_voice_intent", provider_modules=True)
+        intent_deadline = time.time() + max(1.0, float(args.warmup_timeout_s))
+        while time.time() < intent_deadline:
+            if any(
+                e.get("event") == "streaming_voice_runtime_ready"
+                and bool(e.get("provider_modules"))
+                for e in events
+            ):
+                break
+            _process_events(app, 0.03)
+        intent_prewarm_wait_ms = round((time.perf_counter() - intent_started) * 1000.0, 3)
+
     started = time.perf_counter()
     window._tts.speak(args.tts_text, force=True)
     deadline = time.time() + max(1.0, float(args.timeout_s))
@@ -98,6 +118,8 @@ def main() -> int:
         "total_ms": total_ms,
         "warmup_completed": _first_event(events, "warmup") is not None,
         "warmup_wait_ms": warmup_wait_ms,
+        "intent_prewarm": bool(args.intent_prewarm),
+        "intent_prewarm_wait_ms": intent_prewarm_wait_ms,
         "backend": (selected or {}).get("backend"),
         "voice": (selected or {}).get("voice"),
         "model": (selected or {}).get("model"),

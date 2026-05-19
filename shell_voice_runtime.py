@@ -74,6 +74,7 @@ class TTSSpeaker(QThread):
 
         self._queue = deque()
         self._lock = threading.Lock()
+        self._prewarm_lock = threading.Lock()
         self._wake = threading.Event()
         self._enabled = True
         self._rate = "+8%"
@@ -95,6 +96,8 @@ class TTSSpeaker(QThread):
         self._current_backend = ""
         self._current_voice_label = ""
         self._streaming_voice_runtime_ready = False
+        self._streaming_voice_provider_runtime_ready = False
+        self._streaming_voice_prewarm_in_progress = False
         self._audio_output_probe_ok = None
         self._audio_output_probe_error = ""
         self._audio_output_probe_until = 0.0
@@ -483,8 +486,35 @@ class TTSSpeaker(QThread):
         }
         return voice if voice in allowed else "coral"
 
-    def _prewarm_streaming_voice_runtime(self, started=None):
-        if self._streaming_voice_runtime_ready:
+    def _prewarm_streaming_voice_runtime(self, started=None, *, provider_modules=None, reason="warmup"):
+        provider_prewarm = (
+            self._truthy_env("SHELL_TTS_PROVIDER_PREWARM", "0")
+            if provider_modules is None
+            else bool(provider_modules)
+        )
+        with self._prewarm_lock:
+            already_ready = self._streaming_voice_runtime_ready and (
+                not provider_prewarm or self._streaming_voice_provider_runtime_ready
+            )
+            if already_ready:
+                return True
+            if self._streaming_voice_prewarm_in_progress:
+                return False
+            self._streaming_voice_prewarm_in_progress = True
+        try:
+            return self._prewarm_streaming_voice_runtime_locked(
+                started,
+                provider_prewarm=provider_prewarm,
+                reason=reason,
+            )
+        finally:
+            with self._prewarm_lock:
+                self._streaming_voice_prewarm_in_progress = False
+
+    def _prewarm_streaming_voice_runtime_locked(self, started=None, *, provider_prewarm=False, reason="warmup"):
+        if self._streaming_voice_runtime_ready and (
+            not provider_prewarm or self._streaming_voice_provider_runtime_ready
+        ):
             return True
         engine = str(getattr(self, "_engine", "") or "").strip().lower()
         wants_gemini_live = (
@@ -496,7 +526,6 @@ class TTSSpeaker(QThread):
         if not wants_gemini_live and not wants_openai_pcm:
             return False
         started = started or _time.perf_counter()
-        provider_prewarm = self._truthy_env("SHELL_TTS_PROVIDER_PREWARM", "0")
         try:
             import asyncio  # noqa: F401
             import numpy  # noqa: F401
@@ -508,12 +537,15 @@ class TTSSpeaker(QThread):
             if provider_prewarm and wants_openai_pcm:
                 from openai import AsyncOpenAI  # noqa: F401
             self._streaming_voice_runtime_ready = True
+            if provider_prewarm:
+                self._streaming_voice_provider_runtime_ready = True
             self._emit_latency(
                 "streaming_voice_runtime_ready",
                 started,
                 gemini_live=bool(wants_gemini_live),
                 openai_pcm=bool(wants_openai_pcm),
                 provider_modules=bool(provider_prewarm),
+                reason=str(reason or "warmup"),
             )
             return True
         except Exception as exc:
@@ -524,8 +556,17 @@ class TTSSpeaker(QThread):
                 gemini_live=bool(wants_gemini_live),
                 openai_pcm=bool(wants_openai_pcm),
                 provider_modules=bool(provider_prewarm),
+                reason=str(reason or "warmup"),
             )
             return False
+
+    def prewarm_for_voice_intent(self, reason="voice_intent", *, provider_modules=True):
+        """Warm voice dependencies after explicit user intent without speaking."""
+        return self._prewarm_streaming_voice_runtime(
+            _time.perf_counter(),
+            provider_modules=provider_modules,
+            reason=reason,
+        )
 
     def _speak_openai_streaming_tts(self, text):
         """Stream raw 24kHz PCM from OpenAI TTS directly to the local audio device."""
