@@ -268,6 +268,39 @@ def _prepare_realtime_instructions(text: str) -> str:
     )
     return trimmed
 
+
+def handle_user_request(text: str, context: dict | None = None) -> dict | str:
+    """Feature-flagged desktop request bridge.
+
+    Classic LiveKit/desktop behavior remains the default. When
+    SHELLAI_BACKEND_MODE=shellai_core, callers can route a single text request
+    through the new shellai core and receive its structured result.
+    """
+    try:
+        from core.shellai_bridge import handle_user_request as _bridge_handle
+
+        result = _bridge_handle(text, context=context, auto_approve_ask=False)
+        if result is not None:
+            return result
+    except Exception as exc:
+        logger.exception("shellai core bridge failed")
+        return {
+            "ok": False,
+            "status": "error",
+            "error": {
+                "type": exc.__class__.__name__,
+                "message": str(exc),
+                "details": {"source": "agent.handle_user_request"},
+            },
+            "summary": f"ShellAI Core bridge failed: {exc}",
+            "steps": [],
+        }
+    return {
+        "backend": "classic",
+        "status": "not_handled",
+        "message": "Classic desktop backend is active.",
+    }
+
 # =============================================================================
 # 🧠 SECTION 5: ASSISTANT CLASS (130+ TOOLS)
 # =============================================================================
@@ -2498,4 +2531,3 @@ if __name__ == "__main__":
 # [MODULES]: 30+ External, 10 Brain Nodes, 1 Swarm
 # [STATUS]: OPERATIONAL
 # =============================================================================
-

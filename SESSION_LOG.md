@@ -1,3 +1,365 @@
+## Session: 2026-05-20
+
+### Completed
+- Prepared the ShellAI Phase 2 + desktop bridge changes for GitHub publishing.
+- Verified the correct nested Git repository and remote: `origin` -> `https://github.com/mdshoebkhanking/shell-ai-os-controller.git`.
+- Reviewed the worktree before staging to avoid publishing unrelated temporary files.
+- Ran a targeted secret-pattern scan across the new `shellai` package, desktop bridge, tests, and touched UI files.
+
+### Changes Made
+- Updated `SESSION_LOG.md` with this GitHub publish-prep checkpoint.
+
+### Current State
+- Pending GitHub publish from feature branch to avoid pushing directly to `main`.
+- Latest full regression result remains: `.codex_ui_venv/bin/python -m pytest -q` returned `466 passed, 1 warning`.
+- Visible UI validation remains complete for E2E pages, all-tools audit, agents route, ShellAI Core mode, classic mode, and safety blocking.
+
+### Next Steps
+1. Create a publish branch.
+2. Stage intended ShellAI Phase 2, desktop bridge, UI, test, and session-log files.
+3. Run final diff checks.
+4. Commit and push to GitHub.
+
+### Open Issues
+- macOS Accessibility permission is still not granted in this environment, so global input monitoring/mouse automation remains OS-gated.
+- Some tool catalog entries remain readiness-only by design due missing dependency, missing API key, Windows-only behavior, experimental status, or safety policy.
+
+## Session: 2026-05-20
+
+### Completed
+- Performed broad visible PyQt UI validation at the user's request.
+- Ran visible end-to-end UI probe across Chat, Voice, System, Agents, Tools, and Settings pages.
+- Ran full visible tool catalog audit: 442 catalog entries inspected, 53 safe READY tools executed, unsafe/stateful tools skipped by safety, 0 errors.
+- Ran visible agents chat route probe: 37/37 agent commands passed through the UI.
+- Ran mixed ShellAI Core mode UI probe: `!pwd` routed through ShellAI Core, `/tool shell_calculator...` stayed on the legacy backend-command path, and `!rm -rf /` was blocked.
+- Fixed a discovered ShellAI Core opt-in regression so slash commands (`/tool`, `/agent`, `/mcp`) continue using the existing backend-command UI path even when `SHELLAI_BACKEND_MODE=shellai_core`.
+- Improved blocked-command desktop copy from generic “ShellAI Core error” to “Blocked for safety”.
+- Captured visible UI screenshots under `/private/tmp`.
+
+### Changes Made
+- Updated `shell_ui/shell_cinematic_full.py`.
+- Updated `core/shellai_bridge.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Visible E2E UI report passed: `/private/tmp/shellai-full-ui-e2e/report.json`.
+- Visible tool audit report passed: `/private/tmp/shellai-full-tools-ui/report.json`.
+- Visible agents probe report passed: `/private/tmp/shellai-agents-ui/report.json`.
+- Mixed ShellAI Core/legacy command screenshot captured: `/private/tmp/shellai-core-mixed-ui/mixed_shellai_core.png`.
+- Full regression suite passed after the UI routing fix: `.codex_ui_venv/bin/python -m pytest -q` returned `466 passed, 1 warning`.
+
+### Next Steps
+1. Add a dedicated checked-in `tools/shellai_core_ui_probe.py` so this ShellAI Core bridge UI test is reusable.
+2. Add a real ASK approval UI flow instead of ending at `needs_confirmation`.
+3. Add a manual checklist for tests that require user-granted macOS Accessibility permissions.
+
+### Open Issues
+- macOS Accessibility permission is still not granted in this environment, so global input monitoring/mouse automation is unavailable.
+- Some catalog entries remain readiness-only by design: missing dependency, missing API key, Windows-only, experimental, or blocked-by-safety.
+
+## Session: 2026-05-20
+
+### Completed
+- Performed real UI-style validation of the ShellAI Core desktop bridge.
+- Tested the PyQt chat pipeline with `SHELLAI_BACKEND_MODE=shellai_core` using actual widgets: `!pwd`, `!rm missing-ui-probe.txt`, and `!rm -rf /`.
+- Verified `ShellAICoreWorker` completes without leaving `_waiting_reply` stuck or the worker running.
+- Verified ShellAI Core system log entries appear for `ok`, `needs_confirmation`, and `blocked` results.
+- Launched a visible PyQt window, sent `!pwd`, captured `/private/tmp/shellai-ui-visible/shellai_core_visible.png`, and verified the chat bubble showed `shell=ok`.
+- Tested `SHELLAI_BACKEND_MODE=classic` via the PyQt chat flow and verified the local classic reply path still works without ShellAI Core log entries.
+
+### Changes Made
+- Updated `SESSION_LOG.md` with UI validation results.
+
+### Current State
+- Offscreen widget-level ShellAI Core UI probe passed with `ok: true`.
+- Visible ShellAI Core UI launch/screenshot probe passed with `ok: true`.
+- Classic-mode UI smoke passed with `ok: true`.
+- Observed environment warnings are expected in this sandbox/macOS setup: Accessibility trust missing for global input monitoring, chat history home path not writable, and Shell-v2 bridge permission warning. These did not break chat UI or ShellAI Core routing.
+
+### Next Steps
+1. Add an approval UI for ASK-level commands so `needs_confirmation` can become an explicit user decision instead of a final status.
+2. Improve blocked-command desktop copy so BLOCK reads as a safety block rather than a generic “ShellAI Core error”.
+3. Add a reusable checked-in UI probe for ShellAI Core bridge regression testing.
+
+### Open Issues
+- Visible UI testing was automated through PyQt widgets and window screenshots, not manual mouse/keyboard interaction.
+- macOS Accessibility permission is still required for real global input/mouse automation.
+
+## Session: 2026-05-20
+
+### Completed
+- Implemented Phase 2.1 through Phase 2.8 for the `shellai` AI OS Fabric path.
+- Added `MemoryAgent` as the high-level wrapper over `MemoryStore` and `SkillManager`.
+- Added `AgentRuntime` for in-process fabric wiring across Coordinator, Shell, Safety, Memory, UI, and Optimizer agents.
+- Added `UIAgent` response shaping with CLI and desktop summary fields while preserving the existing `summary` field.
+- Added central policy loading/evaluation and JSONL audit logging for shell safety decisions.
+- Updated `ShellTool` and `SafetyAgent` to route shell risk decisions through policy + audit.
+- Added persisted trace snapshots and `shellai monitor`.
+- Added read-only `OptimizerAgent` suggestions and `shellai optimize`.
+- Added manual cron jobs and `shellai cron list/run`.
+- Added opt-in file-backed daemon queue and `shellai daemon start/stop/status/enqueue/process`.
+- Added Phase-2 tests covering memory context, runtime boundaries, UI summaries, policy/audit behavior, monitor redaction, optimizer suggestions, cron jobs, daemon queue behavior, and CLI surfaces.
+
+### Changes Made
+- Created `shellai/agents_memory.py`.
+- Created `shellai/agents_ui.py`.
+- Created `shellai/agents_optimizer.py`.
+- Created `shellai/fabric/__init__.py`.
+- Created `shellai/fabric/runtime.py`.
+- Created `shellai/policy.py`.
+- Created `shellai/monitor.py`.
+- Created `shellai/cron/__init__.py`.
+- Created `shellai/cron/runtime.py`.
+- Created `shellai/daemon.py`.
+- Updated `shellai/agent_loop.py`.
+- Updated `shellai/agents.py`.
+- Updated `shellai/tools/shell_tool.py`.
+- Updated `shellai/cli.py`.
+- Updated `tests/test_shellai_stage1.py` for the richer policy/audit trace.
+- Created `tests/test_shellai_phase2_memory_runtime_ui.py`.
+- Created `tests/test_shellai_phase2_policy_monitor_optimizer.py`.
+- Created `tests/test_shellai_phase2_cron_daemon.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- ShellAI Stage 1-8 + Phase 2 focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py tests/test_shellai_stage3_models.py tests/test_shellai_stage4_memory.py tests/test_shellai_stage5_skills.py tests/test_shellai_stage6_tools.py tests/test_shellai_stage7_agent_loop.py tests/test_shellai_stage8_api_bridge.py tests/test_shellai_phase2_memory_runtime_ui.py tests/test_shellai_phase2_policy_monitor_optimizer.py tests/test_shellai_phase2_cron_daemon.py -q` returned `45 passed`.
+- Full repository validation passed: `.codex_ui_venv/bin/python -m pytest -q` returned `466 passed, 1 warning`.
+- Syntax validation passed with `PYTHONPYCACHEPREFIX=/private/tmp/shell_pycache .codex_ui_venv/bin/python -m py_compile ...` for the updated Phase-2 modules and desktop bridge files.
+- CLI smoke checks passed for `doctor`, `run "!pwd" --json`, `skills list`, `monitor`, `optimize`, `cron list`, `cron run skill_usage_report --dry-run`, and opt-in daemon start/status/stop.
+- Safety smoke checks confirmed ASK commands return `needs_confirmation` without execution and BLOCK commands return `blocked`.
+- Desktop bridge smoke checks confirmed `SHELLAI_BACKEND_MODE=classic` returns the classic no-op bridge path and `SHELLAI_BACKEND_MODE=shellai_core` routes through ShellAI Core.
+
+### Next Steps
+1. Add a real desktop approval UI for ASK-level commands before enabling richer desktop automation.
+2. Add streaming/progress callbacks from AgentRuntime to the PyQt worker.
+3. Add richer context sources: active window, selected file/project, VS Code workspace, and ADB device state.
+4. Convert persisted traces/audit logs into a lightweight desktop diagnostics page once UX is ready.
+
+### Open Issues
+- Natural-language planning still requires a configured provider; explicit `!command` requests remain deterministic and provider-free.
+- Daemon mode is file-backed and manual; it does not run as a true background service yet.
+- Cron jobs are manual and conservative; memory maintenance currently marks/checks old rows rather than performing aggressive compression.
+- UIAgent formatting is deterministic by default; model-shaped summaries require `SHELLAI_UI_MODEL_SUMMARY=1`.
+
+## Session: 2026-05-20
+
+### Completed
+- Implemented Stage 8 desktop bridge for the new `shellai` core.
+- Added `shellai.api.run_shellai_task(...)` as a stable Python API for desktop, daemon, and future app callers.
+- Added structured API error responses for config/runtime/agent-loop failures instead of raw tracebacks.
+- Added `core.shellai_bridge` with `SHELLAI_BACKEND_MODE` feature flag support; default remains `classic`, opt-in is `shellai_core`.
+- Added a minimal `agent.py` bridge helper for callers that want to route a single request through the new core.
+- Added a PyQt worker path in `shell_ui/shell_cinematic_full.py` that runs ShellAI Core only when the feature flag is enabled and logs returned steps to the system log.
+- Added Stage 8 API and desktop bridge smoke tests.
+
+### Changes Made
+- Created `shellai/api.py`.
+- Created `core/shellai_bridge.py`.
+- Updated `agent.py`.
+- Updated `shell_ui/shell_cinematic_full.py`.
+- Created `tests/test_shellai_stage8_api_bridge.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Classic desktop behavior remains the default because `SHELLAI_BACKEND_MODE` defaults to `classic`.
+- Opt-in path: set `SHELLAI_BACKEND_MODE=shellai_core` and desktop chat requests route through `shellai.api.run_shellai_task(...)`.
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage8_api_bridge.py -q` returned `4 passed`.
+- Full ShellAI validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py tests/test_shellai_stage3_models.py tests/test_shellai_stage4_memory.py tests/test_shellai_stage5_skills.py tests/test_shellai_stage6_tools.py tests/test_shellai_stage7_agent_loop.py tests/test_shellai_stage8_api_bridge.py -q` returned `34 passed`.
+- Syntax validation passed with `PYTHONPYCACHEPREFIX=/private/tmp/shell_pycache .codex_ui_venv/bin/python -m py_compile shellai/api.py core/shellai_bridge.py agent.py shell_ui/shell_cinematic_full.py`.
+
+### Next Steps
+1. Add interactive approval UI for `ASK` shell commands before enabling broader desktop automation.
+2. Add streaming/progress callbacks from `run_shellai_task(...)` to the PyQt worker.
+3. Pass richer desktop context such as active window, selected files, and project metadata when those sources are stable.
+
+### Open Issues
+- Natural-language requests still require a configured planning provider; explicit `!command` requests can use the deterministic path without an LLM key.
+- ShellAI Core is non-streaming in Stage 8; the UI receives one final structured result.
+- `auto_approve_ask` is hard-coded to `False` for the desktop bridge until an approvals UI exists.
+
+## Session: 2026-05-20
+
+### Completed
+- Implemented Stage 7 core `shellai` agent loop.
+- Added `shellai/agent_loop.py` with context assembly, JSON plan validation, model planning, safety-aware tool execution, summarization fallback, memory save, and auto-skill draft creation.
+- Added `MessageKind.USER_REQUEST` and `create_user_request(...)` for future chat/UI/daemon callers.
+- Wired `shellai run` to the new agent loop while preserving the existing CLI command shape.
+- Added deterministic explicit-shell planning for prefixed requests like `!pwd` so safe local commands can run without an API key.
+- Added graceful fallback when the default `~/.shellai` runtime path is not writable in the sandbox.
+- Added focused tests covering safe shell execution, ASK-level command blocking, FileTool usage, auto-skill draft creation, and invalid planning JSON.
+
+### Changes Made
+- Created `shellai/agent_loop.py`.
+- Updated `shellai/protocol.py`.
+- Updated `shellai/cli.py`.
+- Updated `tests/test_shellai_stage1.py` for the Stage 7 execution response shape.
+- Created `tests/test_shellai_stage7_agent_loop.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py tests/test_shellai_stage3_models.py tests/test_shellai_stage4_memory.py tests/test_shellai_stage5_skills.py tests/test_shellai_stage6_tools.py tests/test_shellai_stage7_agent_loop.py -q` returned `30 passed`.
+- `SHELLAI_CONFIG=/private/tmp/shellai-stage7-smoke/config.json .codex_ui_venv/bin/python -m shellai run '!pwd' --json` executes safely and writes conversation memory.
+- Default `.codex_ui_venv/bin/python -m shellai run '!pwd' --json` executes safely and returns a warning when `/Users/m1/.shellai` is not writable instead of failing.
+
+### Next Steps
+1. Stage 8: extend CLI surfaces around the new loop without adding daemon behavior yet.
+2. Add interactive approval wiring for `ASK` steps when implementing richer chat/TUI flows.
+3. Connect desktop Shell/PyQt callers to `run_agent_task(...)` once the CLI path is stable.
+
+### Open Issues
+- Natural-language planning still requires a configured provider; missing keys produce structured planning errors.
+- Summarization falls back to deterministic summaries when no provider key is available.
+- Logs currently appear on stderr during CLI runs; JSON payload remains the structured response.
+
+## Session: 2026-05-20
+
+### Completed
+- Implemented Stage 5 skills framework with JSON v1 schema, validation, discovery, creation, deletion, auto-draft creation, and SkillMemory registration.
+- Wired `shellai skills list` and `shellai skills show <id>` to the file-backed skill manager.
+- Implemented Stage 6 tool system with typed `ToolRequest` / `ToolResult`, `ShellTool`, `FileTool`, `OSTool`, and `ToolRegistry`.
+- Connected `ShellTool` to the existing `SAFE` / `ASK` / `BLOCK` risk policy with dry-run and approval behavior.
+- Added trace hooks for skill and tool operations.
+- Added tests for skill validation, skill discovery/fetching, auto-skill drafts, SkillMemory usage tracking, shell risk behavior, file operations, OS helpers, and registry lookup.
+- Made `shellai skills list` degrade cleanly when the default home runtime path is not writable under the current sandbox.
+
+### Changes Made
+- Created `shellai/skills/__init__.py`.
+- Created `shellai/skills/schema.py`.
+- Created `shellai/skills/manager.py`.
+- Created `shellai/tools/__init__.py`.
+- Created `shellai/tools/base.py`.
+- Created `shellai/tools/shell_tool.py`.
+- Created `shellai/tools/file_tool.py`.
+- Created `shellai/tools/os_tool.py`.
+- Created `shellai/tools/registry.py`.
+- Updated `shellai/cli.py`.
+- Created `tests/test_shellai_stage5_skills.py`.
+- Created `tests/test_shellai_stage6_tools.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py tests/test_shellai_stage3_models.py tests/test_shellai_stage4_memory.py tests/test_shellai_stage5_skills.py tests/test_shellai_stage6_tools.py -q` returned `25 passed`.
+- `SHELLAI_CONFIG=/private/tmp/shellai-smoke/config.json .codex_ui_venv/bin/python -m shellai skills list` returns an empty skill list successfully.
+- Default `shellai skills list` cannot write `/Users/m1/.shellai` in this sandbox, but now returns a structured JSON error instead of a traceback.
+
+### Next Steps
+1. Stage 7: implement the agent loop that composes memory retrieval, model routing, skills, safety, and tools.
+2. Connect `ShellAgent` to `ToolRegistry` through `SafetyAgent` approval decisions.
+3. Add examples under the runtime/manual skills path or repo examples when packaging docs are updated.
+
+### Open Issues
+- Full CLI skill storage under `~/.shellai` needs a writable user home or `SHELLAI_CONFIG` override in this sandbox.
+- Auto-skill creation is deterministic but not yet connected to successful agent task completion; that belongs in Stage 7+.
+- `OSTool.open_path` remains a platform-specific stub by design.
+
+## Session: 2026-05-20
+
+### Completed
+- Implemented Stage 3 model provider abstraction for the new `shellai` package.
+- Added a `ModelProvider` interface, `ModelRouter`, OpenAI-compatible HTTP provider, and Ollama provider.
+- Added model diagnostics for missing API keys and surfaced them through `shellai doctor`.
+- Implemented Stage 4 SQLite memory system with conversation, user profile, and skill memory tables.
+- Added a `MemoryStore` facade with save/search/profile/skill APIs and request-trace hooks.
+- Added focused tests for model routing, missing-key diagnostics, fake provider injection, SQLite initialization, memory save/search, user profile upsert, and skill usage tracking.
+- Fixed a Python 3.9 compatibility issue in the model type alias after validation exposed it.
+
+### Changes Made
+- Created `shellai/models/__init__.py`.
+- Created `shellai/models/base.py`.
+- Created `shellai/models/router.py`.
+- Created `shellai/models/openai_compatible.py`.
+- Created `shellai/models/ollama.py`.
+- Created `shellai/memory/__init__.py`.
+- Created `shellai/memory/store.py`.
+- Updated `shellai/cli.py`.
+- Created `tests/test_shellai_stage3_models.py`.
+- Created `tests/test_shellai_stage4_memory.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- `shellai doctor` reports model-router diagnostics for OpenAI, OpenRouter, and Ollama.
+- Missing API keys are reported as diagnostics instead of hard crashes.
+- Memory DB schema initializes safely with `CREATE TABLE IF NOT EXISTS`.
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py tests/test_shellai_stage3_models.py tests/test_shellai_stage4_memory.py -q` returned `15 passed`.
+
+### Next Steps
+1. Stage 5: implement the skills framework on top of `SkillMemory`.
+2. Stage 6: connect tool interfaces to the risk policy and trace system.
+3. Later Phase 2: introduce `MemoryAgent` as a thin caller of `MemoryStore`, then add summarization/embedding.
+
+### Open Issues
+- No real provider calls were made during validation; tests use diagnostics and a fake provider.
+- Embeddings are intentionally left as an interface hook for future memory search.
+- Command execution remains disabled in the new `shellai` path by design.
+
+## Session: 2026-05-20
+
+### Completed
+- Reviewed the Stage 1 `shellai` package and preserved its public behavior.
+- Added a lightweight future-aware agent protocol for later AI OS Fabric work.
+- Upgraded Stage 2 config with typed runtime paths, provider backend settings, env fallback, and per-role model lookup.
+- Added future-agent model role mapping for `CoordinatorAgent`, `ShellAgent`, `SafetyAgent`, `MemoryAgent`, `OptimizerAgent`, and `UIAgent`.
+- Expanded default tool priorities for Git, Python, Node, browser, Android/ADB, and VS Code while keeping Linux/Windows first.
+- Updated CLI doctor output to include paths, provider diagnostics, agent model roles, and active provider readiness.
+- Added focused tests for config env fallback, config persistence, future agent role mapping, and trace-ready agent messages.
+
+### Changes Made
+- Created `shellai/protocol.py`.
+- Updated `shellai/agents.py`.
+- Updated `shellai/config.py`.
+- Updated `shellai/cli.py`.
+- Created `tests/test_shellai_stage2_config.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Stage 1 CLI behavior remains compatible.
+- `shellai doctor` now reports active provider diagnostics, config/data/log/skill paths, model roles, and future agent model mappings.
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py tests/test_shellai_stage2_config.py -q` returned `8 passed`.
+- CLI smoke checks passed for `shellai doctor` and `shellai run '!git status' --json`.
+
+### Next Steps
+1. Stage 3: add model provider abstraction using the Stage 2 provider backend config.
+2. Keep provider implementations thin: OpenAI-compatible first, then Ollama.
+3. Keep future Phase-2 agents dormant until memory, skills, tools, and daemon stages exist.
+
+### Open Issues
+- The shell environment still lacks a `python` binary; validation used `.codex_ui_venv/bin/python`.
+- No command execution or full multi-agent routing was added in Stage 2 by design.
+
+## Session: 2026-05-20
+
+### Completed
+- Refined the 10-stage ShellAI next-generation controller plan with in-process `CoordinatorAgent`, `ShellAgent`, and `SafetyAgent` roles.
+- Added Stage 1 architecture foundations for a new additive `shellai` package.
+- Added central logging and a process-local in-memory request trace store.
+- Added a configurable shell command risk policy with `SAFE`, `ASK`, and `BLOCK` levels.
+- Added default user profile context for an India-based power-user developer using mixed Hindi/English, with Marathi/Urdu support.
+- Added focused Stage 1 tests and smoke-checked the CLI.
+
+### Changes Made
+- Created `shellai/__init__.py`.
+- Created `shellai/__main__.py`.
+- Created `shellai/observability.py`.
+- Created `shellai/config.py`.
+- Created `shellai/safety.py`.
+- Created `shellai/agents.py`.
+- Created `shellai/cli.py`.
+- Created `tests/test_shellai_stage1.py`.
+
+### Current State
+- `shellai doctor` works and reports provider/model defaults, tool switches, risk policy default, and the India/Hinglish dev profile.
+- `shellai run '!git status' --json` produces a `SAFE` risk decision and a four-step trace: coordinator receive, shell proposal, safety classification, coordinator completion.
+- Focused validation passed: `.codex_ui_venv/bin/python -m pytest tests/test_shellai_stage1.py -q` returned `4 passed`.
+
+### Next Steps
+1. Stage 2: persist config with setup wizard behavior and richer tool/model defaults for Linux + Windows first.
+2. Stage 3: add model provider interfaces for OpenAI-compatible endpoints and Ollama.
+3. Stage 4: add SQLite memory layers for conversation, user profile, and skills.
+
+### Open Issues
+- The shell environment does not expose a `python` binary; validation used `.codex_ui_venv/bin/python`.
+- Stage 1 does not execute commands yet. It only classifies and traces requests.
+
 ## Session: 2026-05-17
 
 ### Completed

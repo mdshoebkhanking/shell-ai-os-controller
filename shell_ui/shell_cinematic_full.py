@@ -793,6 +793,77 @@ class ShellActionExecutor:
             return f"Tool error: {e}"
 
 
+class ShellAICoreWorker(QThread):
+    """Runs one request through the new shellai core behind a feature flag."""
+    reply_ready = pyqtSignal(str)
+    reply_error = pyqtSignal(str)
+    chunk_received = pyqtSignal(str)
+    stream_done = pyqtSignal()
+    latency_event = pyqtSignal(str, object)
+    result_ready = pyqtSignal(object)
+
+    def __init__(self, message: str, history=None, context=None, parent=None):
+        super().__init__(parent)
+        self._message = message
+        self._history = history or []
+        self._context = dict(context or {})
+        self._cancel_requested = False
+
+    def requestInterruption(self):
+        self._cancel_requested = True
+        try:
+            super().requestInterruption()
+        except Exception:
+            pass
+
+    def _emit_latency(self, event: str, started: float, **payload):
+        try:
+            payload["elapsed_ms"] = round((_time.perf_counter() - started) * 1000.0, 2)
+            self.latency_event.emit(event, payload)
+        except Exception:
+            pass
+
+    def run(self):
+        started = _time.perf_counter()
+        try:
+            if self._cancel_requested:
+                self._emit_latency("shellai_core_cancelled", started)
+                return
+            from core.shellai_bridge import (
+                format_shellai_reply,
+                handle_user_request as _handle_shellai_core,
+            )
+
+            context = dict(self._context)
+            if self._history:
+                context["history_tail"] = [
+                    {"role": role, "text": text}
+                    for role, text in self._history[-10:]
+                ]
+            result = _handle_shellai_core(
+                self._message,
+                context=context,
+                auto_approve_ask=False,
+            )
+            if self._cancel_requested:
+                self._emit_latency("shellai_core_cancelled", started)
+                return
+            if result is None:
+                self.reply_error.emit("ShellAI Core backend is not enabled")
+                return
+            self.result_ready.emit(result)
+            reply = format_shellai_reply(result)
+            self._emit_latency(
+                "shellai_core_done",
+                started,
+                status=result.get("status") if isinstance(result, dict) else "unknown",
+            )
+            self.reply_ready.emit(reply)
+        except Exception as exc:
+            self._emit_latency("shellai_core_exception", started, error=str(exc)[:180])
+            self.reply_error.emit(f"ShellAI Core error: {exc}")
+
+
 class ShellV2Worker(QThread):
     """Posts the user's text to the Shell-v2 brain at /api/say and emits the reply.
 
@@ -13280,7 +13351,17 @@ class ShellHoloUI(QMainWindow):
 
     def _on_chat_send(self, text):
         fast_reply = self._fast_local_reply_candidate(text)
-        if fast_reply is None and self._try_run_backend_command(text, origin="chat", record_user=True):
+        shellai_core_mode = False
+        if fast_reply is None:
+            try:
+                from core.shellai_bridge import shellai_core_enabled
+                shellai_core_mode = shellai_core_enabled()
+            except Exception as _e:
+                logger.debug("shellai core feature flag check failed: %s", _e)
+                shellai_core_mode = False
+        raw_text = str(text or "").strip()
+        existing_backend_command = raw_text.startswith("/")
+        if fast_reply is None and (existing_backend_command or not shellai_core_mode) and self._try_run_backend_command(text, origin="chat", record_user=True):
             return
 
         # Track in chat history
@@ -13307,6 +13388,9 @@ class ShellHoloUI(QMainWindow):
         self.chat_page.set_thinking(True)
         if self.orb:
             self.orb.set_thinking(True)
+
+        if fast_reply is None and shellai_core_mode and self._start_shellai_core_worker(text):
+            return
 
         # Try sending to SocketIO backend too. Extend the payload with
         # a `files` field when the user staged attachments via drag-drop
@@ -13355,6 +13439,72 @@ class ShellHoloUI(QMainWindow):
         self._streaming_text = ""
         self._stream_bubble = None
         self._ai_worker.start()
+
+    def _start_shellai_core_worker(self, text):
+        try:
+            from core.shellai_bridge import build_desktop_context
+        except Exception as exc:
+            logger.debug("shellai core bridge import failed: %s", exc)
+            return False
+
+        try:
+            if hasattr(self, '_ai_worker') and self._ai_worker and self._ai_worker.isRunning():
+                try:
+                    self._ai_worker.requestInterruption()
+                except Exception:
+                    pass
+                for signal_name in (
+                    "reply_ready",
+                    "reply_error",
+                    "chunk_received",
+                    "stream_done",
+                    "latency_event",
+                    "result_ready",
+                ):
+                    try:
+                        getattr(self._ai_worker, signal_name).disconnect()
+                    except Exception:
+                        pass
+        except Exception as _e:
+            logger.debug("shellai core previous worker cleanup failed: %s", _e)
+
+        context = build_desktop_context({
+            "cwd": os.getcwd(),
+            "platform": sys.platform,
+        })
+        self._ai_worker = ShellAICoreWorker(text, history=self._chat_history, context=context, parent=self)
+        self._ai_worker.reply_ready.connect(self._on_ai_reply)
+        self._ai_worker.reply_error.connect(self._on_ai_error)
+        self._ai_worker.latency_event.connect(self._on_ai_latency_event)
+        self._ai_worker.result_ready.connect(self._on_shellai_core_result)
+        self._streaming_text = ""
+        self._stream_bubble = None
+        try:
+            self.system_page.add_log_entry("ShellAI Core", "request started", "PROCESSING")
+        except Exception as _e:
+            logger.debug("shellai core log start failed: %s", _e)
+        self._ai_worker.start()
+        return True
+
+    def _on_shellai_core_result(self, result):
+        try:
+            if not isinstance(result, dict):
+                self.system_page.add_log_entry("ShellAI Core", "non-structured result", "ERROR")
+                return
+            status = str(result.get("status") or "unknown")
+            self.system_page.add_log_entry("ShellAI Core", f"status={status}", "SUCCESS" if status == "ok" else "INFO")
+            for step in (result.get("steps") or [])[:8]:
+                if not isinstance(step, dict):
+                    continue
+                metadata = step.get("metadata") if isinstance(step.get("metadata"), dict) else {}
+                command = metadata.get("command") or step.get("description") or ""
+                self.system_page.add_log_entry(
+                    "ShellAI Core Step",
+                    f"{step.get('tool')} {step.get('status')}: {command}",
+                    "SUCCESS" if step.get("status") == "ok" else "INFO",
+                )
+        except Exception as exc:
+            logger.debug("shellai core result logging failed: %s", exc)
 
     def _on_ai_latency_event(self, event, payload):
         try:
