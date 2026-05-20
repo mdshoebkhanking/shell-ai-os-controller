@@ -1,6 +1,37 @@
 ## Session: 2026-05-20
 
 ### Completed
+- Updated the public repository documentation to match the current ShellAI Core / AI OS Fabric state on `main`.
+- Added a dedicated ShellAI Core and AI OS Fabric guide covering CLI usage, runtime layout, desktop feature flag, model routing, safety policy, and current limitations.
+- Updated README, architecture docs, developer docs, roadmap, and `.env.example` with current ShellAI CLI, provider, memory, skills, monitor, cron, daemon, and desktop bridge details.
+
+### Changes Made
+- Updated `README.md`.
+- Updated `ARCHITECTURE.md`.
+- Added `docs/SHELLAI_FABRIC.md`.
+- Updated `docs/README.md`.
+- Updated `docs/ARCHITECTURE_GUIDE.md`.
+- Updated `docs/DEVELOPER_GUIDE.md`.
+- Updated `docs/ROADMAP.md`.
+- Updated `.env.example`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- The repo now documents both the classic desktop Shell path and the opt-in ShellAI Core backend path.
+- ShellAI Core remains feature-flagged through `SHELLAI_BACKEND_MODE=shellai_core`; classic behavior remains the default.
+
+### Next Steps
+1. Run documentation diff checks and regression tests.
+2. Commit the documentation refresh.
+3. Push the updated `main` branch to GitHub.
+
+### Open Issues
+- The local Python runtime still emits the known LibreSSL/urllib3 warning during tests.
+- ASK-level ShellAI Core commands still need a real desktop approval UI.
+
+## Session: 2026-05-20
+
+### Completed
 - Prepared the ShellAI Phase 2 + desktop bridge changes for GitHub publishing.
 - Verified the correct nested Git repository and remote: `origin` -> `https://github.com/mdshoebkhanking/shell-ai-os-controller.git`.
 - Reviewed the worktree before staging to avoid publishing unrelated temporary files.

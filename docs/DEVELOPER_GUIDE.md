@@ -32,6 +32,12 @@ python -m pytest -q
 ## Important Commands
 
 ```bash
+python -m shellai doctor
+python -m shellai run "!pwd" --json
+python -m shellai skills list
+python -m shellai monitor --limit 10
+python -m shellai optimize
+python -m shellai cron list
 python tools/repo_audit.py
 python tools/production_release_check.py --strict
 python tools/package_public_release.py
@@ -54,10 +60,24 @@ python -m pytest -q
 | --- | --- |
 | UI | `shell_ui/` |
 | Agent runtime | `agent.py`, `brain/`, `core/` |
+| ShellAI Core | `shellai/`, `core/shellai_bridge.py`, `tests/test_shellai_*.py` |
 | Tool execution | `shell_tool_gateway.py`, `shell_safe_executor.py` |
 | Telegram | `shell_telegram.py` |
 | Installer | `installer/`, `ONE_CLICK_INSTALL.*`, `Start_ShellAI.bat` |
 | Release | `tools/package_public_release.py`, `tools/production_readiness.py` |
+
+## ShellAI Core Development
+
+Classic desktop behavior is the default. Use this flag only when testing the
+new backend path:
+
+```bash
+SHELLAI_BACKEND_MODE=shellai_core python launch.py
+```
+
+Use `SHELLAI_CONFIG=/tmp/shellai-test/config.json` in tests or manual probes to
+avoid writing to your real `~/.shellai` runtime. ShellAI Core should return
+structured errors instead of raw tracebacks so the desktop UI can stay alive.
 
 ## Pull Request Flow
 

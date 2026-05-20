@@ -11,6 +11,7 @@ This folder contains the public documentation system for Shell AI OS Controller.
 - [Beginner install guide](INSTALL_BEGINNER.md)
 - [Developer guide](DEVELOPER_GUIDE.md)
 - [Architecture guide](ARCHITECTURE_GUIDE.md)
+- [ShellAI Core and AI OS Fabric](SHELLAI_FABRIC.md)
 - [API and tool guide](API_GUIDE.md)
 - [Troubleshooting](TROUBLESHOOTING.md)
 - [FAQ](FAQ.md)

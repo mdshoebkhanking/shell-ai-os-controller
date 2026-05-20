@@ -17,7 +17,7 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-111827.svg">
-  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776AB.svg">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.9%2B-3776AB.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0F172A.svg">
   <img alt="Status" src="https://img.shields.io/badge/status-validation--gated-16A34A.svg">
 </p>
@@ -47,6 +47,13 @@ Shell AI OS Controller is a Python desktop assistant and automation platform
 that connects a modern PyQt UI with AI providers, voice, local tools, desktop
 automation, Telegram, email, browser control, and structured runtime
 diagnostics.
+
+The current repo also includes **ShellAI Core**, a safe opt-in AI OS controller
+backend with a CLI, model router, SQLite memory, reusable skills, tool
+registry, policy/audit layer, trace monitor, optimizer suggestions, manual
+cron jobs, and a minimal daemon queue. The desktop app keeps the classic
+backend by default and can route through ShellAI Core with
+`SHELLAI_BACKEND_MODE=shellai_core`.
 
 It is not an operating system replacement, not a custom AGI model, and not a
 self-aware system. It is a practical AI-native desktop control layer designed
@@ -101,6 +108,9 @@ Shell is designed around visible confidence:
 | Media | Image generation, QR tools, PDF tools, YouTube summaries, OCR hooks |
 | Runtime | Health checks, readiness states, logs, production release gates |
 | Installer | One-click Windows bootstrap plus macOS/Linux launch helpers |
+| ShellAI Core | `python -m shellai` CLI, agent loop, model routing, memory, skills, tools, monitor, cron, daemon |
+| AI OS Fabric | Coordinator/Shell/Safety/Memory/UI/Optimizer agents wired in-process behind stable APIs |
+| Safety | SAFE/ASK/BLOCK shell policy, dry-run behavior, audit logs, blocked destructive commands |
 
 ## Screenshots
 
@@ -171,9 +181,18 @@ High-level flow:
 User
   -> PyQt UI / Voice / Telegram
   -> Shell Hub + Runtime State
-  -> Agent + Planner + Tool Gateway
+  -> Classic Agent + Tool Gateway
   -> Local Tools / APIs / Desktop Automation / Browser Automation
   -> Structured Result + Logs + UI Update
+
+Optional ShellAI Core path:
+
+User / CLI / Desktop feature flag
+  -> ShellAI API
+  -> AgentRuntime + CoordinatorAgent
+  -> MemoryAgent + ModelRouter + SafetyAgent
+  -> ToolRegistry / ShellTool / FileTool / OSTool
+  -> Trace + SQLite memory + UI summary
 ```
 
 ## Folder Structure
@@ -181,7 +200,9 @@ User
 ```text
 .
 ├── agent.py                         # Main AI agent runtime
+├── shellai/                         # ShellAI Core CLI, agent loop, fabric, memory, skills, tools
 ├── shell_ui/                        # PyQt desktop interface
+├── core/shellai_bridge.py           # Feature-flagged desktop bridge to ShellAI Core
 ├── shell_tool_gateway.py            # Tool execution gateway
 ├── shell_telegram.py                # Telegram bot integration
 ├── shell_windows_mcp.py             # CursorTouch Windows-MCP bridge
@@ -259,6 +280,7 @@ For a detailed beginner guide, see [docs/INSTALL_BEGINNER.md](docs/INSTALL_BEGIN
 - [Beginner install guide](docs/INSTALL_BEGINNER.md)
 - [Developer guide](docs/DEVELOPER_GUIDE.md)
 - [Architecture guide](docs/ARCHITECTURE_GUIDE.md)
+- [ShellAI Core and AI OS Fabric](docs/SHELLAI_FABRIC.md)
 - [API and tool guide](docs/API_GUIDE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
 - [FAQ](docs/FAQ.md)
@@ -329,9 +351,34 @@ Required for full voice mode:
 Optional features need their own API keys or dependencies. Missing optional
 providers should produce clear readiness messages instead of crashing the app.
 
+ShellAI Core CLI:
+
+```bash
+python -m shellai doctor
+python -m shellai run "!pwd" --json
+python -m shellai skills list
+python -m shellai monitor
+python -m shellai optimize
+python -m shellai cron list
+python -m shellai daemon status
+```
+
+Desktop ShellAI Core bridge is opt-in:
+
+```bash
+SHELLAI_BACKEND_MODE=shellai_core python launch.py
+```
+
+Keep `SHELLAI_BACKEND_MODE=classic` or unset for the existing desktop behavior.
+
 ## Common Commands
 
 ```bash
+python3 -m shellai doctor
+python3 -m shellai run "!pwd" --json
+python3 -m shellai monitor --limit 10
+python3 -m shellai optimize
+python3 -m shellai cron run skill_usage_report --dry-run
 python3 tools/production_release_check.py --strict
 python3 tools/package_public_release.py
 python3 tools/production_readiness.py --run-tests
@@ -383,6 +430,10 @@ No. Users must provide their own keys in `.env`. Never commit `.env`.
 
 ## Roadmap
 
+- [ ] Add interactive approvals UI for ShellAI Core ASK-level commands.
+- [ ] Add reusable checked-in visible UI probe for the ShellAI Core bridge.
+- [ ] Add richer ADB, VS Code, git, and browser tool adapters to ShellAI Core.
+- [ ] Add OpenSSL-backed Python runtime guidance to remove local LibreSSL urllib3 warnings.
 - [ ] Improve first-run setup wizard and diagnostics UX.
 - [ ] Add signed installers and macOS notarization.
 - [ ] Add official documentation website.

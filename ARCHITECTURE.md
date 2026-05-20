@@ -33,8 +33,64 @@ Shell is three layers glued together:
      pywin32)              aiohttp)                      OpenWeather, etc.)
 ```
 
-The **only** AI running is hosted Gemini. Everything else is a Python
-program deciding what to execute.
+The classic voice path uses hosted Gemini through LiveKit. The newer
+ShellAI Core path can route planning/summarization calls through
+OpenAI-compatible providers, OpenRouter, or local Ollama depending on
+`~/.shellai/config.json` and environment variables. Everything else is a
+Python program deciding what to execute under policy and tool gates.
+
+---
+
+## ShellAI Core and AI OS Fabric
+
+ShellAI Core is the opt-in backend brain added for shell and desktop OS
+automation. It is intentionally separate from the classic desktop behavior so
+the PyQt app can keep working while the new agent loop matures.
+
+```
+CLI / Desktop bridge / future daemon
+        │
+        ▼
+shellai.api.run_shellai_task()
+        │
+        ▼
+AgentRuntime
+        │
+        ├─ CoordinatorAgent  ── planning JSON and request orchestration
+        ├─ ShellAgent        ── shell/file/os tool execution boundary
+        ├─ SafetyAgent       ── SAFE / ASK / BLOCK policy and audit decisions
+        ├─ MemoryAgent       ── profile, conversation memory, relevant skills
+        ├─ UIAgent           ── CLI/desktop summary shaping
+        └─ OptimizerAgent    ── read-only suggestions from traces and skills
+        │
+        ▼
+ModelRouter + MemoryStore + SkillManager + ToolRegistry
+        │
+        ▼
+SQLite memory, JSON skills, trace snapshots, shell/file/os results
+```
+
+Important boundaries:
+
+- `shellai/agent_loop.py` remains the stable single-request loop.
+- `shellai/fabric/runtime.py` wires agents in-process only; there is no
+  network bus or autonomous self-improvement loop.
+- `core/shellai_bridge.py` is the desktop feature flag boundary. It returns
+  `None` when `SHELLAI_BACKEND_MODE` is unset or `classic`, so existing PyQt
+  flows continue unchanged.
+- `shellai/policy.py` and `shellai/safety.py` decide shell risk classes before
+  `ShellTool` executes anything.
+- `shellai/monitor.py` persists compact trace snapshots for CLI inspection.
+
+Runtime storage defaults:
+
+| Data | Default path |
+|---|---|
+| Config | `~/.shellai/config.json` or `SHELLAI_CONFIG` |
+| SQLite memory | `~/.shellai/data/memory.sqlite3` |
+| Skills | `~/.shellai/skills/manual` and `~/.shellai/skills/auto` |
+| Traces | `~/.shellai/traces` |
+| Logs | `~/.shellai/logs` |
 
 ---
 
@@ -66,7 +122,9 @@ Shell. Shell's job is only:
 
 | File | Role |
 |---|---|
-| `agent.py` | Central orchestrator. 1946 lines; contains the `Assistant` class, session handlers, and the full `tools_list`. Slated for refactor. |
+| `agent.py` | Central classic orchestrator. Contains the `Assistant` class, session handlers, and the full `tools_list`. Slated for continued extraction behind stable interfaces. |
+| `shellai/` | New opt-in ShellAI Core package: CLI, agent loop, fabric runtime, models, memory, skills, tools, monitor, cron, daemon. |
+| `core/shellai_bridge.py` | Feature-flagged desktop bridge from PyQt/agent callers into ShellAI Core. Defaults to classic behavior. |
 | `shell_voice.py` | Single source of truth for voice + persona. Exposes resolver, catalog of 30 Gemini voices, 6 personas, runtime switcher, session registration. |
 | `shell_safety_gate.py` | Gates the dangerous "write LLM code to disk" operations. Refuses by default unless `SHELL_ALLOW_CODE_WRITE` / `SHELL_ALLOW_AGENT_PATCH` is set. Appends audit log. |
 | `shell_config.py` | `.env` loader + typed getters. Grouped properties (`config.voice`, `config.email`, `config.vad`). |
@@ -109,6 +167,9 @@ functions into `agent.py`'s `tools_list`.
 | `brain/memory_core.py` | Sentence-transformer-backed JSON memory store |
 | `brain/predictive_engine.py` | scikit-learn classifier that guesses user's next action from logs |
 | `shell_knowledge.py` | Plain-text knowledge facts + learn-from-file helpers |
+| `shellai/memory/store.py` | SQLite-backed ShellAI Core memory facade for conversation, user profile, skill metadata, and audit records. |
+| `shellai/skills/manager.py` | JSON skill loader/manager plus deterministic auto-skill drafts for reusable workflows. |
+| `shellai/models/router.py` | Provider/model-role resolver for planning, command generation, and summarization. |
 
 ### Advanced / honest-but-gated
 
@@ -127,6 +188,7 @@ functions into `agent.py`'s `tools_list`.
 | `shell_windows_mcp.py` | CursorTouch Windows-MCP stdio adapter. Exposes real MCP desktop tools (`Click`, `Type`, `Screenshot`, `Snapshot`, `App`, `Shell`, etc.) to UI/chat. |
 | `mcp_server.py` / `shell_mcp_server.py` | Legacy HTTP JSON-action server kept for compatibility. It is no longer the UI's MCP surface. |
 | `shell_ui/shell_cinematic_full.py` | PyQt6 "glass" UI — animated orb, states, captions. Connects to hub via Socket.IO. |
+| `ShellAICoreWorker` in `shell_ui/shell_cinematic_full.py` | Optional worker that routes chat text through ShellAI Core when `SHELLAI_BACKEND_MODE=shellai_core`. Slash commands still use the classic backend-command path. |
 | `shell_ui/shell_orb_*.py` | Orb renderer variants (OpenGL, particle, pygame). |
 | `launch.py` / `launch_ui.pyw` | UI entry points. |
 | `start_shell.bat` | One-batch launcher (hub → MCP → agent → UI, each in its own terminal). |
@@ -259,16 +321,21 @@ Removed in the April 2026 cleanup: beautifulsoup4, colorama.
 | File | Focus | Count |
 |---|---|---|
 | `tests/test_security_regressions.py` | Downloader SSRF/path safety, workflow gates, env redaction | 4 |
+| `tests/test_shellai_stage*.py` | ShellAI Core stages: config, models, memory, skills, tools, agent loop, desktop API bridge | 45+ |
+| `tests/test_shellai_phase2_*.py` | AI OS Fabric wrappers, policy/monitor/optimizer, cron, daemon | 20+ |
 
-All tests run offline. Run: `pytest` (uses `pytest.ini`).
+All tests run offline. Run: `pytest` (uses `pytest.ini`). The latest full local
+run in this workspace passed with `466 passed, 1 warning`; the warning is the
+local Python/LibreSSL `urllib3` compatibility warning, not an app failure.
 
 ---
 
 ## Known architectural debts
 
-1. **agent.py is monolithic** — 2000+ lines in one file, one class, one
-   `__init__`. Planned split into decorator-driven auto-discovery where
-   each tool module self-registers.
+1. **agent.py is still monolithic** — one large classic entry point still
+   owns LiveKit session wiring and tool registration. ShellAI Core is the new
+   extraction boundary, but the classic path still needs gradual split-out into
+   stable modules.
 2. **Legacy HTTP MCP naming remains.** The active UI/chat MCP surface is
    CursorTouch Windows-MCP, but old compatibility files still need a future
    rename to `shell_http_api.py`.
