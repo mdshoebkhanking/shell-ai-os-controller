@@ -34,7 +34,7 @@
 - Ran focused chart/transcript UI probe and backend bridge regressions to verify calculator commands, chart prompts, clear button behavior, and previous-task recall.
 - Added and ran a real UI chart/tools/Gallery/animation probe covering calculator, unit conversion, hash, base64, tools-list routing, Gallery save/render, and CSS animation runtime.
 - Pushed Shell Web UI and OS-control integration to GitHub on `main`.
-- Investigated the pushed commit checks, fixed GitHub Actions Web UI build setup for CI/security jobs, corrected GitHub author identity for future commits, and raised the CYBER_NEON subtle text contrast above the audit threshold.
+- Investigated the pushed commit checks, fixed GitHub Actions Web UI build setup plus CI Python health-check wiring for CI/security jobs, corrected GitHub author identity for future commits, and raised the CYBER_NEON subtle text contrast above the audit threshold.
 
 ### Changes Made
 - Added `/Users/m1/.codex/skills/shell-ai-workflow/SKILL.md`, `references/project-map.md`, `scripts/project_snapshot.py`, and `agents/openai.yaml`.
@@ -83,6 +83,7 @@
   - `animate-in fade-in zoom-in duration-300` resolves to the `shell-enter` animation at runtime
 - Regression tests passed: `66` base backend/router/voice tests, `43` performance/runtime tests, and `40` focused bridge/chart/router/import tests.
 - Latest commit health check found GitHub author metadata on the previous push was not linked to the `mdshoebkhanking` account; local git config now uses `mdshoebkhanking <255382462+mdshoebkhanking@users.noreply.github.com>`.
+- GitHub Security secret-pattern job exposed that CI runners do not have `.shellai_venv`; workflows now export `SHELLAI_VENV_DIR` to the active setup-python environment after installing CI requirements.
 - Local verification after the CI fix: `npm run build` passed, `tools/production_release_check.py --strict` passed, `tests/test_phase6_ui_ux.py` passed, and focused bridge/router/image tests passed (`38 passed`).
 - GitHub Actions fix is staged as a follow-up commit candidate; local worktree still has three unrelated unstaged deletions that were intentionally not pushed.
 - Latest targeted regression passed: `45 passed, 1 warning`.
