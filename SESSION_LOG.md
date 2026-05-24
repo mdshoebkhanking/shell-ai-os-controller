@@ -1,6 +1,14 @@
 ## Session: 2026-05-24
 
 ### Completed
+- Built the new primary public media set requested for the current Shell UI:
+  English 16:9 landscape video, landscape poster, and SVG "photo" showcase.
+- Added current SVG visuals for dashboard, chat/chart, voice/tools, tools
+  control, settings/API/Telegram, Gallery/media, and runtime architecture.
+- Added Remotion `ShellCurrentUiLandscape` at 1920x1080 and rendered the MP4.
+- Promoted the landscape demo and current SVG showcase across README, media
+  kit, screenshots docs, videos docs, public release docs, screenshot strategy,
+  current repo status, changelog, and session log.
 - Refreshed the public repository positioning for the current Shell Web UI + PyQt WebEngine architecture.
 - Updated README, architecture docs, public release notes, performance notes, current E2E audit, media documentation, screenshot documentation, and changelog.
 - Added a current repository status page and a media kit for screenshots, videos, brand assets, and capture standards.
@@ -10,6 +18,14 @@
 - Fixed the follow-up GitHub CI public launch failure by restoring the README reference to `videos/shell-launch-demo-poster.png` while keeping the new current Web UI demo primary.
 
 ### Changes Made
+- Added `screenshots/current/dashboard.svg`, `chat-chart.svg`,
+  `voice-tools.svg`, `tools-control.svg`, `settings-api.svg`,
+  `gallery-media.svg`, `runtime-architecture.svg`, and `README.md`.
+- Added synced Remotion public SVG copies under
+  `videos/instagram-reel/public/current-ui/`.
+- Added `videos/instagram-reel/src/ShellCurrentUiLandscape.tsx`.
+- Added rendered assets `videos/shell-current-ui-landscape-demo.mp4` and
+  `videos/shell-current-ui-landscape-poster.png`.
 - Updated `README.md`, `ARCHITECTURE.md`, `PUBLIC_RELEASE.md`, `CHANGELOG.md`, and `SESSION_LOG.md`.
 - Updated `docs/README.md`, `docs/ARCHITECTURE_GUIDE.md`, `docs/CURRENT_SYSTEM_E2E_AUDIT.md`, `docs/SHELL_PERFORMANCE_BENCHMARK.md`, `docs/assets/shell_architecture_map.svg`, and `docs/assets/shell_status_dashboard.svg`.
 - Added `docs/CURRENT_REPO_STATUS.md` and `docs/MEDIA_KIT.md`.
@@ -20,6 +36,10 @@
 - Added rendered assets `videos/shell-current-state-demo.mp4` and `videos/shell-current-state-demo-poster.png`.
 
 ### Current State
+- Remotion landscape poster render passed with `npm run still:landscape`.
+- Remotion landscape MP4 render passed with `npm run render:landscape`.
+- Landscape MP4 is a valid ISO media file at 1920x1080; poster is a valid
+  1920x1080 PNG.
 - Remotion current demo poster render passed with `npm run still:current`.
 - Remotion current demo MP4 render passed with `npm run render:current`.
 - Rendered MP4 is a valid ISO media file; poster is a valid 720x1280 PNG.
@@ -29,13 +49,15 @@
 - Targeted public launch regression passes locally: `5 passed`.
 
 ### Next Steps
-1. Push the README CI-fix follow-up commit to `main`.
-2. Watch GitHub Actions for the final pushed commit.
-3. Use the new `docs/MEDIA_KIT.md` and `videos/shell-current-state-demo.mp4` for the public GitHub repo presentation.
+1. Run final link/static checks for the new media set.
+2. Commit and push the updated current UI media refresh.
+3. Watch GitHub Actions for the final pushed commit.
 
 ### Open Issues
-- The new Remotion video is generated from existing checked-in screenshots; live UI recapture should be repeated whenever the UI changes materially.
-- GitHub Actions still needs to run on the new pushed commit after this local refresh.
+- The new SVG set is designed from current UI captures; live PNG recapture
+  should still be repeated whenever the UI changes materially.
+- GitHub Actions still needs to run on the next pushed commit after this media
+  refresh.
 
 ## Session: 2026-05-24
 

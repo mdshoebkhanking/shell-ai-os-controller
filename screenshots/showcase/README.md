@@ -5,6 +5,10 @@
 These screenshots are selected for the public GitHub README and launch
 presentation.
 
+The primary generated public visuals now live in `../current/` as SVG files.
+Use the PNGs in this folder as real WebEngine reference captures and recapture
+them when the UI changes.
+
 ## Selected Assets
 
 - `chat-interface.png`: main AI chat interface.

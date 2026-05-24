@@ -38,6 +38,15 @@ Before making the repository public, review:
 These files keep product language, onboarding, launch claims, and future
 roadmap expectations consistent.
 
+Primary current media for the public repository:
+
+- `videos/shell-current-ui-landscape-demo.mp4`
+- `videos/shell-current-ui-landscape-poster.png`
+- `screenshots/current/`
+
+The landscape demo is English-only and 16:9. Older vertical/current-state and
+classic cinematic videos remain available as secondary media.
+
 ## One-Click User Flow
 
 Windows:

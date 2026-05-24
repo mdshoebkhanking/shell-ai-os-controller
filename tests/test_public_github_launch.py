@@ -26,9 +26,18 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/showcase/settings-panel.png",
         "screenshots/showcase/tools-catalog.png",
         "screenshots/showcase/windows-chat-acceptance.png",
+        "screenshots/current/dashboard.svg",
+        "screenshots/current/chat-chart.svg",
+        "screenshots/current/voice-tools.svg",
+        "screenshots/current/tools-control.svg",
+        "screenshots/current/settings-api.svg",
+        "screenshots/current/gallery-media.svg",
+        "screenshots/current/runtime-architecture.svg",
         "gifs/shell-launch-preview.gif",
         "gifs/shell-realtime-demo.svg",
         "gifs/shell-install-flow.svg",
+        "videos/shell-current-ui-landscape-demo.mp4",
+        "videos/shell-current-ui-landscape-poster.png",
         "videos/shell-launch-demo.mp4",
         "videos/shell-launch-demo-poster.png",
         "videos/shell-launch-demo-voiceover.md",
@@ -45,9 +54,14 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     assert "assets/brand/shell-official-logo.png" in readme
     assert "screenshots/showcase/chat-interface.png" in readme
     assert "screenshots/showcase/voice-interface.png" in readme
+    assert "screenshots/current/dashboard.svg" in readme
+    assert "screenshots/current/chat-chart.svg" in readme
+    assert "screenshots/current/runtime-architecture.svg" in readme
     assert "gifs/shell-launch-preview.gif" in readme
     assert "gifs/shell-realtime-demo.svg" in readme
     assert "gifs/shell-install-flow.svg" in readme
+    assert "videos/shell-current-ui-landscape-demo.mp4" in readme
+    assert "videos/shell-current-ui-landscape-poster.png" in readme
     assert "videos/shell-launch-demo.mp4" in readme
     assert "videos/shell-launch-demo-poster.png" in readme
     assert "videos/shell-launch-demo-voiceover.md" in readme
@@ -68,11 +82,17 @@ def test_public_github_launch_audit_has_no_high_findings():
 
 
 def test_launch_demo_video_is_github_friendly_size():
+    current_landscape = ROOT / "videos" / "shell-current-ui-landscape-demo.mp4"
+    current_landscape_poster = ROOT / "videos" / "shell-current-ui-landscape-poster.png"
     video = ROOT / "videos" / "shell-launch-demo.mp4"
     preview = ROOT / "gifs" / "shell-launch-preview.gif"
 
+    assert current_landscape.exists()
+    assert current_landscape_poster.exists()
     assert video.exists()
     assert preview.exists()
+    assert current_landscape.stat().st_size < 15_000_000
+    assert current_landscape_poster.stat().st_size < 5_000_000
     assert video.stat().st_size < 15_000_000
     assert preview.stat().st_size < 8_000_000
 

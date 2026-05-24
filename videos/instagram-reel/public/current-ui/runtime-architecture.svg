@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Shell AI current runtime architecture</title>
+  <desc id="desc">Current Shell AI architecture as a public SVG photo: React Web UI, PyQt WebEngine, QWebChannel, Shell Hub, natural-language router, tool gateway, agents, memory, RAG, and guarded OS automation.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="#05080D"/><stop offset="0.48" stop-color="#09121C"/><stop offset="1" stop-color="#06222A"/></linearGradient>
+    <linearGradient id="nodeA" x1="0" x2="1"><stop offset="0" stop-color="#0B2530"/><stop offset="1" stop-color="#123C46"/></linearGradient>
+    <linearGradient id="nodeB" x1="0" x2="1"><stop offset="0" stop-color="#172554"/><stop offset="1" stop-color="#312E81"/></linearGradient>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#67E8F9"/></marker>
+    <style>.font{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.mono{font-family:"SFMono-Regular",Consolas,monospace}.text{fill:#F8FAFC}.muted{fill:#94A3B8}.cyan{fill:#22D3EE}.green{fill:#64E6AE}.amber{fill:#FBBF24}.node{stroke:#67E8F9;stroke-width:1.5}.label{font-size:13px;letter-spacing:5px;font-weight:900}</style>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <text x="80" y="90" class="font text" font-size="44" font-weight="950">Shell AI Current Architecture</text><text x="80" y="128" class="font muted" font-size="18">Local-first Web UI, bridge, tools, agents, and safety-gated desktop automation.</text>
+  <g class="font" font-weight="900" text-anchor="middle">
+    <rect x="80" y="210" width="250" height="120" rx="24" fill="url(#nodeA)" class="node"/><text x="205" y="258" class="text" font-size="24">User</text><text x="205" y="292" class="muted" font-size="14">chat / voice / Telegram</text>
+    <rect x="430" y="180" width="300" height="180" rx="28" fill="url(#nodeB)" class="node"/><text x="580" y="235" class="text" font-size="24">React Web UI</text><text x="580" y="270" class="muted" font-size="14">Vite + WebGL + Shell style</text><text x="580" y="300" class="cyan" font-size="14">embedded in PyQt WebEngine</text>
+    <rect x="840" y="180" width="300" height="180" rx="28" fill="url(#nodeA)" class="node"/><text x="990" y="235" class="text" font-size="24">QWebChannel</text><text x="990" y="270" class="muted" font-size="14">Shell bridge + event stream</text><text x="990" y="300" class="cyan" font-size="14">window.shellAPI</text>
+    <rect x="1250" y="180" width="270" height="180" rx="28" fill="url(#nodeB)" class="node"/><text x="1385" y="235" class="text" font-size="24">Python Host</text><text x="1385" y="270" class="muted" font-size="14">Shell Hub runtime state</text><text x="1385" y="300" class="cyan" font-size="14">health + telemetry</text>
+    <path d="M330 270 H430" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/><path d="M730 270 H840" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/><path d="M1140 270 H1250" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/>
+    <rect x="230" y="500" width="270" height="140" rx="24" fill="#0B1320" class="node"/><text x="365" y="552" class="text" font-size="22">NL Router</text><text x="365" y="586" class="muted" font-size="14">chat/chart command routing</text>
+    <rect x="560" y="500" width="270" height="140" rx="24" fill="#0B1320" class="node"/><text x="695" y="552" class="text" font-size="22">Tool Gateway</text><text x="695" y="586" class="muted" font-size="14">468 catalog entries</text>
+    <rect x="890" y="500" width="270" height="140" rx="24" fill="#0B1320" class="node"/><text x="1025" y="552" class="text" font-size="22">Agents + Memory</text><text x="1025" y="586" class="muted" font-size="14">37 agents + recall + RAG</text>
+    <rect x="1220" y="500" width="270" height="140" rx="24" fill="#0B1320" class="node"/><text x="1355" y="552" class="text" font-size="22">OS Automation</text><text x="1355" y="586" class="muted" font-size="14">pywinauto / PyAutoGUI / MCP</text>
+    <path d="M1385 360 C1385 430 365 430 365 500" stroke="#67E8F9" stroke-width="3" fill="none" marker-end="url(#arrow)"/><path d="M500 570 H560" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/><path d="M830 570 H890" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/><path d="M1160 570 H1220" stroke="#67E8F9" stroke-width="3" marker-end="url(#arrow)"/>
+  </g>
+  <g transform="translate(80 740)">
+    <rect x="0" y="0" width="1440" height="76" rx="24" fill="#08111C" stroke="#29445A"/>
+    <text x="36" y="32" class="font green label">CURRENT VALIDATION</text><text x="36" y="58" class="font text" font-size="16">CI/Security green · Python 3.10-3.13 · 538 local tests · real UI probes · safety-gated destructive actions</text>
+    <text x="1030" y="47" class="font amber" font-size="16" font-weight="900">Local-first. Human-controlled. Clear diagnostics.</text>
+  </g>
+</svg>

@@ -15,7 +15,21 @@ Controller.
 
 ## Current Screenshots
 
-Use these for the README and public launch pages:
+Use these SVG visuals as the primary README, launch page, and video source
+assets. They are built in the current Shell Web UI style and are safe to embed
+without exposing local machine state:
+
+| SVG visual | Path |
+| --- | --- |
+| Current dashboard | `screenshots/current/dashboard.svg` |
+| Chat + chart control | `screenshots/current/chat-chart.svg` |
+| Voice + tools | `screenshots/current/voice-tools.svg` |
+| Tools control center | `screenshots/current/tools-control.svg` |
+| Settings/API/Telegram | `screenshots/current/settings-api.svg` |
+| Gallery/media workflow | `screenshots/current/gallery-media.svg` |
+| Runtime architecture | `screenshots/current/runtime-architecture.svg` |
+
+Real WebEngine captures remain available as source references:
 
 | Screenshot | Path |
 | --- | --- |
@@ -34,8 +48,10 @@ visible.
 
 | Video | Path | Notes |
 | --- | --- | --- |
-| Current Web UI demo | `videos/shell-current-state-demo.mp4` | Remotion-rendered current-state demo |
-| Current Web UI poster | `videos/shell-current-state-demo-poster.png` | Poster for README/demo embeds |
+| Current 16:9 Web UI demo | `videos/shell-current-ui-landscape-demo.mp4` | Primary English landscape Remotion demo |
+| Current 16:9 Web UI poster | `videos/shell-current-ui-landscape-poster.png` | Primary README poster frame |
+| Current vertical Web UI demo | `videos/shell-current-state-demo.mp4` | Secondary vertical current-state demo |
+| Current vertical Web UI poster | `videos/shell-current-state-demo-poster.png` | Secondary vertical poster |
 | Classic launch demo | `videos/shell-launch-demo.mp4` | Earlier cinematic launch video with voiceover |
 | Real workflow reel | `videos/shell-ai-real-workflow-reel-60s.mp4` | Existing vertical workflow reel |
 
@@ -50,11 +66,17 @@ videos/instagram-reel/
 Useful commands:
 
 ```bash
+npm run still:landscape
+npm run render:landscape
 npm run still:current
 npm run render:current
 ```
 
-The current demo composition is `ShellCurrentStateDemo`. It uses:
+The primary current demo composition is `ShellCurrentUiLandscape` at 1920x1080.
+It uses English on-screen copy and current SVG UI assets from
+`videos/instagram-reel/public/current-ui/`.
+
+The secondary vertical demo composition is `ShellCurrentStateDemo`. It uses:
 
 - real checked-in screenshots from `videos/instagram-reel/public/screenshots/`
 - official logo from `videos/instagram-reel/public/brand/`

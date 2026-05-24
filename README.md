@@ -30,13 +30,15 @@
 </p>
 
 <p align="center">
-  <a href="videos/shell-current-state-demo.mp4">
-    <img src="videos/shell-current-state-demo-poster.png" alt="Shell AI OS Controller current Web UI demo preview" width="760">
+  <a href="videos/shell-current-ui-landscape-demo.mp4">
+    <img src="videos/shell-current-ui-landscape-poster.png" alt="Shell AI OS Controller current 16:9 Web UI demo preview" width="920">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-current-state-demo.mp4">Watch the current Shell Web UI demo</a></strong>
+  <strong><a href="videos/shell-current-ui-landscape-demo.mp4">Watch the current 16:9 Shell Web UI demo</a></strong>
+  ·
+  <a href="screenshots/current/dashboard.svg">Current SVG showcase</a>
   ·
   <a href="videos/shell-launch-demo.mp4">Classic launch demo</a>
 </p>
@@ -270,7 +272,23 @@ latency notes are tracked in
 
 ## Screenshots
 
-Real public showcase screenshots are stored in `screenshots/showcase/`.
+Current public SVG showcase images are stored in `screenshots/current/`. They
+are designed from the active Shell Web UI style and are the primary visuals for
+README, docs, and the landscape Remotion demo.
+
+| Dashboard | Chat + Chart |
+| --- | --- |
+| <img src="screenshots/current/dashboard.svg" alt="Current Shell dashboard SVG" width="420"> | <img src="screenshots/current/chat-chart.svg" alt="Current Shell chat and chart SVG" width="420"> |
+
+| Voice + Tools | Settings + API |
+| --- | --- |
+| <img src="screenshots/current/voice-tools.svg" alt="Current Shell voice and tools SVG" width="420"> | <img src="screenshots/current/settings-api.svg" alt="Current Shell settings and API SVG" width="420"> |
+
+| Gallery + Media | Runtime Architecture |
+| --- | --- |
+| <img src="screenshots/current/gallery-media.svg" alt="Current Shell gallery and media SVG" width="420"> | <img src="screenshots/current/runtime-architecture.svg" alt="Current Shell runtime architecture SVG" width="420"> |
+
+Real WebEngine capture references remain available in `screenshots/showcase/`.
 
 | Chat | Voice |
 | --- | --- |
@@ -286,16 +304,18 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 ## Demo Media
 
-### Launch Demo With Voiceover
+### Current 16:9 Landscape Demo
 
 <p align="center">
-  <a href="videos/shell-current-state-demo.mp4">
-    <img src="videos/shell-current-state-demo-poster.png" alt="Watch the current Shell AI OS Controller Web UI demo" width="760">
+  <a href="videos/shell-current-ui-landscape-demo.mp4">
+    <img src="videos/shell-current-ui-landscape-poster.png" alt="Watch the current Shell AI OS Controller 16:9 Web UI demo" width="920">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-current-state-demo.mp4">Watch the current Shell Web UI demo</a></strong>
+  <strong><a href="videos/shell-current-ui-landscape-demo.mp4">Watch the current 16:9 Shell Web UI demo</a></strong>
+  ·
+  <a href="videos/shell-current-state-demo.mp4">Vertical current-state demo</a>
   ·
   <a href="videos/shell-launch-demo.mp4">Classic cinematic launch demo</a>
   ·
@@ -304,7 +324,9 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 | Media | Preview |
 | --- | --- |
-| Current Web UI Demo | <a href="videos/shell-current-state-demo.mp4"><img src="videos/shell-current-state-demo-poster.png" alt="Shell current Web UI demo poster" width="420"></a> |
+| Current 16:9 Web UI Demo | <a href="videos/shell-current-ui-landscape-demo.mp4"><img src="videos/shell-current-ui-landscape-poster.png" alt="Shell current landscape Web UI demo poster" width="420"></a> |
+| Current SVG Dashboard | <a href="screenshots/current/dashboard.svg"><img src="screenshots/current/dashboard.svg" alt="Shell current dashboard SVG preview" width="420"></a> |
+| Current Vertical Web UI Demo | <a href="videos/shell-current-state-demo.mp4"><img src="videos/shell-current-state-demo-poster.png" alt="Shell current vertical Web UI demo poster" width="420"></a> |
 | Classic Launch Demo | <a href="videos/shell-launch-demo.mp4"><img src="videos/shell-launch-demo-poster.png" alt="Shell AI classic launch demo poster" width="420"></a> |
 | Launch Preview GIF | <a href="videos/shell-launch-demo.mp4"><img src="gifs/shell-launch-preview.gif" alt="Shell AI launch preview GIF" width="420"></a> |
 | Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
@@ -313,7 +335,7 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 Recommended launch media:
 
-- 30-second current Web UI demo.
+- 36-second current 16:9 English Web UI demo.
 - 60-second install GIF.
 - 90-second real voice demo after Gemini/remote audio setup.
 - 2-minute "chat opens apps and runs tools" demo.
@@ -325,6 +347,9 @@ Storyboards:
 - [Launch preview GIF](gifs/shell-launch-preview.gif)
 - [One-click install visual](gifs/shell-install-flow.svg)
 - [Launch trailer visual](videos/shell-launch-trailer.svg)
+- [Current 16:9 Web UI demo MP4](videos/shell-current-ui-landscape-demo.mp4)
+- [Current 16:9 Web UI demo poster](videos/shell-current-ui-landscape-poster.png)
+- [Current SVG showcase](screenshots/current/README.md)
 - [Current Web UI demo MP4](videos/shell-current-state-demo.mp4)
 - [Current Web UI demo poster](videos/shell-current-state-demo-poster.png)
 - [Launch demo MP4](videos/shell-launch-demo.mp4)

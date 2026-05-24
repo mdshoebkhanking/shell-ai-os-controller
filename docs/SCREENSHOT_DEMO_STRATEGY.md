@@ -9,14 +9,25 @@ GIFs, launch videos, and social previews.
 
 | Folder | Purpose |
 | --- | --- |
-| `screenshots/` | Static app screenshots for README and docs |
+| `screenshots/current/` | Current SVG visuals for README, media kit, and Remotion |
+| `screenshots/showcase/` | Real WebEngine PNG capture references |
 | `gifs/` | Short looped feature demos |
 | `videos/` | Longer walkthrough/demo placeholders |
 | `banners/` | GitHub/social preview assets |
 
 ## Required Screenshots
 
-Capture these before public release:
+Current SVG visuals already cover:
+
+1. Dashboard and telemetry.
+2. Chat + chart command lane.
+3. Voice + tool handoff.
+4. Tools and guarded execution.
+5. Settings/API/Telegram remote control.
+6. Gallery/media workflow.
+7. Runtime architecture.
+
+Recapture these WebEngine PNG references before major public release changes:
 
 1. Chat first screen with starter chips.
 2. Chat response with a real tool result.
@@ -41,7 +52,14 @@ Keep GIFs under 12 seconds where possible.
 
 ## Video Plan
 
-Recommended public launch video:
+Current primary public launch video:
+
+- `videos/shell-current-ui-landscape-demo.mp4`
+- 16:9 landscape, 1920x1080.
+- English-only on-screen copy.
+- Built from the current SVG showcase and Remotion source.
+
+Recommended public launch sequence:
 
 1. 0-5s: title and app open.
 2. 5-20s: chat request and fast response.

@@ -2,10 +2,23 @@
 
 # Screenshots
 
-Public screenshots live under `screenshots/showcase/` and are used by the
-README, media kit, and Remotion video source.
+The primary public visual set now lives under `screenshots/current/` as SVGs.
+These SVGs match the current Shell Web UI style and are used by the README,
+media kit, and 16:9 Remotion landscape demo.
 
-Current showcase files:
+Current SVG files:
+
+- `current/dashboard.svg`
+- `current/chat-chart.svg`
+- `current/voice-tools.svg`
+- `current/tools-control.svg`
+- `current/settings-api.svg`
+- `current/gallery-media.svg`
+- `current/runtime-architecture.svg`
+
+Real WebEngine capture references live under `screenshots/showcase/`.
+
+Showcase PNG files:
 
 - `showcase/chat-interface.png`
 - `showcase/voice-interface.png`

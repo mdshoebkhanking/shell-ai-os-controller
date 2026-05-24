@@ -57,8 +57,11 @@ Latest local validation:
 
 ## Current Demo Assets
 
-- Current Web UI demo: `videos/shell-current-state-demo.mp4`
-- Current Web UI poster: `videos/shell-current-state-demo-poster.png`
+- Current 16:9 Web UI demo: `videos/shell-current-ui-landscape-demo.mp4`
+- Current 16:9 Web UI poster: `videos/shell-current-ui-landscape-poster.png`
+- Current SVG showcase: `screenshots/current/`
+- Current vertical Web UI demo: `videos/shell-current-state-demo.mp4`
+- Current vertical Web UI poster: `videos/shell-current-state-demo-poster.png`
 - Classic launch demo: `videos/shell-launch-demo.mp4`
 - Showcase screenshots: `screenshots/showcase/`
 - Architecture diagram: `docs/assets/shell_architecture_map.svg`
