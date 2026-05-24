@@ -9,36 +9,33 @@ GIFs, launch videos, and social previews.
 
 | Folder | Purpose |
 | --- | --- |
-| `screenshots/current/` | Current SVG visuals for README, media kit, and Remotion |
-| `screenshots/showcase/` | Real WebEngine PNG capture references |
+| `screenshots/current/` | Current real WebEngine PNG captures for README, media kit, and Remotion |
+| `screenshots/showcase/` | Earlier WebEngine PNG capture references |
 | `gifs/` | Short looped feature demos |
 | `videos/` | Longer walkthrough/demo placeholders |
 | `banners/` | GitHub/social preview assets |
 
 ## Required Screenshots
 
-Current SVG visuals already cover:
+Current real PNG captures already cover:
 
 1. Dashboard and telemetry.
-2. Chat + chart command lane.
-3. Voice + tool handoff.
-4. Tools and guarded execution.
-5. Settings/API/Telegram remote control.
-6. Gallery/media workflow.
-7. Runtime architecture.
+2. Control Center tools and agents.
+3. Gallery/media workflow.
+4. Settings.
+5. Apps.
+6. Notes.
+7. Phone.
+8. Macros.
 
-Recapture these WebEngine PNG references before major public release changes:
+Recapture the current screenshots before major public release changes:
 
-1. Chat first screen with starter chips.
-2. Chat response with a real tool result.
-3. Voice page in Ready state.
-4. Voice page while Listening.
-5. Tools page with readiness statuses.
-6. Settings API key page with secrets hidden.
-7. System diagnostics page.
-8. Light mode screenshot.
-9. Windows install/start screenshot.
-10. macOS install/start screenshot.
+```bash
+node tools/capture_current_ui_screens.mjs 9235 .shell_runtime/current_ui_capture
+```
+
+Then copy reviewed captures into `screenshots/current/` and
+`videos/instagram-reel/public/current-ui/`.
 
 ## Demo GIFs
 
@@ -57,7 +54,7 @@ Current primary public launch video:
 - `videos/shell-current-ui-landscape-demo.mp4`
 - 16:9 landscape, 1920x1080.
 - English-only on-screen copy.
-- Built from the current SVG showcase and Remotion source.
+- Built from the current real PNG screenshots and Remotion source.
 
 Recommended public launch sequence:
 

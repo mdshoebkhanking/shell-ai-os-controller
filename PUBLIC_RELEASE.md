@@ -42,10 +42,11 @@ Primary current media for the public repository:
 
 - `videos/shell-current-ui-landscape-demo.mp4`
 - `videos/shell-current-ui-landscape-poster.png`
-- `screenshots/current/`
+- `screenshots/current/` real current Web UI PNG captures
 
-The landscape demo is English-only and 16:9. Older vertical/current-state and
-classic cinematic videos remain available as secondary media.
+The landscape demo is English-only, 16:9, and rendered from the current PNG
+captures. Older vertical/current-state and classic cinematic videos remain
+available as secondary media.
 
 ## One-Click User Flow
 

@@ -4,9 +4,10 @@
 
 - Added a primary English 16:9 landscape Remotion demo for the current Shell
   Web UI and repository presentation.
-- Added a current SVG showcase set for dashboard, chat/chart, voice/tools,
-  tools control, settings/API/Telegram, Gallery/media, and runtime architecture.
-- Promoted the landscape demo and SVG showcase to the README, media kit,
+- Replaced the handcrafted SVG showcase with real 1440x900 PNG captures from
+  the running Shell Web UI: Dashboard, Control Center, Gallery, Settings, Apps,
+  Notes, Phone, and Macros.
+- Promoted the landscape demo and actual current UI screenshots to the README, media kit,
   screenshot docs, video docs, public release docs, and current status docs.
 - Updated README positioning for the current React/Vite Shell Web UI embedded
   in PyQt WebEngine.

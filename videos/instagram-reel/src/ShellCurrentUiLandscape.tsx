@@ -16,16 +16,15 @@ const fps = 30;
 const shot = 135;
 
 const colors = {
-  bg: "#05070B",
-  ink: "#F8FAFC",
-  muted: "#9AA8BD",
-  dim: "#64748B",
-  cyan: "#22D3EE",
-  cyanSoft: "#67E8F9",
-  green: "#64E6AE",
+  bg: "#050706",
+  ink: "#F4FFF8",
+  muted: "#A8BFAF",
+  dim: "#607869",
+  emerald: "#22C55E",
+  neon: "#75FF9A",
   amber: "#FBBF24",
-  panel: "rgba(7, 12, 20, 0.78)",
-  line: "rgba(103, 232, 249, 0.28)",
+  line: "rgba(117, 255, 154, 0.28)",
+  panel: "rgba(4, 10, 8, 0.82)",
 };
 
 const font =
@@ -38,7 +37,7 @@ const ease = (frame: number, start: number, duration: number) =>
     extrapolateRight: "clamp",
   });
 
-const softOut = (frame: number, duration: number) =>
+const fadeOut = (frame: number, duration: number) =>
   interpolate(frame, [duration - 18, duration], [1, 0], {
     easing: Easing.in(Easing.cubic),
     extrapolateLeft: "clamp",
@@ -47,74 +46,47 @@ const softOut = (frame: number, duration: number) =>
 
 const Stage = ({ children }: { children: ReactNode }) => {
   const frame = useCurrentFrame();
-  const sweep = (frame * 3) % 1080;
+  const scan = (frame * 2.8) % 1120;
   return (
     <AbsoluteFill style={{ backgroundColor: colors.bg, color: colors.ink, fontFamily: font }}>
       <AbsoluteFill
         style={{
           background:
-            "radial-gradient(circle at 18% 18%, rgba(34,211,238,0.22), transparent 28%), radial-gradient(circle at 86% 64%, rgba(100,230,174,0.13), transparent 30%), linear-gradient(145deg, #05070B, #08111A 52%, #061E25)",
+            "radial-gradient(circle at 18% 16%, rgba(34,197,94,0.20), transparent 30%), radial-gradient(circle at 84% 72%, rgba(117,255,154,0.12), transparent 32%), linear-gradient(145deg, #030503, #07110B 54%, #03120A)",
         }}
       />
       <AbsoluteFill
         style={{
-          opacity: 0.2,
+          opacity: 0.16,
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)",
-          backgroundSize: "54px 54px",
+            "linear-gradient(rgba(117,255,154,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(117,255,154,0.06) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
         }}
       />
       <div
         style={{
           position: "absolute",
-          top: sweep - 140,
+          top: scan - 180,
           left: 0,
           right: 0,
-          height: 140,
-          background: "linear-gradient(180deg, transparent, rgba(103,232,249,0.10), transparent)",
+          height: 170,
+          background: "linear-gradient(180deg, transparent, rgba(117,255,154,0.13), transparent)",
         }}
       />
-      <Audio src={staticFile("audio/os-ambient-bed.wav")} loop volume={0.14} />
+      <Audio src={staticFile("audio/os-ambient-bed.wav")} loop volume={0.12} />
       <Sequence from={0}>
-        <Audio src={staticFile("audio/boot-chime.wav")} volume={0.38} />
+        <Audio src={staticFile("audio/boot-chime.wav")} volume={0.3} />
       </Sequence>
       {[shot - 8, shot * 2 - 8, shot * 3 - 8, shot * 4 - 8, shot * 5 - 8, shot * 6 - 8].map(
         (from) => (
           <Sequence key={from} from={from}>
-            <Audio src={staticFile("audio/data-whoosh.wav")} volume={0.18} />
+            <Audio src={staticFile("audio/data-whoosh.wav")} volume={0.14} />
           </Sequence>
         ),
       )}
       {children}
       <Progress />
     </AbsoluteFill>
-  );
-};
-
-const Progress = () => {
-  const frame = useCurrentFrame();
-  const { durationInFrames } = useVideoConfig();
-  return (
-    <div
-      style={{
-        position: "absolute",
-        left: 76,
-        right: 76,
-        bottom: 36,
-        height: 5,
-        borderRadius: 999,
-        background: "rgba(255,255,255,0.12)",
-        overflow: "hidden",
-      }}
-    >
-      <div
-        style={{
-          width: `${(frame / Math.max(1, durationInFrames - 1)) * 100}%`,
-          height: "100%",
-          background: `linear-gradient(90deg, ${colors.cyan}, ${colors.green}, ${colors.amber})`,
-        }}
-      />
-    </div>
   );
 };
 
@@ -129,35 +101,65 @@ const Header = () => (
       alignItems: "center",
       justifyContent: "space-between",
       color: colors.dim,
-      fontSize: 18,
+      fontSize: 17,
       fontWeight: 900,
-      letterSpacing: 2.8,
+      letterSpacing: 0,
       textTransform: "uppercase",
     }}
   >
     <span>Shell AI OS Controller</span>
-    <span style={{ color: colors.green }}>CI green · local-first</span>
+    <span style={{ color: colors.neon }}>Actual UI capture · PyQt WebEngine</span>
   </div>
 );
 
-const ShellLogo = ({ size = 96 }: { size?: number }) => (
-  <div
+const Progress = () => {
+  const frame = useCurrentFrame();
+  const { durationInFrames } = useVideoConfig();
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: 76,
+        right: 76,
+        bottom: 36,
+        height: 5,
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.10)",
+        overflow: "hidden",
+      }}
+    >
+      <div
+        style={{
+          width: `${(frame / Math.max(1, durationInFrames - 1)) * 100}%`,
+          height: "100%",
+          background: `linear-gradient(90deg, ${colors.emerald}, ${colors.neon}, ${colors.amber})`,
+        }}
+      />
+    </div>
+  );
+};
+
+const Logo = ({ size = 78 }: { size?: number }) => (
+  <Img
+    src={staticFile("brand/shell-official-logo.png")}
     style={{
       width: size,
       height: size,
-      borderRadius: size * 0.22,
-      display: "grid",
-      placeItems: "center",
-      background: "linear-gradient(135deg, #67E8F9, #8EA4FF)",
-      boxShadow: "0 0 42px rgba(34,211,238,0.36)",
-      color: "#06111A",
-      fontSize: size * 0.46,
-      fontWeight: 950,
+      objectFit: "contain",
+      filter: "drop-shadow(0 0 28px rgba(117,255,154,0.34))",
     }}
-  >
-    S
-  </div>
+  />
 );
+
+const Shot = ({ children }: { children: ReactNode }) => {
+  const frame = useCurrentFrame();
+  return (
+    <AbsoluteFill style={{ opacity: fadeOut(frame, shot), padding: "92px 72px 72px" }}>
+      <Header />
+      {children}
+    </AbsoluteFill>
+  );
+};
 
 const TextBlock = ({
   eyebrow,
@@ -179,19 +181,19 @@ const TextBlock = ({
     >
       <div
         style={{
-          color: colors.cyanSoft,
-          fontSize: 18,
+          color: colors.neon,
+          fontSize: 17,
           fontWeight: 950,
-          letterSpacing: 4,
+          letterSpacing: 0,
           textTransform: "uppercase",
-          marginBottom: 20,
+          marginBottom: 18,
         }}
       >
         {eyebrow}
       </div>
       <div
         style={{
-          fontSize: 58,
+          fontSize: 56,
           lineHeight: 0.98,
           fontWeight: 950,
           letterSpacing: 0,
@@ -200,14 +202,14 @@ const TextBlock = ({
       >
         {title}
       </div>
-      <div style={{ color: colors.muted, fontSize: 25, lineHeight: 1.22, fontWeight: 650 }}>
+      <div style={{ color: colors.muted, fontSize: 25, lineHeight: 1.23, fontWeight: 650 }}>
         {body}
       </div>
     </div>
   );
 };
 
-const ChromeFrame = ({
+const ShellFrame = ({
   file,
   title,
   scale = 1,
@@ -217,15 +219,15 @@ const ChromeFrame = ({
   scale?: number;
 }) => {
   const frame = useCurrentFrame();
-  const enter = ease(frame, 6, 22);
+  const enter = ease(frame, 6, 24);
   return (
     <div
       style={{
-        height: 760,
-        borderRadius: 24,
+        height: 762,
+        borderRadius: 22,
         border: `1px solid ${colors.line}`,
-        background: "rgba(5, 9, 17, 0.88)",
-        boxShadow: "0 30px 110px rgba(0,0,0,0.45)",
+        background: "rgba(2, 6, 4, 0.92)",
+        boxShadow: "0 32px 120px rgba(0,0,0,0.52), 0 0 48px rgba(34,197,94,0.10)",
         overflow: "hidden",
         transform: `scale(${interpolate(enter, [0, 1], [0.97, scale])})`,
         opacity: enter,
@@ -238,45 +240,45 @@ const ChromeFrame = ({
           alignItems: "center",
           gap: 14,
           padding: "0 22px",
-          borderBottom: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(4, 8, 14, 0.96)",
+          borderBottom: "1px solid rgba(117,255,154,0.13)",
+          background: "rgba(1, 5, 3, 0.98)",
         }}
       >
-        <ShellLogo size={30} />
+        <Logo size={32} />
         <span style={{ fontSize: 17, fontWeight: 950 }}>{title}</span>
-        <span style={{ marginLeft: "auto", color: colors.green, fontSize: 14, fontWeight: 900 }}>
-          READY
+        <span style={{ marginLeft: "auto", color: colors.neon, fontSize: 14, fontWeight: 900 }}>
+          LIVE CAPTURE
         </span>
       </div>
       <Img
         src={staticFile(`current-ui/${file}`)}
-        style={{ width: "100%", height: 704, objectFit: "contain", backgroundColor: "#050914" }}
+        style={{ width: "100%", height: 706, objectFit: "contain", backgroundColor: "#020604" }}
       />
     </div>
   );
 };
 
-const Metric = ({ value, label, tone = colors.cyan }: { value: string; label: string; tone?: string }) => {
+const Metric = ({ value, label, tone = colors.neon }: { value: string; label: string; tone?: string }) => {
   const frame = useCurrentFrame();
   const enter = ease(frame, 18, 24);
   return (
     <div
       style={{
-        borderRadius: 22,
+        borderRadius: 20,
         border: `1px solid ${tone}66`,
         background: `${tone}18`,
-        padding: "24px 26px",
+        padding: "23px 24px",
         opacity: enter,
         transform: `translateY(${interpolate(enter, [0, 1], [18, 0])}px)`,
       }}
     >
-      <div style={{ color: tone, fontSize: 48, fontWeight: 950, lineHeight: 1 }}>{value}</div>
+      <div style={{ color: tone, fontSize: 45, fontWeight: 950, lineHeight: 1 }}>{value}</div>
       <div
         style={{
           color: colors.muted,
           fontSize: 15,
           fontWeight: 900,
-          letterSpacing: 2,
+          letterSpacing: 0,
           textTransform: "uppercase",
           marginTop: 10,
         }}
@@ -287,41 +289,106 @@ const Metric = ({ value, label, tone = colors.cyan }: { value: string; label: st
   );
 };
 
-const Shot = ({ children }: { children: ReactNode }) => {
+const MiniShot = ({ file, label }: { file: string; label: string }) => {
   const frame = useCurrentFrame();
+  const enter = ease(frame, 12, 26);
   return (
-    <AbsoluteFill style={{ opacity: softOut(frame, shot), padding: "92px 72px 72px" }}>
-      <Header />
-      {children}
-    </AbsoluteFill>
+    <div
+      style={{
+        borderRadius: 18,
+        border: `1px solid ${colors.line}`,
+        background: colors.panel,
+        padding: 12,
+        opacity: enter,
+        transform: `translateY(${interpolate(enter, [0, 1], [22, 0])}px)`,
+        boxShadow: "0 24px 70px rgba(0,0,0,0.35)",
+      }}
+    >
+      <Img
+        src={staticFile(`current-ui/${file}`)}
+        style={{ width: "100%", aspectRatio: "16 / 10", objectFit: "cover", borderRadius: 12 }}
+      />
+      <div
+        style={{
+          marginTop: 12,
+          color: colors.ink,
+          fontSize: 18,
+          fontWeight: 900,
+          textAlign: "center",
+        }}
+      >
+        {label}
+      </div>
+    </div>
+  );
+};
+
+const architectureNodes = [
+  "React / Vite / WebGL UI",
+  "PyQt WebEngine host",
+  "QWebChannel bridge",
+  "Shell Hub + NL Router",
+  "Tool Gateway + Agents",
+  "Memory, RAG, Voice, OS Drivers",
+];
+
+const ArchitectureMap = () => {
+  const frame = useCurrentFrame();
+  const enter = ease(frame, 12, 28);
+  const nodeStyle: CSSProperties = {
+    borderRadius: 18,
+    border: `1px solid ${colors.line}`,
+    background: "rgba(2, 9, 5, 0.82)",
+    color: colors.ink,
+    padding: "22px 24px",
+    fontSize: 25,
+    fontWeight: 900,
+    boxShadow: "0 20px 70px rgba(0,0,0,0.34)",
+  };
+  return (
+    <div
+      style={{
+        opacity: enter,
+        transform: `translateX(${interpolate(enter, [0, 1], [30, 0])}px)`,
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      {architectureNodes.map((node, index) => (
+        <div key={node} style={nodeStyle}>
+          <span style={{ color: colors.neon, marginRight: 16 }}>{String(index + 1).padStart(2, "0")}</span>
+          {node}
+        </div>
+      ))}
+    </div>
   );
 };
 
 const Hero = () => {
   const frame = useCurrentFrame();
-  const pulse = interpolate(Math.sin(frame / 16), [-1, 1], [0.96, 1.04]);
+  const pulse = interpolate(Math.sin(frame / 18), [-1, 1], [0.97, 1.04]);
   return (
     <Shot>
       <div
         style={{
           height: "100%",
           display: "grid",
-          gridTemplateColumns: "0.9fr 1.1fr",
+          gridTemplateColumns: "0.86fr 1.14fr",
           gap: 54,
           alignItems: "center",
         }}
       >
         <div>
-          <div style={{ transform: `scale(${pulse})`, transformOrigin: "left center", marginBottom: 36 }}>
-            <ShellLogo size={128} />
+          <div style={{ transform: `scale(${pulse})`, transformOrigin: "left center", marginBottom: 34 }}>
+            <Logo size={132} />
           </div>
           <TextBlock
-            eyebrow="Current public demo"
+            eyebrow="Current real UI"
             title="Shell AI OS Controller"
-            body="A local-first desktop control layer for chat, voice, tools, automation, telemetry, and runtime diagnostics."
+            body="Captured from the running desktop app, not a mockup. This is the current Shell neural interface inside PyQt WebEngine."
           />
         </div>
-        <ChromeFrame file="dashboard.svg" title="Current Dashboard" />
+        <ShellFrame file="dashboard.png" title="Dashboard" />
       </div>
     </Shot>
   );
@@ -329,80 +396,79 @@ const Hero = () => {
 
 const Dashboard = () => (
   <Shot>
-    <div style={{ display: "grid", gridTemplateColumns: "1.25fr 0.75fr", gap: 42, alignItems: "center" }}>
-      <ChromeFrame file="dashboard.svg" title="System Dashboard" />
+    <div style={{ display: "grid", gridTemplateColumns: "1.24fr 0.76fr", gap: 42, alignItems: "center" }}>
+      <ShellFrame file="dashboard.png" title="Dashboard / Transcript / Chart" />
       <TextBlock
-        eyebrow="Runtime visibility"
-        title="Telemetry, transcript, and chart control in one workspace."
-        body="Shell shows live system state while keeping typed chart and transcript commands text-only by default."
+        eyebrow="Main workspace"
+        title="Telemetry, orb, transcript, and chart composer on one screen."
+        body="The dashboard keeps the live control lane visible while text-originated prompts stay text-only."
       />
     </div>
   </Shot>
 );
 
-const ChatChart = () => (
-  <Shot>
-    <div style={{ display: "grid", gridTemplateColumns: "0.74fr 1.26fr", gap: 42, alignItems: "center" }}>
-      <TextBlock
-        eyebrow="Chat and chart"
-        title="Ask questions or run tools from the same command lane."
-        body="Calculator, unit conversion, memory recall, and chart prompts all route through the guarded backend."
-      />
-      <ChromeFrame file="chat-chart.svg" title="Chat + Chart" />
-    </div>
-  </Shot>
-);
-
-const VoiceTools = () => (
-  <Shot>
-    <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 42, alignItems: "center" }}>
-      <ChromeFrame file="voice-tools.svg" title="Voice Core" />
-      <TextBlock
-        eyebrow="Voice pipeline"
-        title="Voice stays optional, visible, and controllable."
-        body="Manual voice controls remain available, with wake word, VAD, and local STT kept behind explicit flags."
-      />
-    </div>
-  </Shot>
-);
-
-const Tools = () => (
+const Control = () => (
   <Shot>
     <div style={{ display: "grid", gridTemplateColumns: "0.76fr 1.24fr", gap: 42, alignItems: "center" }}>
       <div>
         <TextBlock
-          eyebrow="Tool gateway"
-          title="Hundreds of local tools without silent risk."
-          body="Tool execution is routed through a catalog, readiness checks, safety gates, and clear result panels."
+          eyebrow="Control center"
+          title="Tools and agents are exposed through the actual UI."
+          body="The captured Control tab shows the catalog surface users can operate from Shell, with guarded execution paths behind it."
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18, marginTop: 34 }}>
-          <Metric value="468" label="catalog entries" />
-          <Metric value="37/37" label="agents verified" tone={colors.green} />
+          <Metric value="485" label="visible entries" />
+          <Metric value="40" label="agent cards" tone={colors.emerald} />
         </div>
       </div>
-      <ChromeFrame file="tools-control.svg" title="Tools / MCP" />
+      <ShellFrame file="control.png" title="Control Center" />
     </div>
   </Shot>
 );
 
-const SettingsGallery = () => (
+const GallerySettings = () => (
   <Shot>
     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 34, alignItems: "center" }}>
-      <ChromeFrame file="settings-api.svg" title="Settings + API Keys" scale={0.98} />
-      <ChromeFrame file="gallery-media.svg" title="Gallery + Media" scale={0.98} />
+      <ShellFrame file="gallery.png" title="Gallery" scale={0.98} />
+      <ShellFrame file="settings.png" title="Settings" scale={0.98} />
+    </div>
+  </Shot>
+);
+
+const WorkspaceTabs = () => (
+  <Shot>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 26, alignItems: "center" }}>
+      <MiniShot file="apps.png" label="Apps" />
+      <MiniShot file="notes.png" label="Notes" />
+      <MiniShot file="phone.png" label="Phone" />
+    </div>
+  </Shot>
+);
+
+const Macros = () => (
+  <Shot>
+    <div style={{ display: "grid", gridTemplateColumns: "1.16fr 0.84fr", gap: 42, alignItems: "center" }}>
+      <ShellFrame file="macros.png" title="Macros" />
+      <TextBlock
+        eyebrow="Automation surface"
+        title="Macros, app actions, notes, phone, gallery, and settings share one visual system."
+        body="The README media now follows the same screen hierarchy users see when they launch Shell."
+      />
     </div>
   </Shot>
 );
 
 const Architecture = () => (
   <Shot>
-    <div style={{ display: "grid", gridTemplateColumns: "1.18fr 0.82fr", gap: 42, alignItems: "center" }}>
-      <ChromeFrame file="runtime-architecture.svg" title="Runtime Architecture" />
-      <TextBlock
-        eyebrow="Architecture"
-        title="React UI, Python runtime, and safe local automation."
-        body="The Web UI talks to Shell Hub through QWebChannel, then routes requests through the NL router, tools, agents, memory, RAG, and OS drivers."
-      />
+    <div style={{ display: "grid", gridTemplateColumns: "0.88fr 1.12fr", gap: 42, alignItems: "center" }}>
+      <div>
+        <TextBlock
+          eyebrow="Architecture"
+          title="Repo page now describes the real current stack."
+          body="React UI, PyQt WebEngine, QWebChannel, Shell Hub, NL routing, tools, agents, memory, RAG, voice, and OS drivers stay documented as the product architecture."
+        />
+      </div>
+      <ArchitectureMap />
     </div>
   </Shot>
 );
@@ -420,24 +486,24 @@ const Final = () => (
     >
       <div>
         <TextBlock
-          eyebrow="Repository-ready"
-          title="Current UI media, docs, and release status are aligned."
-          body="Use the landscape demo, SVG showcase, media kit, architecture map, and CI-green status for the public GitHub presentation."
+          eyebrow="Public repository"
+          title="Docs, screenshots, and video now match the running Shell UI."
+          body="The public README uses real captured PNG screenshots and this landscape demo is rendered from those captures."
         />
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18, marginTop: 34 }}>
-          <Metric value="538" label="tests passed" tone={colors.green} />
-          <Metric value="3.10-3.13" label="Python matrix" />
-          <Metric value="safe" label="gated actions" tone={colors.amber} />
+          <Metric value="real" label="UI captures" tone={colors.neon} />
+          <Metric value="16:9" label="English video" />
+          <Metric value="local" label="desktop-first" tone={colors.amber} />
         </div>
       </div>
-      <ChromeFrame file="dashboard.svg" title="Shell Web UI" />
+      <ShellFrame file="dashboard.png" title="Shell Web UI" />
     </div>
   </Shot>
 );
 
 export const ShellCurrentUiLandscape = () => (
   <Stage>
-    {[Hero, Dashboard, ChatChart, VoiceTools, Tools, SettingsGallery, Architecture, Final].map(
+    {[Hero, Dashboard, Control, GallerySettings, WorkspaceTabs, Macros, Architecture, Final].map(
       (Comp, index) => (
         <Sequence key={index} from={index * shot} durationInFrames={shot}>
           <Comp />

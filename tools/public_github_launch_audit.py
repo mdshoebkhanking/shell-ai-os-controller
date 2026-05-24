@@ -35,7 +35,16 @@ REQUIRED_SHOWCASE = [
     "screenshots/showcase/windows-chat-acceptance.png",
 ]
 
+REQUIRED_CURRENT_SCREENSHOTS = [
+    "screenshots/current/dashboard.png",
+    "screenshots/current/control.png",
+    "screenshots/current/gallery.png",
+    "screenshots/current/settings.png",
+]
+
 REQUIRED_DEMO_MEDIA = [
+    "videos/shell-current-ui-landscape-demo.mp4",
+    "videos/shell-current-ui-landscape-poster.png",
     "gifs/shell-launch-preview.gif",
     "gifs/shell-realtime-demo.svg",
     "gifs/shell-install-flow.svg",
@@ -97,6 +106,11 @@ def check_brand(findings: list[Finding]) -> None:
 
 def check_showcase(findings: list[Finding]) -> None:
     readme = read_text("README.md")
+    for path in REQUIRED_CURRENT_SCREENSHOTS:
+        if not exists(path):
+            findings.append(Finding("high", "screenshots", f"Missing current UI screenshot: {path}", "Capture the running Shell UI and commit the PNG.", path))
+        if path not in readme:
+            findings.append(Finding("medium", "screenshots", f"README does not reference current UI screenshot: {path}", "Show actual current UI screenshots directly in README.", "README.md"))
     for path in REQUIRED_SHOWCASE:
         if not exists(path):
             findings.append(Finding("high", "screenshots", f"Missing showcase screenshot: {path}", "Add real UI screenshots before public launch.", path))

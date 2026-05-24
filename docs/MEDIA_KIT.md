@@ -15,30 +15,22 @@ Controller.
 
 ## Current Screenshots
 
-Use these SVG visuals as the primary README, launch page, and video source
-assets. They are built in the current Shell Web UI style and are safe to embed
-without exposing local machine state:
-
-| SVG visual | Path |
-| --- | --- |
-| Current dashboard | `screenshots/current/dashboard.svg` |
-| Chat + chart control | `screenshots/current/chat-chart.svg` |
-| Voice + tools | `screenshots/current/voice-tools.svg` |
-| Tools control center | `screenshots/current/tools-control.svg` |
-| Settings/API/Telegram | `screenshots/current/settings-api.svg` |
-| Gallery/media workflow | `screenshots/current/gallery-media.svg` |
-| Runtime architecture | `screenshots/current/runtime-architecture.svg` |
-
-Real WebEngine captures remain available as source references:
+Use these PNG captures as the primary README, launch page, and video source
+assets. They are captured from the running Shell Web UI through PyQt WebEngine.
+Before publishing, re-check that no local private state is visible.
 
 | Screenshot | Path |
 | --- | --- |
-| Chat interface | `screenshots/showcase/chat-interface.png` |
-| Voice interface | `screenshots/showcase/voice-interface.png` |
-| Runtime dashboard | `screenshots/showcase/system-dashboard.png` |
-| Settings panel | `screenshots/showcase/settings-panel.png` |
-| Tools catalog | `screenshots/showcase/tools-catalog.png` |
-| Windows acceptance capture | `screenshots/showcase/windows-chat-acceptance.png` |
+| Dashboard | `screenshots/current/dashboard.png` |
+| Control Center | `screenshots/current/control.png` |
+| Gallery | `screenshots/current/gallery.png` |
+| Settings | `screenshots/current/settings.png` |
+| Apps | `screenshots/current/apps.png` |
+| Notes | `screenshots/current/notes.png` |
+| Phone | `screenshots/current/phone.png` |
+| Macros | `screenshots/current/macros.png` |
+
+Legacy/reference WebEngine captures remain available under `screenshots/showcase/`.
 
 Before using screenshots publicly, confirm that no API key, Telegram chat ID,
 email address, local username, private file path, or machine-specific value is
@@ -73,7 +65,7 @@ npm run render:current
 ```
 
 The primary current demo composition is `ShellCurrentUiLandscape` at 1920x1080.
-It uses English on-screen copy and current SVG UI assets from
+It uses English on-screen copy and current PNG UI captures from
 `videos/instagram-reel/public/current-ui/`.
 
 The secondary vertical demo composition is `ShellCurrentStateDemo`. It uses:

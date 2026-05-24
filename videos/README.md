@@ -8,7 +8,7 @@ Prefer YouTube, GitHub Releases, or Git LFS for large videos.
 ## Current Assets
 
 - `shell-current-ui-landscape-demo.mp4`: primary English 16:9 Remotion demo
-  for the current Shell Web UI and repository presentation.
+  rendered from real current Shell Web UI screenshots.
 - `shell-current-ui-landscape-poster.png`: primary README poster frame for the
   current landscape demo.
 - `shell-current-state-demo.mp4`: secondary vertical Remotion-rendered current
@@ -35,6 +35,12 @@ npm run still:landscape
 npm run render:landscape
 npm run still:current
 npm run render:current
+```
+
+Before regenerating the landscape demo, refresh the current UI captures:
+
+```bash
+node tools/capture_current_ui_screens.mjs 9235 .shell_runtime/current_ui_capture
 ```
 
 For the older cinematic launch demo, on macOS with FFmpeg available:

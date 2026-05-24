@@ -1,6 +1,53 @@
 ## Session: 2026-05-24
 
 ### Completed
+- Corrected the public media set after verifying the actual running Shell Web UI.
+- Captured real 1440x900 PNG screenshots from PyQt WebEngine through Qt remote
+  debugging: Dashboard, Control Center, Gallery, Settings, Apps, Notes, Phone,
+  and Macros.
+- Removed the handcrafted current SVG showcase from tracked public media.
+- Rebuilt the Remotion landscape source to render from actual current UI PNG
+  captures instead of illustrative SVG screens.
+- Updated README, media kit, screenshot strategy, video docs, public release
+  notes, current repo status, changelog, public launch audit, and launch tests
+  to point at real current UI screenshots.
+
+### Changes Made
+- Added `screenshots/current/dashboard.png`, `control.png`, `gallery.png`,
+  `settings.png`, `apps.png`, `notes.png`, `phone.png`, and `macros.png`.
+- Added synced Remotion public PNG copies under
+  `videos/instagram-reel/public/current-ui/`.
+- Removed the old generated `screenshots/current/*.svg` and
+  `videos/instagram-reel/public/current-ui/*.svg` files.
+- Replaced `videos/instagram-reel/src/ShellCurrentUiLandscape.tsx` so the
+  16:9 English demo uses real Shell UI screenshots.
+- Added `tools/capture_current_ui_screens.mjs` for repeatable current UI
+  recapture from a running Shell Web UI remote-debugging session.
+
+### Current State
+- Real current UI captures exist locally and are now the public README media
+  source.
+- Corrected Remotion poster render passed with `npm run still:landscape`.
+- Corrected Remotion MP4 render passed with `npm run render:landscape`; output
+  is a valid 1920x1080 H.264 MP4 under the 15 MB repository target.
+- `npm run build --prefix shell_web_ui` passes with the existing non-blocking
+  face-api/browser externalization and large chunk warnings.
+- Public launch regression passes: `5 passed`.
+- Public GitHub launch audit passes with `0 findings`.
+- `git diff --check` passes.
+
+### Next Steps
+1. Commit and push the correction to GitHub.
+2. Watch GitHub Actions after push.
+
+### Open Issues
+- The Settings capture is dark because it reflects the current UI state; it is
+  included for accuracy but Dashboard/Control/Gallery are the primary public
+  preview surfaces.
+
+## Session: 2026-05-24
+
+### Completed
 - Built the new primary public media set requested for the current Shell UI:
   English 16:9 landscape video, landscape poster, and SVG "photo" showcase.
 - Added current SVG visuals for dashboard, chat/chart, voice/tools, tools

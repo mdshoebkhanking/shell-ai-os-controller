@@ -2,19 +2,20 @@
 
 # Screenshots
 
-The primary public visual set now lives under `screenshots/current/` as SVGs.
-These SVGs match the current Shell Web UI style and are used by the README,
-media kit, and 16:9 Remotion landscape demo.
+The primary public visual set now lives under `screenshots/current/` as real
+PNG captures from the running Shell Web UI. These screenshots are used by the
+README, media kit, and 16:9 Remotion landscape demo.
 
-Current SVG files:
+Current PNG files:
 
-- `current/dashboard.svg`
-- `current/chat-chart.svg`
-- `current/voice-tools.svg`
-- `current/tools-control.svg`
-- `current/settings-api.svg`
-- `current/gallery-media.svg`
-- `current/runtime-architecture.svg`
+- `current/dashboard.png`
+- `current/control.png`
+- `current/gallery.png`
+- `current/settings.png`
+- `current/apps.png`
+- `current/notes.png`
+- `current/phone.png`
+- `current/macros.png`
 
 Real WebEngine capture references live under `screenshots/showcase/`.
 

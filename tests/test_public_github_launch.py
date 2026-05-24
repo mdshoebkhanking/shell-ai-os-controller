@@ -26,13 +26,14 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/showcase/settings-panel.png",
         "screenshots/showcase/tools-catalog.png",
         "screenshots/showcase/windows-chat-acceptance.png",
-        "screenshots/current/dashboard.svg",
-        "screenshots/current/chat-chart.svg",
-        "screenshots/current/voice-tools.svg",
-        "screenshots/current/tools-control.svg",
-        "screenshots/current/settings-api.svg",
-        "screenshots/current/gallery-media.svg",
-        "screenshots/current/runtime-architecture.svg",
+        "screenshots/current/dashboard.png",
+        "screenshots/current/control.png",
+        "screenshots/current/gallery.png",
+        "screenshots/current/settings.png",
+        "screenshots/current/apps.png",
+        "screenshots/current/notes.png",
+        "screenshots/current/phone.png",
+        "screenshots/current/macros.png",
         "gifs/shell-launch-preview.gif",
         "gifs/shell-realtime-demo.svg",
         "gifs/shell-install-flow.svg",
@@ -54,9 +55,10 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     assert "assets/brand/shell-official-logo.png" in readme
     assert "screenshots/showcase/chat-interface.png" in readme
     assert "screenshots/showcase/voice-interface.png" in readme
-    assert "screenshots/current/dashboard.svg" in readme
-    assert "screenshots/current/chat-chart.svg" in readme
-    assert "screenshots/current/runtime-architecture.svg" in readme
+    assert "screenshots/current/dashboard.png" in readme
+    assert "screenshots/current/control.png" in readme
+    assert "screenshots/current/gallery.png" in readme
+    assert "screenshots/current/settings.png" in readme
     assert "gifs/shell-launch-preview.gif" in readme
     assert "gifs/shell-realtime-demo.svg" in readme
     assert "gifs/shell-install-flow.svg" in readme
