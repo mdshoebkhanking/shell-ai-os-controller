@@ -6,6 +6,9 @@
   debugging: Dashboard, Control Center, Gallery, Settings, Apps, Notes, Phone,
   and Macros.
 - Removed the handcrafted current SVG showcase from tracked public media.
+- Removed old placeholder screenshots, legacy showcase screenshots, old GIFs,
+  vertical reels, classic launch videos, storyboard media, and unused Remotion
+  audio/screenshots from tracked public media.
 - Rebuilt the Remotion landscape source to render from actual current UI PNG
   captures instead of illustrative SVG screens.
 - Updated README, media kit, screenshot strategy, video docs, public release
@@ -19,8 +22,13 @@
   `videos/instagram-reel/public/current-ui/`.
 - Removed the old generated `screenshots/current/*.svg` and
   `videos/instagram-reel/public/current-ui/*.svg` files.
+- Removed old media assets from `screenshots/showcase/`, legacy placeholder
+  SVG files, old tracked GIFs, classic/vertical demo videos, Remotion `out/`
+  artifacts, old screenshot copies, unused audio, and retired reel components.
 - Replaced `videos/instagram-reel/src/ShellCurrentUiLandscape.tsx` so the
   16:9 English demo uses real Shell UI screenshots.
+- Replaced `tools/build_launch_video.py` with a wrapper that renders the
+  current Shell UI Remotion composition only.
 - Added `tools/capture_current_ui_screens.mjs` for repeatable current UI
   recapture from a running Shell Web UI remote-debugging session.
 - Hardened `tools/memory_probe.py` listener cleanup after GitHub Actions
@@ -29,6 +37,8 @@
 ### Current State
 - Real current UI captures exist locally and are now the public README media
   source.
+- Old tracked public photos/videos/GIFs are removed; the remaining public media
+  set is `screenshots/current/` plus the current 16:9 Remotion demo/poster.
 - Corrected Remotion poster render passed with `npm run still:landscape`.
 - Corrected Remotion MP4 render passed with `npm run render:landscape`; output
   is a valid 1920x1080 H.264 MP4 under the 15 MB repository target.

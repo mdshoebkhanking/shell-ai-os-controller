@@ -45,8 +45,8 @@ Primary current media for the public repository:
 - `screenshots/current/` real current Web UI PNG captures
 
 The landscape demo is English-only, 16:9, and rendered from the current PNG
-captures. Older vertical/current-state and classic cinematic videos remain
-available as secondary media.
+captures. Older vertical/current-state and classic cinematic videos were
+removed from tracked public media.
 
 ## One-Click User Flow
 

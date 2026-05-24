@@ -17,16 +17,8 @@ Current PNG files:
 - `current/phone.png`
 - `current/macros.png`
 
-Real WebEngine capture references live under `screenshots/showcase/`.
-
-Showcase PNG files:
-
-- `showcase/chat-interface.png`
-- `showcase/voice-interface.png`
-- `showcase/system-dashboard.png`
-- `showcase/settings-panel.png`
-- `showcase/tools-catalog.png`
-- `showcase/windows-chat-acceptance.png`
-
 Avoid screenshots that show API keys, email addresses, Telegram chat IDs, or
 private local files.
+
+Older placeholder screenshots and previous showcase captures were removed so
+the repository only presents the current Shell UI.

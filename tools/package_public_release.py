@@ -126,7 +126,7 @@ EXCLUDED_SUFFIXES = {
 }
 
 PUBLIC_MEDIA_EXCEPTIONS = {
-    ("videos", "shell-launch-demo.mp4"),
+    ("videos", "shell-current-ui-landscape-demo.mp4"),
 }
 
 TEXT_SUFFIXES = {

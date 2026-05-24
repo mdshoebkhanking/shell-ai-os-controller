@@ -26,32 +26,47 @@ class Finding:
 
 SCORE_WEIGHTS = {"critical": 30, "high": 18, "medium": 7, "low": 3, "info": 0}
 
-REQUIRED_SHOWCASE = [
+REQUIRED_CURRENT_SCREENSHOTS = [
+    "screenshots/current/dashboard.png",
+    "screenshots/current/control.png",
+    "screenshots/current/gallery.png",
+    "screenshots/current/settings.png",
+    "screenshots/current/apps.png",
+    "screenshots/current/notes.png",
+    "screenshots/current/phone.png",
+    "screenshots/current/macros.png",
+]
+
+REQUIRED_DEMO_MEDIA = [
+    "videos/shell-current-ui-landscape-demo.mp4",
+    "videos/shell-current-ui-landscape-poster.png",
+]
+
+REMOVED_LEGACY_MEDIA = [
+    "screenshots/add-chat-screenshot.svg",
+    "screenshots/add-voice-screenshot.svg",
+    "screenshots/add-tools-screenshot.svg",
+    "screenshots/add-settings-screenshot.svg",
     "screenshots/showcase/chat-interface.png",
     "screenshots/showcase/voice-interface.png",
     "screenshots/showcase/system-dashboard.png",
     "screenshots/showcase/settings-panel.png",
     "screenshots/showcase/tools-catalog.png",
     "screenshots/showcase/windows-chat-acceptance.png",
-]
-
-REQUIRED_CURRENT_SCREENSHOTS = [
-    "screenshots/current/dashboard.png",
-    "screenshots/current/control.png",
-    "screenshots/current/gallery.png",
-    "screenshots/current/settings.png",
-]
-
-REQUIRED_DEMO_MEDIA = [
-    "videos/shell-current-ui-landscape-demo.mp4",
-    "videos/shell-current-ui-landscape-poster.png",
+    "gifs/add-setup-demo.svg",
     "gifs/shell-launch-preview.gif",
     "gifs/shell-realtime-demo.svg",
     "gifs/shell-install-flow.svg",
+    "videos/add-video-demo.svg",
+    "videos/shell-current-state-demo.mp4",
+    "videos/shell-current-state-demo-poster.png",
     "videos/shell-launch-demo.mp4",
     "videos/shell-launch-demo-poster.png",
     "videos/shell-launch-demo-voiceover.md",
     "videos/shell-launch-trailer.svg",
+    "videos/shell-ai-os-controller-instagram-reel.mp4",
+    "videos/shell-ai-os-controller-instagram-reel-60s.mp4",
+    "videos/shell-ai-real-workflow-reel-60s.mp4",
 ]
 
 REQUIRED_PUBLIC_FILES = [
@@ -111,11 +126,6 @@ def check_showcase(findings: list[Finding]) -> None:
             findings.append(Finding("high", "screenshots", f"Missing current UI screenshot: {path}", "Capture the running Shell UI and commit the PNG.", path))
         if path not in readme:
             findings.append(Finding("medium", "screenshots", f"README does not reference current UI screenshot: {path}", "Show actual current UI screenshots directly in README.", "README.md"))
-    for path in REQUIRED_SHOWCASE:
-        if not exists(path):
-            findings.append(Finding("high", "screenshots", f"Missing showcase screenshot: {path}", "Add real UI screenshots before public launch.", path))
-        if path not in readme:
-            findings.append(Finding("medium", "screenshots", f"README does not reference showcase screenshot: {path}", "Show real screenshots directly in README.", "README.md"))
     if "Replace these placeholders" in readme:
         findings.append(Finding("medium", "screenshots", "README still contains placeholder screenshot language.", "Replace placeholder language with real launch media.", "README.md"))
 
@@ -127,12 +137,14 @@ def check_demo_media(findings: list[Finding]) -> None:
             findings.append(Finding("high", "demo_media", f"Missing demo media asset: {path}", "Add lightweight public demo media before launch.", path))
         if path not in readme:
             findings.append(Finding("medium", "demo_media", f"README does not reference demo media asset: {path}", "Show demo media directly in README.", "README.md"))
-    video = ROOT / "videos" / "shell-launch-demo.mp4"
+    for path in REMOVED_LEGACY_MEDIA:
+        if exists(path):
+            findings.append(Finding("medium", "demo_media", f"Legacy media asset is still present: {path}", "Remove old placeholder/showcase/classic media and keep only current UI captures.", path))
+        if path in readme:
+            findings.append(Finding("medium", "demo_media", f"README still references legacy media asset: {path}", "Point README only at current Shell UI screenshots and demo media.", "README.md"))
+    video = ROOT / "videos" / "shell-current-ui-landscape-demo.mp4"
     if video.exists() and video.stat().st_size > 15_000_000:
-        findings.append(Finding("medium", "demo_media", "Launch demo MP4 is larger than 15 MB.", "Compress or host large videos in GitHub Releases/YouTube.", "videos/shell-launch-demo.mp4"))
-    preview = ROOT / "gifs" / "shell-launch-preview.gif"
-    if preview.exists() and preview.stat().st_size > 8_000_000:
-        findings.append(Finding("medium", "demo_media", "Launch preview GIF is larger than 8 MB.", "Compress the README preview GIF so the repository loads quickly.", "gifs/shell-launch-preview.gif"))
+        findings.append(Finding("medium", "demo_media", "Current UI landscape demo MP4 is larger than 15 MB.", "Compress or host large videos in GitHub Releases/YouTube.", "videos/shell-current-ui-landscape-demo.mp4"))
     if "Add setup GIF here" in readme or "Add video demo here" in readme:
         findings.append(Finding("medium", "demo_media", "README still contains demo media placeholder labels.", "Replace placeholder demo labels with real launch media.", "README.md"))
 

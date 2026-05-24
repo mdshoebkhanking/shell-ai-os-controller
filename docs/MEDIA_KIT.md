@@ -30,8 +30,6 @@ Before publishing, re-check that no local private state is visible.
 | Phone | `screenshots/current/phone.png` |
 | Macros | `screenshots/current/macros.png` |
 
-Legacy/reference WebEngine captures remain available under `screenshots/showcase/`.
-
 Before using screenshots publicly, confirm that no API key, Telegram chat ID,
 email address, local username, private file path, or machine-specific value is
 visible.
@@ -42,10 +40,6 @@ visible.
 | --- | --- | --- |
 | Current 16:9 Web UI demo | `videos/shell-current-ui-landscape-demo.mp4` | Primary English landscape Remotion demo |
 | Current 16:9 Web UI poster | `videos/shell-current-ui-landscape-poster.png` | Primary README poster frame |
-| Current vertical Web UI demo | `videos/shell-current-state-demo.mp4` | Secondary vertical current-state demo |
-| Current vertical Web UI poster | `videos/shell-current-state-demo-poster.png` | Secondary vertical poster |
-| Classic launch demo | `videos/shell-launch-demo.mp4` | Earlier cinematic launch video with voiceover |
-| Real workflow reel | `videos/shell-ai-real-workflow-reel-60s.mp4` | Existing vertical workflow reel |
 
 ## Remotion Source
 
@@ -60,19 +54,15 @@ Useful commands:
 ```bash
 npm run still:landscape
 npm run render:landscape
-npm run still:current
-npm run render:current
 ```
 
 The primary current demo composition is `ShellCurrentUiLandscape` at 1920x1080.
 It uses English on-screen copy and current PNG UI captures from
 `videos/instagram-reel/public/current-ui/`.
 
-The secondary vertical demo composition is `ShellCurrentStateDemo`. It uses:
-
-- real checked-in screenshots from `videos/instagram-reel/public/screenshots/`
-- official logo from `videos/instagram-reel/public/brand/`
-- local ambient and UI sound effects from `videos/instagram-reel/public/audio/`
+Old vertical reels, classic launch videos, placeholder screenshots, and
+reference captures were removed so public media only reflects the current Shell
+UI.
 
 ## Capture Standard
 

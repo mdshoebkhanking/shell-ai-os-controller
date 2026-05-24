@@ -39,8 +39,6 @@
   <strong><a href="videos/shell-current-ui-landscape-demo.mp4">Watch the current 16:9 Shell Web UI demo</a></strong>
   ·
   <a href="screenshots/current/dashboard.png">Actual current UI screenshots</a>
-  ·
-  <a href="videos/shell-launch-demo.mp4">Classic launch demo</a>
 </p>
 
 ---
@@ -293,20 +291,6 @@ and the landscape Remotion demo.
 | --- | --- |
 | <img src="screenshots/current/phone.png" alt="Actual current Shell phone UI" width="420"> | <img src="screenshots/current/macros.png" alt="Actual current Shell macros UI" width="420"> |
 
-Real WebEngine capture references remain available in `screenshots/showcase/`.
-
-| Chat | Voice |
-| --- | --- |
-| <img src="screenshots/showcase/chat-interface.png" alt="Shell chat interface" width="420"> | <img src="screenshots/showcase/voice-interface.png" alt="Shell voice interface" width="420"> |
-
-| Runtime | Tools |
-| --- | --- |
-| <img src="screenshots/showcase/system-dashboard.png" alt="Shell runtime dashboard" width="420"> | <img src="screenshots/showcase/tools-catalog.png" alt="Shell tools catalog" width="420"> |
-
-| Settings | Windows Acceptance |
-| --- | --- |
-| <img src="screenshots/showcase/settings-panel.png" alt="Shell settings panel" width="420"> | <img src="screenshots/showcase/windows-chat-acceptance.png" alt="Shell Windows acceptance chat capture" width="420"> |
-
 ## Demo Media
 
 ### Current 16:9 Landscape Demo
@@ -319,49 +303,25 @@ Real WebEngine capture references remain available in `screenshots/showcase/`.
 
 <p align="center">
   <strong><a href="videos/shell-current-ui-landscape-demo.mp4">Watch the current 16:9 Shell Web UI demo</a></strong>
-  ·
-  <a href="videos/shell-current-state-demo.mp4">Vertical current-state demo</a>
-  ·
-  <a href="videos/shell-launch-demo.mp4">Classic cinematic launch demo</a>
-  ·
-  <a href="videos/shell-launch-demo-voiceover.md">Voiceover script</a>
 </p>
 
 | Media | Preview |
 | --- | --- |
 | Current 16:9 Web UI Demo | <a href="videos/shell-current-ui-landscape-demo.mp4"><img src="videos/shell-current-ui-landscape-poster.png" alt="Shell current landscape Web UI demo poster" width="420"></a> |
 | Actual Current Dashboard | <a href="screenshots/current/dashboard.png"><img src="screenshots/current/dashboard.png" alt="Actual Shell current dashboard preview" width="420"></a> |
-| Current Vertical Web UI Demo | <a href="videos/shell-current-state-demo.mp4"><img src="videos/shell-current-state-demo-poster.png" alt="Shell current vertical Web UI demo poster" width="420"></a> |
-| Classic Launch Demo | <a href="videos/shell-launch-demo.mp4"><img src="videos/shell-launch-demo-poster.png" alt="Shell AI classic launch demo poster" width="420"></a> |
-| Launch Preview GIF | <a href="videos/shell-launch-demo.mp4"><img src="gifs/shell-launch-preview.gif" alt="Shell AI launch preview GIF" width="420"></a> |
-| Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
-| One-Click Install Flow | <img src="gifs/shell-install-flow.svg" alt="Animated Shell one-click installation flow" width="420"> |
-| Launch Trailer Storyboard | <img src="videos/shell-launch-trailer.svg" alt="Shell public launch trailer storyboard" width="420"> |
 
 Recommended launch media:
 
 - 36-second current 16:9 English Web UI demo.
-- 60-second install GIF.
 - 90-second real voice demo after Gemini/remote audio setup.
 - 2-minute "chat opens apps and runs tools" demo.
 - 5-minute technical architecture walkthrough.
 
-Storyboards:
+Current media files:
 
-- [Realtime demo visual](gifs/shell-realtime-demo.svg)
-- [Launch preview GIF](gifs/shell-launch-preview.gif)
-- [One-click install visual](gifs/shell-install-flow.svg)
-- [Launch trailer visual](videos/shell-launch-trailer.svg)
 - [Current 16:9 Web UI demo MP4](videos/shell-current-ui-landscape-demo.mp4)
 - [Current 16:9 Web UI demo poster](videos/shell-current-ui-landscape-poster.png)
 - [Actual current UI screenshots](screenshots/current/README.md)
-- [Current Web UI demo MP4](videos/shell-current-state-demo.mp4)
-- [Current Web UI demo poster](videos/shell-current-state-demo-poster.png)
-- [Launch demo MP4](videos/shell-launch-demo.mp4)
-- [Launch demo poster](videos/shell-launch-demo-poster.png)
-- [Launch demo voiceover script](videos/shell-launch-demo-voiceover.md)
-- [GIF demo storyboards](gifs/storyboards/README.md)
-- [Launch video storyboards](videos/storyboards/README.md)
 
 ## Architecture
 
@@ -406,9 +366,9 @@ User / CLI / Desktop feature flag
 ├── tools/                           # Release, probes, diagnostics, packaging
 ├── docs/                            # Architecture and rollout documents
 ├── assets/brand/                    # Official Shell logo and brand rules
-├── screenshots/                     # Public screenshots and showcase captures
-├── gifs/                            # Lightweight demo visuals and storyboards
-├── videos/                          # Launch video storyboards and preview media
+├── screenshots/                     # Current public UI captures
+├── gifs/                            # Reserved for future current UI GIFs
+├── videos/                          # Current 16:9 demo and Remotion source
 ├── banners/                         # Public banner and social assets
 ├── .github/                         # Issue and pull request templates
 ├── LICENSE                          # Apache-2.0 license

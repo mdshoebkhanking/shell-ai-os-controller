@@ -20,12 +20,6 @@ def test_official_logo_and_showcase_assets_exist():
     required = [
         "assets/brand/shell-official-logo.png",
         "assets/brand/README.md",
-        "screenshots/showcase/chat-interface.png",
-        "screenshots/showcase/voice-interface.png",
-        "screenshots/showcase/system-dashboard.png",
-        "screenshots/showcase/settings-panel.png",
-        "screenshots/showcase/tools-catalog.png",
-        "screenshots/showcase/windows-chat-acceptance.png",
         "screenshots/current/dashboard.png",
         "screenshots/current/control.png",
         "screenshots/current/gallery.png",
@@ -34,15 +28,8 @@ def test_official_logo_and_showcase_assets_exist():
         "screenshots/current/notes.png",
         "screenshots/current/phone.png",
         "screenshots/current/macros.png",
-        "gifs/shell-launch-preview.gif",
-        "gifs/shell-realtime-demo.svg",
-        "gifs/shell-install-flow.svg",
         "videos/shell-current-ui-landscape-demo.mp4",
         "videos/shell-current-ui-landscape-poster.png",
-        "videos/shell-launch-demo.mp4",
-        "videos/shell-launch-demo-poster.png",
-        "videos/shell-launch-demo-voiceover.md",
-        "videos/shell-launch-trailer.svg",
     ]
 
     for path in required:
@@ -53,21 +40,12 @@ def test_readme_uses_official_logo_and_real_showcase_gallery():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "assets/brand/shell-official-logo.png" in readme
-    assert "screenshots/showcase/chat-interface.png" in readme
-    assert "screenshots/showcase/voice-interface.png" in readme
     assert "screenshots/current/dashboard.png" in readme
     assert "screenshots/current/control.png" in readme
     assert "screenshots/current/gallery.png" in readme
     assert "screenshots/current/settings.png" in readme
-    assert "gifs/shell-launch-preview.gif" in readme
-    assert "gifs/shell-realtime-demo.svg" in readme
-    assert "gifs/shell-install-flow.svg" in readme
     assert "videos/shell-current-ui-landscape-demo.mp4" in readme
     assert "videos/shell-current-ui-landscape-poster.png" in readme
-    assert "videos/shell-launch-demo.mp4" in readme
-    assert "videos/shell-launch-demo-poster.png" in readme
-    assert "videos/shell-launch-demo-voiceover.md" in readme
-    assert "videos/shell-launch-trailer.svg" in readme
     assert "Replace these placeholders" not in readme
     assert "Add setup GIF here" not in readme
     assert "Add video demo here" not in readme
@@ -86,17 +64,11 @@ def test_public_github_launch_audit_has_no_high_findings():
 def test_launch_demo_video_is_github_friendly_size():
     current_landscape = ROOT / "videos" / "shell-current-ui-landscape-demo.mp4"
     current_landscape_poster = ROOT / "videos" / "shell-current-ui-landscape-poster.png"
-    video = ROOT / "videos" / "shell-launch-demo.mp4"
-    preview = ROOT / "gifs" / "shell-launch-preview.gif"
 
     assert current_landscape.exists()
     assert current_landscape_poster.exists()
-    assert video.exists()
-    assert preview.exists()
     assert current_landscape.stat().st_size < 15_000_000
     assert current_landscape_poster.stat().st_size < 5_000_000
-    assert video.stat().st_size < 15_000_000
-    assert preview.stat().st_size < 8_000_000
 
 
 def test_public_launch_docs_and_ci_gate_are_linked():

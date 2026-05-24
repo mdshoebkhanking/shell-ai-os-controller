@@ -9,8 +9,8 @@ GitHub publicly.
 
 - Official logo is used from `assets/brand/shell-official-logo.png`.
 - README hero shows the official logo and banner.
-- Showcase screenshots are real UI captures from `screenshots/showcase/`.
-- Demo GIF/video sections include lightweight animated SVG launch media plus storyboards.
+- Current screenshots are real UI captures from `screenshots/current/`.
+- Demo video media is the current 16:9 Shell UI render from `videos/shell-current-ui-landscape-demo.mp4`.
 - Branding stays metallic, dark, minimal, premium, and realistic.
 
 ## Security Gate
@@ -42,11 +42,9 @@ Only run the remote commands after the target GitHub repository URL is known.
 
 ## Public Launch Assets
 
-- README screenshots.
-- 60-second install GIF.
-- 90-second voice demo.
-- 2-minute workflow demo.
-- 5-minute architecture walkthrough.
+- README screenshots from the current Shell UI.
+- Current 16:9 UI demo video and poster.
+- Future voice/workflow/architecture demos regenerated from the current UI.
 - Social preview image.
 - Launch post.
 

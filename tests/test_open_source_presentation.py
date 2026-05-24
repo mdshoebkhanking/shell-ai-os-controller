@@ -51,15 +51,15 @@ def test_github_community_files_exist():
         assert (ROOT / path).exists(), path
 
 
-def test_media_placeholders_exist():
+def test_current_public_media_exists():
     required = [
         "banners/shell-ai-os-controller-banner.svg",
-        "screenshots/add-chat-screenshot.svg",
-        "screenshots/add-voice-screenshot.svg",
-        "screenshots/add-tools-screenshot.svg",
-        "screenshots/add-settings-screenshot.svg",
-        "gifs/add-setup-demo.svg",
-        "videos/add-video-demo.svg",
+        "screenshots/current/dashboard.png",
+        "screenshots/current/control.png",
+        "screenshots/current/gallery.png",
+        "screenshots/current/settings.png",
+        "videos/shell-current-ui-landscape-demo.mp4",
+        "videos/shell-current-ui-landscape-poster.png",
     ]
     for path in required:
         assert (ROOT / path).exists(), path

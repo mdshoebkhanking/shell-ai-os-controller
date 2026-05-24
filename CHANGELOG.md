@@ -9,6 +9,9 @@
   Notes, Phone, and Macros.
 - Promoted the landscape demo and actual current UI screenshots to the README, media kit,
   screenshot docs, video docs, public release docs, and current status docs.
+- Removed old placeholder screenshots, legacy showcase screenshots, vertical
+  reels, classic launch videos, storyboard files, and unused Remotion media so
+  public assets now reflect only the current Shell UI.
 - Updated README positioning for the current React/Vite Shell Web UI embedded
   in PyQt WebEngine.
 - Added current repository status and media kit documentation.

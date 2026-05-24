@@ -10,9 +10,8 @@ GIFs, launch videos, and social previews.
 | Folder | Purpose |
 | --- | --- |
 | `screenshots/current/` | Current real WebEngine PNG captures for README, media kit, and Remotion |
-| `screenshots/showcase/` | Earlier WebEngine PNG capture references |
-| `gifs/` | Short looped feature demos |
-| `videos/` | Longer walkthrough/demo placeholders |
+| `gifs/` | Reserved for future current UI GIFs |
+| `videos/` | Current 16:9 demo and Remotion source |
 | `banners/` | GitHub/social preview assets |
 
 ## Required Screenshots
@@ -37,16 +36,6 @@ node tools/capture_current_ui_screens.mjs 9235 .shell_runtime/current_ui_capture
 Then copy reviewed captures into `screenshots/current/` and
 `videos/instagram-reel/public/current-ui/`.
 
-## Demo GIFs
-
-Keep GIFs under 12 seconds where possible.
-
-- `gifs/chat-first-message.gif`: open app, type, see streamed reply.
-- `gifs/voice-ready.gif`: open Voice, start voice, transcript updates.
-- `gifs/tool-readiness.gif`: open Tools, run a safe local tool.
-- `gifs/settings-api-key.gif`: add provider key with redacted value.
-- `gifs/repair-flow.gif`: show a missing dependency and repair action.
-
 ## Video Plan
 
 Current primary public launch video:
@@ -56,14 +45,9 @@ Current primary public launch video:
 - English-only on-screen copy.
 - Built from the current real PNG screenshots and Remotion source.
 
-Recommended public launch sequence:
-
-1. 0-5s: title and app open.
-2. 5-20s: chat request and fast response.
-3. 20-40s: voice page and transcript.
-4. 40-60s: tools and automation with safety status.
-5. 60-75s: settings, API keys, and health checks.
-6. 75-90s: what is real today and what is on the roadmap.
+Older placeholder visuals, showcase reference screenshots, vertical reels, and
+classic launch videos should not be reintroduced unless they are regenerated
+from the current Shell UI.
 
 ## Social Preview Direction
 
