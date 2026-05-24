@@ -19,6 +19,8 @@
   and safety-gated OS automation.
 - Added Remotion source/scripts for the current Web UI demo video and poster.
 - Documented current screenshots, demo media, and public release asset flow.
+- Hardened the synthetic memory probe listener cleanup path after Python 3.10
+  CI exposed a flaky QThread cleanup timing issue.
 
 ## 1.0.0
 

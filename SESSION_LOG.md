@@ -23,6 +23,8 @@
   16:9 English demo uses real Shell UI screenshots.
 - Added `tools/capture_current_ui_screens.mjs` for repeatable current UI
   recapture from a running Shell Web UI remote-debugging session.
+- Hardened `tools/memory_probe.py` listener cleanup after GitHub Actions
+  Python 3.10 exposed a flaky synthetic QThread cleanup failure.
 
 ### Current State
 - Real current UI captures exist locally and are now the public README media
@@ -34,6 +36,7 @@
   face-api/browser externalization and large chunk warnings.
 - Public launch regression passes: `5 passed`.
 - Public GitHub launch audit passes with `0 findings`.
+- Memory probe regression passes locally: `6 passed, 1 warning`.
 - `git diff --check` passes.
 
 ### Next Steps

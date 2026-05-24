@@ -119,15 +119,24 @@ def _listener_probe() -> dict[str, Any]:
     thread_count_before = threading.active_count()
     listener.start()
     time.sleep(0.15)
-    listener.stop_listening()
-    listener.wait(1500)
+    cleaned_up = False
+    for timeout_ms in (1500, 1500, 3000):
+        listener.stop_listening()
+        if listener.wait(timeout_ms):
+            cleaned_up = True
+            break
+    if not cleaned_up and listener.isRunning():
+        # This probe uses a synthetic audio source; terminate only as a final
+        # cleanup fallback so CI never leaves a QThread behind.
+        listener.terminate()
+        cleaned_up = listener.wait(1000)
     thread_count_after = threading.active_count()
     return {
         "sounddevice_available": _SD_AVAILABLE,
         "speech_recognition_available": _SR_AVAILABLE,
         "thread_count_before": thread_count_before,
         "thread_count_after": thread_count_after,
-        "thread_cleaned_up": not listener.isRunning(),
+        "thread_cleaned_up": bool(cleaned_up) and not listener.isRunning(),
     }
 
 
