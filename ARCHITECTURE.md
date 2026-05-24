@@ -7,37 +7,39 @@ the pitch, see [README.md](README.md).*
 
 ## Big picture
 
-Shell is three layers glued together:
+Shell is now five runtime surfaces behind one guarded backend:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  LiveKit Agents  ·  streaming mic ↔ Gemini Realtime ↔ speaker    │
-│  (livekit-agents, livekit-plugins-google, livekit-plugins-silero)│
+│  React/Vite/WebGL renderer inside PyQt WebEngine                 │
+│  Dashboard, chart chat, transcript, Settings, Gallery, Tools     │
 └──────────────────────────────────────────────────────────────────┘
                                  │
-                                 │  AgentSession
+                                 │  QWebChannel + hub events
                                  ▼
 ┌──────────────────────────────────────────────────────────────────┐
-│  agent.py — the Assistant class                                  │
-│    • imports ~80 shell_*.py modules lazily                       │
-│    • registers ~300 @function_tool functions into `tools_list`   │
-│    • passes `tools_list` + instructions + voice to Gemini        │
-│    • handles session state, SocketIO events, shutdown            │
+│  Shell Python host and runtime                                   │
+│    • shell_web_ui/host.py exposes bridge APIs to JavaScript      │
+│    • shell_hub.py streams runtime events when the hub is active  │
+│    • shell_nl_router.py maps natural language to backend tools   │
+│    • shell_tool_gateway.py executes catalogued tools safely      │
 └──────────────────────────────────────────────────────────────────┘
                                  │
           ┌──────────────────────┼─────────────────────────────┐
           ▼                      ▼                             ▼
-    Desktop I/O            Web I/O                      External APIs
-    (pyautogui,            (selenium,                   (Groq, Perplexity,
-     pygetwindow,          playwright,                   HF, Pollinations,
-     pywin32)              aiohttp)                      OpenWeather, etc.)
+    Voice Pipeline         Agent/Tool Layer              External + OS I/O
+    Gemini Live,           468 tool entries,             pywinauto, PyAutoGUI,
+    local fallback,        37 agents, memory,            Windows-MCP, browser,
+    wake/VAD flags         RAG, sandbox, checkpoints     Telegram, image APIs
 ```
 
-The classic voice path uses hosted Gemini through LiveKit. The newer
-ShellAI Core path can route planning/summarization calls through
-OpenAI-compatible providers, OpenRouter, or local Ollama depending on
-`~/.shellai/config.json` and environment variables. Everything else is a
-Python program deciding what to execute under policy and tool gates.
+The visible app defaults to the Web UI path. The preserved PyQt UI remains
+available only as a rollback path with `SHELL_LEGACY_UI=1`. The classic voice
+path can use Gemini/LiveKit or local fallbacks, while ShellAI Core can route
+planning/summarization calls through OpenAI-compatible providers, OpenRouter,
+or local Ollama depending on `~/.shellai/config.json` and environment
+variables. Everything still resolves to Python code deciding what to execute
+under policy, readiness, and safety gates.
 
 ---
 
@@ -76,8 +78,8 @@ Important boundaries:
 - `shellai/fabric/runtime.py` wires agents in-process only; there is no
   network bus or autonomous self-improvement loop.
 - `core/shellai_bridge.py` is the desktop feature flag boundary. It returns
-  `None` when `SHELLAI_BACKEND_MODE` is unset or `classic`, so existing PyQt
-  flows continue unchanged.
+  `None` when `SHELLAI_BACKEND_MODE` is unset or `classic`, so the default Web
+  UI and classic backend flows continue unchanged.
 - `shellai/policy.py` and `shellai/safety.py` decide shell risk classes before
   `ShellTool` executes anything.
 - `shellai/monitor.py` persists compact trace snapshots for CLI inspection.
@@ -122,9 +124,9 @@ Shell. Shell's job is only:
 
 | File | Role |
 |---|---|
-| `agent.py` | Central classic orchestrator. Contains the `Assistant` class, session handlers, and the full `tools_list`. Slated for continued extraction behind stable interfaces. |
+| `agent.py` | Central classic orchestrator. Contains the `Assistant` class, session handlers, and the full legacy LiveKit tool list. Slated for continued extraction behind stable interfaces. |
 | `shellai/` | New opt-in ShellAI Core package: CLI, agent loop, fabric runtime, models, memory, skills, tools, monitor, cron, daemon. |
-| `core/shellai_bridge.py` | Feature-flagged desktop bridge from PyQt/agent callers into ShellAI Core. Defaults to classic behavior. |
+| `core/shellai_bridge.py` | Feature-flagged desktop bridge from UI/agent callers into ShellAI Core. Defaults to classic behavior. |
 | `shell_voice.py` | Single source of truth for voice + persona. Exposes resolver, catalog of 30 Gemini voices, 6 personas, runtime switcher, session registration. |
 | `shell_safety_gate.py` | Gates the dangerous "write LLM code to disk" operations. Refuses by default unless `SHELL_ALLOW_CODE_WRITE` / `SHELL_ALLOW_AGENT_PATCH` is set. Appends audit log. |
 | `shell_config.py` | `.env` loader + typed getters. Grouped properties (`config.voice`, `config.email`, `config.vad`). |
@@ -184,11 +186,13 @@ functions into `agent.py`'s `tools_list`.
 
 | File | Role |
 |---|---|
-| `shell_hub.py` | aiohttp + Socket.IO server. Bridges agent state to the UI. Issues LiveKit tokens on `/token`. |
+| `shell_hub.py` | aiohttp + Socket.IO server. Bridges agent/runtime state to the UI. Issues LiveKit tokens on `/token`. |
 | `shell_windows_mcp.py` | CursorTouch Windows-MCP stdio adapter. Exposes real MCP desktop tools (`Click`, `Type`, `Screenshot`, `Snapshot`, `App`, `Shell`, etc.) to UI/chat. |
 | `mcp_server.py` / `shell_mcp_server.py` | Legacy HTTP JSON-action server kept for compatibility. It is no longer the UI's MCP surface. |
-| `shell_ui/shell_cinematic_full.py` | PyQt6 "glass" UI — animated orb, states, captions. Connects to hub via Socket.IO. |
-| `ShellAICoreWorker` in `shell_ui/shell_cinematic_full.py` | Optional worker that routes chat text through ShellAI Core when `SHELLAI_BACKEND_MODE=shellai_core`. Slash commands still use the classic backend-command path. |
+| `shell_web_ui/host.py` | PyQt WebEngine host for the React renderer. Exposes Shell bridge APIs, system metrics, tool execution, Gallery, media permissions, voice state, and settings. |
+| `shell_web_ui/src/` | React/Vite/WebGL Shell UI: Dashboard chart/chat, Settings, Gallery, Phone, Control Center, Notes, orb, animation system, and Shell bridge client. |
+| `shell_ui/shell_cinematic_full.py` | Preserved PyQt6 legacy UI and rollback implementation behind `SHELL_LEGACY_UI=1`. |
+| `ShellAICoreWorker` in `shell_ui/shell_cinematic_full.py` | Optional legacy worker that routes chat text through ShellAI Core when `SHELLAI_BACKEND_MODE=shellai_core`. Web UI routes through the bridge/host path. |
 | `shell_ui/shell_orb_*.py` | Orb renderer variants (OpenGL, particle, pygame). |
 | `launch.py` / `launch_ui.pyw` | UI entry points. |
 | `start_shell.bat` | One-batch launcher (hub → MCP → agent → UI, each in its own terminal). |
@@ -308,7 +312,8 @@ and hiding the `AttributeError` behind a `return True`.
 - **NLP / ML** — fuzzywuzzy, sentence-transformers, scikit-learn,
   youtube-transcript-api, yt-dlp, deep-translator.
 - **Communication** — instagrapi, speechrecognition.
-- **UI** — PyQt6, PyQt6-WebEngine, PyOpenGL, GPUtil, pygame-ce, ursina.
+- **UI** — React, Vite, TypeScript, PyQt6, PyQt6-WebEngine, QWebChannel,
+  PyOpenGL, GPUtil, pygame-ce, ursina.
 - **Utilities** — pyfiglet, cryptography, yfinance.
 - **Testing** — pytest, pytest-asyncio, pytest-timeout.
 
@@ -325,17 +330,17 @@ Removed in the April 2026 cleanup: beautifulsoup4, colorama.
 | `tests/test_shellai_phase2_*.py` | AI OS Fabric wrappers, policy/monitor/optimizer, cron, daemon | 20+ |
 
 All tests run offline. Run: `pytest` (uses `pytest.ini`). The latest full local
-run in this workspace passed with `466 passed, 1 warning`; the warning is the
-local Python/LibreSSL `urllib3` compatibility warning, not an app failure.
+CI-style run in this workspace passed with `538 passed`. GitHub Actions is
+green on Python 3.10, 3.11, 3.12, and 3.13.
 
 ---
 
 ## Known architectural debts
 
 1. **agent.py is still monolithic** — one large classic entry point still
-   owns LiveKit session wiring and tool registration. ShellAI Core is the new
-   extraction boundary, but the classic path still needs gradual split-out into
-   stable modules.
+   owns LiveKit session wiring and legacy tool registration. ShellAI Core and
+   `shell_tool_gateway.py` are the newer extraction boundaries, but the classic
+   path still needs gradual split-out into stable modules.
 2. **Legacy HTTP MCP naming remains.** The active UI/chat MCP surface is
    CursorTouch Windows-MCP, but old compatibility files still need a future
    rename to `shell_http_api.py`.
@@ -343,8 +348,9 @@ local Python/LibreSSL `urllib3` compatibility warning, not an app failure.
    `SHELL_HUB_TOKEN`, but Socket.IO/event scoping is still broad.
 4. **Dual Google SDKs.** `google-generativeai` (deprecated) and
    `google-genai` (modern) both installed; migration ongoing.
-5. **Hardcoded screen coordinates** in WhatsApp desktop backend.
-   Resilient only at 1920×1080.
+5. **Large Web UI bundle.** The current Vite build passes, but the main chunk is
+   still large and should be code-split around Gallery, Notes, vision, and
+   workflow editor modules.
 
 These are tracked in the README roadmap section and will be addressed
 in subsequent phases.

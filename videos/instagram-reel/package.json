@@ -7,7 +7,9 @@
   "scripts": {
     "studio": "remotion studio src/index.ts",
     "still": "remotion still src/index.ts ShellInstagramReel --frame=900 --output=./out/frame-900.png",
-    "render": "remotion render src/index.ts ShellInstagramReel ../shell-ai-real-workflow-reel-60s.mp4 --codec=h264 --pixel-format=yuv420p"
+    "render": "remotion render src/index.ts ShellInstagramReel ../shell-ai-real-workflow-reel-60s.mp4 --codec=h264 --pixel-format=yuv420p",
+    "still:current": "remotion still src/index.ts ShellCurrentStateDemo --frame=180 --output=../shell-current-state-demo-poster.png",
+    "render:current": "remotion render src/index.ts ShellCurrentStateDemo ../shell-current-state-demo.mp4 --codec=h264 --pixel-format=yuv420p"
   },
   "dependencies": {
     "@remotion/cli": "4.0.462",

@@ -12,8 +12,9 @@
 
 ## Implemented Optimizations
 
-- The Shell dashboard uses native Qt widgets and a single 16 ms orb timer instead
-  of embedding an additional browser runtime.
+- The primary Shell dashboard now uses the React/Vite renderer inside PyQt
+  WebEngine. Heavy backend work remains in Python and communicates through the
+  QWebChannel bridge so UI events stay responsive.
 - Transcript streaming updates reuse one mutable bubble through `_stream_label`
   rather than creating a new widget per token.
 - Dashboard system telemetry updates every 500 ms and network simulation updates
@@ -95,8 +96,9 @@ completed successfully.
 
 ## Current Limitations
 
-- Browser Web Workers, Service Workers, IndexedDB, and WebAssembly are not added
-  because the active Shell desktop surface is PyQt, not a browser renderer.
+- Browser Web Workers, Service Workers, IndexedDB, and WebAssembly are still
+  future optimization tracks. The current Web UI is embedded in PyQt WebEngine
+  and already keeps heavy OS/tool work outside the renderer process.
 - True 0 ms latency is physically impossible. The implementation targets
   immediate streaming visibility and records first partial/first response timing
   through `shell_neural_voice.VOICE_COORDINATOR`.

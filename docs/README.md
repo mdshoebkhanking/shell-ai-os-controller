@@ -7,6 +7,7 @@ This folder contains the public documentation system for Shell AI OS Controller.
 ## Start Here
 
 - [Product experience](PRODUCT_EXPERIENCE.md)
+- [Current repository status](CURRENT_REPO_STATUS.md)
 - [Design system](../DESIGN.md)
 - [Beginner install guide](INSTALL_BEGINNER.md)
 - [Developer guide](DEVELOPER_GUIDE.md)
@@ -21,12 +22,14 @@ This folder contains the public documentation system for Shell AI OS Controller.
 - [Trust and credibility](TRUST_AND_CREDIBILITY.md)
 - [Website plan](WEBSITE_PLAN.md)
 - [Public launch plan](PUBLIC_LAUNCH_PLAN.md)
+- [Media kit](MEDIA_KIT.md)
 - [Release process](RELEASE_PROCESS.md)
 - [Branching strategy](BRANCHING_STRATEGY.md)
 
 ## Engineering Reports
 
 - [Current system E2E audit](CURRENT_SYSTEM_E2E_AUDIT.md)
+- [Current repository status](CURRENT_REPO_STATUS.md)
 - [Low-latency performance audit](LOW_LATENCY_PERFORMANCE_AUDIT.md)
 - [One-click install and realtime rollout](ONE_CLICK_INSTALL_AND_REALTIME_ROLLOUT.md)
 - [Productionization architecture](PRODUCTIONIZATION_ARCHITECTURE.md)
@@ -36,6 +39,7 @@ This folder contains the public documentation system for Shell AI OS Controller.
 - [Phase 6 UI/UX audit report](UI_UX_PHASE6_REPORT.md)
 - [Product experience design](PRODUCT_EXPERIENCE_DESIGN.md)
 - [Screenshot and demo strategy](SCREENSHOT_DEMO_STRATEGY.md)
+- [Media kit](MEDIA_KIT.md)
 
 ## Enterprise Platform Planning
 

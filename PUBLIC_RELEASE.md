@@ -1,8 +1,9 @@
 # Shell AI Public Release Guide
 
 This repository can now produce a guarded public release candidate. The release
-process is intentionally strict: it validates installer assets, safe defaults,
-runtime health, and secret exclusion before anything is marked publishable.
+process is intentionally strict: it validates installer assets, the React Shell
+Web UI build, safe defaults, runtime health, and secret exclusion before
+anything is marked publishable.
 
 ## Release Status
 
@@ -12,8 +13,10 @@ Project creator: `mdshoebking`
 
 License: `Apache-2.0`
 
-This build is intended for public testing after the release check passes on
-the target OS.
+Current status: CI and Security are green on GitHub, including the Python
+3.10-3.13 test matrix, Release integrity, CodeQL, secret-pattern guard, and
+Python dependency audit. This build is intended for public testing after the
+release check passes on the target OS.
 
 ## Product Launch References
 
@@ -23,6 +26,8 @@ Before making the repository public, review:
 - `DESIGN.md`
 - `docs/TRUST_AND_CREDIBILITY.md`
 - `docs/PUBLIC_LAUNCH_PLAN.md`
+- `docs/CURRENT_REPO_STATUS.md`
+- `docs/MEDIA_KIT.md`
 - `docs/WEBSITE_PLAN.md`
 - `docs/ECOSYSTEM_ROADMAP.md`
 - `docs/ENTERPRISE_ARCHITECTURE_REVIEW.md`
@@ -153,11 +158,12 @@ This runs the same one-click bootstrap path a normal user uses, then writes:
 .shell_runtime\windows_acceptance_report.json
 ```
 
-The automated Windows probe validates install health, Shell Hub startup, PyQt
-UI rendering, voice dependencies, Windows audio readiness, and Windows-MCP
+The automated Windows probe validates install health, Shell Hub startup, Shell
+Web UI rendering, voice dependencies, Windows audio readiness, and Windows-MCP
 readiness. It does not replace the visible user test. After it finishes, start
-`Start_ShellAI.bat` and manually confirm chat, voice audio, app open/close, and
-settings persistence through the real UI.
+`Start_ShellAI.bat` and manually confirm chat, voice audio, app open/close,
+Gallery image rendering, Telegram status, and settings persistence through the
+real UI.
 
 ## Signing And Notarization Readiness
 

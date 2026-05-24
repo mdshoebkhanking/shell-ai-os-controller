@@ -16,8 +16,8 @@
     </marker>
   </defs>
   <rect width="1100" height="560" rx="28" fill="url(#bg)"/>
-  <text x="50" y="58" fill="#f3fbff" font-family="Arial, sans-serif" font-size="34" font-weight="700">Shell AI Project Map</text>
-  <text x="50" y="92" fill="#9db6c5" font-family="Arial, sans-serif" font-size="18">Simple flow: user command goes through UI, hub, agent brain, and real tools.</text>
+  <text x="50" y="58" fill="#f3fbff" font-family="Arial, sans-serif" font-size="34" font-weight="700">Shell AI Current Architecture</text>
+  <text x="50" y="92" fill="#9db6c5" font-family="Arial, sans-serif" font-size="18">React Web UI, Python bridge, guarded tools, agents, memory, and OS automation.</text>
 
   <g filter="url(#shadow)">
     <rect x="55" y="160" width="160" height="92" rx="18" fill="#102235" stroke="#22445b"/>
@@ -25,19 +25,19 @@
     <text x="135" y="226" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">type or speak</text>
 
     <rect x="280" y="145" width="185" height="122" rx="18" fill="#102235" stroke="#00d4ff"/>
-    <text x="372" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">PyQt UI</text>
-    <text x="372" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Chat, Voice, Tools</text>
-    <text x="372" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Settings, System</text>
+    <text x="372" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Web UI</text>
+    <text x="372" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">React + WebGL</text>
+    <text x="372" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">PyQt WebEngine</text>
 
     <rect x="530" y="145" width="175" height="122" rx="18" fill="#102235" stroke="#43f3c7"/>
-    <text x="618" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Hub</text>
-    <text x="618" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Socket.IO + API</text>
-    <text x="618" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">tokens, settings</text>
+    <text x="618" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Bridge</text>
+    <text x="618" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">QWebChannel</text>
+    <text x="618" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Hub events</text>
 
     <rect x="770" y="145" width="250" height="122" rx="18" fill="#102235" stroke="#7cc7ff"/>
-    <text x="895" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Agent + Router</text>
-    <text x="895" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">Gemini/brain picks</text>
-    <text x="895" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">tool or agent</text>
+    <text x="895" y="190" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="22" font-weight="700">Router + Gateway</text>
+    <text x="895" y="218" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">NL routes</text>
+    <text x="895" y="240" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">tools + agents</text>
   </g>
 
   <line x1="215" y1="206" x2="270" y2="206" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
@@ -46,16 +46,16 @@
 
   <g filter="url(#shadow)">
     <rect x="90" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
-    <text x="195" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Local Tools</text>
-    <text x="195" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">calculator, files, QR</text>
+    <text x="195" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Tool Catalog</text>
+    <text x="195" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">468 entries</text>
 
     <rect x="350" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
-    <text x="455" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">API Tools</text>
-    <text x="455" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">search, image, email</text>
+    <text x="455" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Agents + Memory</text>
+    <text x="455" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">37 agents, RAG</text>
 
     <rect x="610" y="355" width="210" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
-    <text x="715" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Windows-MCP</text>
-    <text x="715" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">click, type, app, shell</text>
+    <text x="715" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">OS Control</text>
+    <text x="715" y="424" fill="#9db6c5" text-anchor="middle" font-family="Arial, sans-serif" font-size="15">pywinauto/MCP</text>
 
     <rect x="870" y="355" width="170" height="100" rx="18" fill="#0d1d2e" stroke="#35566c"/>
     <text x="955" y="395" fill="#f3fbff" text-anchor="middle" font-family="Arial, sans-serif" font-size="20" font-weight="700">Result</text>
@@ -67,5 +67,5 @@
   <line x1="820" y1="405" x2="860" y2="405" stroke="#43f3c7" stroke-width="4" marker-end="url(#arrow)"/>
 
   <rect x="50" y="495" width="1000" height="1" fill="#1e3c4e"/>
-  <text x="50" y="525" fill="#9db6c5" font-family="Arial, sans-serif" font-size="15">Important: some boxes need API keys, Windows, browser drivers, mic drivers, or safety flags before they can really run.</text>
+  <text x="50" y="525" fill="#9db6c5" font-family="Arial, sans-serif" font-size="15">Important: optional features need API keys, Windows drivers, mic/audio permissions, or explicit safety flags before they can run.</text>
 </svg>

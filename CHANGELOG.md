@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0 - Current repository refresh
+
+- Updated README positioning for the current React/Vite Shell Web UI embedded
+  in PyQt WebEngine.
+- Added current repository status and media kit documentation.
+- Replaced the stale current-system E2E audit with the 2026-05-24 Web UI and
+  CI-green audit state.
+- Updated architecture docs and diagrams for QWebChannel, Shell bridge,
+  tool gateway, 468 catalog entries, 37 agents, memory/RAG/sandbox/checkpoints,
+  and safety-gated OS automation.
+- Added Remotion source/scripts for the current Web UI demo video and poster.
+- Documented current screenshots, demo media, and public release asset flow.
+
 ## 1.0.0
 
 - Added public production release guardrails.

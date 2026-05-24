@@ -17,9 +17,9 @@
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-111827.svg">
-  <img alt="Python" src="https://img.shields.io/badge/python-3.9%2B-3776AB.svg">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10--3.13-3776AB.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0F172A.svg">
-  <img alt="Status" src="https://img.shields.io/badge/status-validation--gated-16A34A.svg">
+  <img alt="Status" src="https://img.shields.io/badge/status-CI%20green%20%7C%20validation--gated-16A34A.svg">
 </p>
 
 <p align="center">
@@ -30,13 +30,15 @@
 </p>
 
 <p align="center">
-  <a href="videos/shell-launch-demo.mp4">
-    <img src="gifs/shell-launch-preview.gif" alt="Shell AI OS Controller launch demo preview" width="760">
+  <a href="videos/shell-current-state-demo.mp4">
+    <img src="videos/shell-current-state-demo-poster.png" alt="Shell AI OS Controller current Web UI demo preview" width="760">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-launch-demo.mp4">Watch the full cinematic launch demo with voiceover</a></strong>
+  <strong><a href="videos/shell-current-state-demo.mp4">Watch the current Shell Web UI demo</a></strong>
+  ·
+  <a href="videos/shell-launch-demo.mp4">Classic launch demo</a>
 </p>
 
 ---
@@ -44,9 +46,9 @@
 ## What Shell Is
 
 Shell AI OS Controller is a Python desktop assistant and automation platform
-that connects a modern PyQt UI with AI providers, voice, local tools, desktop
-automation, Telegram, email, browser control, and structured runtime
-diagnostics.
+that connects a React/Vite/WebGL interface embedded in PyQt WebEngine with AI
+providers, voice, local tools, desktop automation, Telegram, email, browser
+control, memory, RAG, telemetry, and structured runtime diagnostics.
 
 The current repo also includes **ShellAI Core**, a safe opt-in AI OS controller
 backend with a CLI, model router, SQLite memory, reusable skills, tool
@@ -101,7 +103,7 @@ Shell is designed around visible confidence:
 | Chat | Text chat with streaming-style UI, tool routing, and grounded responses |
 | Voice | Gemini voice path plus local TTS fallback and low-latency voice UI |
 | Voice Pipeline | Optional wake-word, Silero VAD, and local sherpa-onnx STT fallback with safe button-mode fallback |
-| Tools | 300+ Python tools behind a guarded execution gateway |
+| Tools | 460+ catalogued Python tools behind a guarded execution gateway |
 | Desktop | App/window control, screenshots, clipboard, keyboard/mouse automation |
 | Windows Control | Optional pywinauto UI Automation driver with PyAutoGUI/pywin32 fallback |
 | Browser | Browser automation wrappers with safety gates and dry-run support |
@@ -118,8 +120,25 @@ Shell is designed around visible confidence:
 | Secure Sandbox | Optional per-run coding workspace with timeout enforcement, secret-scrubbed environment, audit log, rollback cleanup, and network import guard |
 | Workflow Checkpoints | Optional agent workflow persistence with last-action tracking, SQLite/JSON storage, resume loading, and auditable rollback checkpoints |
 | Safety | SAFE/ASK/BLOCK shell policy, dry-run behavior, audit logs, blocked destructive commands |
-| Neural UI | React/WebGL Shell Neural OS renderer embedded in PyQt WebEngine with emerald glass panels, live transcript rail, central particle orb, optics status, and telemetry cards |
+| Web UI | React/Vite/WebGL Shell Neural OS renderer embedded in PyQt WebEngine with emerald glass panels, live transcript/chart rail, central particle orb, settings, gallery, tools, and telemetry cards |
 | Shell Neural Features | Streaming voice state, permanent core memory, deep focus sessions, remote access records, project folder scanning, coding context packs, and background process inspection |
+
+## Current Repo Status
+
+Latest verified state for this repository:
+
+- `main` is synced to GitHub and the latest CI/Security runs are green.
+- GitHub Actions test matrix passes on Python 3.10, 3.11, 3.12, and 3.13.
+- Local CI-style regression passes: `538 passed`.
+- Release integrity, public package checks, secret pattern guard, dependency audit, and CodeQL pass.
+- Real Web UI probes cover Dashboard chart/chat, transcript memory, Settings scroll/API keys, Telegram panel, Gallery render/save, Control Center execution, fake camera/screen streams, animations, and voice button paths.
+- Tool/agent probes scan 468 catalog entries with 0 probe errors, and 37/37 agents pass readiness/execution smoke checks.
+
+Details:
+
+- [Current repository status](docs/CURRENT_REPO_STATUS.md)
+- [Current system E2E audit](docs/CURRENT_SYSTEM_E2E_AUDIT.md)
+- [Media kit](docs/MEDIA_KIT.md)
 
 ## Shell Neural UI
 
@@ -270,19 +289,22 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 ### Launch Demo With Voiceover
 
 <p align="center">
-  <a href="videos/shell-launch-demo.mp4">
-    <img src="videos/shell-launch-demo-poster.png" alt="Watch the Shell AI OS Controller launch demo video" width="760">
+  <a href="videos/shell-current-state-demo.mp4">
+    <img src="videos/shell-current-state-demo-poster.png" alt="Watch the current Shell AI OS Controller Web UI demo" width="760">
   </a>
 </p>
 
 <p align="center">
-  <strong><a href="videos/shell-launch-demo.mp4">Watch the cinematic launch demo with voiceover</a></strong>
+  <strong><a href="videos/shell-current-state-demo.mp4">Watch the current Shell Web UI demo</a></strong>
+  ·
+  <a href="videos/shell-launch-demo.mp4">Classic cinematic launch demo</a>
   ·
   <a href="videos/shell-launch-demo-voiceover.md">Voiceover script</a>
 </p>
 
 | Media | Preview |
 | --- | --- |
+| Current Web UI Demo | <a href="videos/shell-current-state-demo.mp4"><img src="videos/shell-current-state-demo-poster.png" alt="Shell current Web UI demo poster" width="420"></a> |
 | Launch Preview GIF | <a href="videos/shell-launch-demo.mp4"><img src="gifs/shell-launch-preview.gif" alt="Shell AI launch preview GIF" width="420"></a> |
 | Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
 | One-Click Install Flow | <img src="gifs/shell-install-flow.svg" alt="Animated Shell one-click installation flow" width="420"> |
@@ -290,8 +312,9 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 
 Recommended launch media:
 
+- 30-second current Web UI demo.
 - 60-second install GIF.
-- 90-second voice demo video.
+- 90-second real voice demo after Gemini/remote audio setup.
 - 2-minute "chat opens apps and runs tools" demo.
 - 5-minute technical architecture walkthrough.
 
@@ -301,6 +324,8 @@ Storyboards:
 - [Launch preview GIF](gifs/shell-launch-preview.gif)
 - [One-click install visual](gifs/shell-install-flow.svg)
 - [Launch trailer visual](videos/shell-launch-trailer.svg)
+- [Current Web UI demo MP4](videos/shell-current-state-demo.mp4)
+- [Current Web UI demo poster](videos/shell-current-state-demo-poster.png)
 - [Launch demo MP4](videos/shell-launch-demo.mp4)
 - [Launch demo voiceover script](videos/shell-launch-demo-voiceover.md)
 - [GIF demo storyboards](gifs/storyboards/README.md)
@@ -316,11 +341,11 @@ High-level flow:
 
 ```text
 User
-  -> PyQt UI / Voice / Telegram
-  -> Shell Hub + Runtime State
-  -> Classic Agent + Tool Gateway
+  -> React Web UI in PyQt WebEngine / Voice / Telegram
+  -> QWebChannel + Shell Hub + Runtime State
+  -> NL Router + Tool Gateway + Agent Orchestrator
   -> Local Tools / APIs / Desktop Automation / Browser Automation
-  -> Structured Result + Logs + UI Update
+  -> Structured Result + Logs + UI Event Stream
 
 Optional ShellAI Core path:
 

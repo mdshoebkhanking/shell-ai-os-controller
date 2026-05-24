@@ -9,16 +9,16 @@ runtime state, and external integrations.
 
 ```text
 User input
-  -> PyQt UI / Voice / Telegram
-  -> Shell Hub / Classic Agent Runtime
-  -> Tool Gateway
+  -> React Web UI in PyQt WebEngine / Voice / Telegram
+  -> QWebChannel / Shell Hub / Classic Agent Runtime
+  -> Natural-language Router / Tool Gateway / Agent Orchestrator
   -> Local Tool / API / Desktop Automation
   -> Structured Result
-  -> UI + Logs + User Response
+  -> UI Event Stream + Logs + User Response
 
 Optional ShellAI Core path:
 
-CLI / PyQt feature flag
+CLI / desktop feature flag
   -> shellai.api
   -> AgentRuntime
   -> Coordinator / Shell / Safety / Memory / UI / Optimizer agents
@@ -30,11 +30,13 @@ CLI / PyQt feature flag
 
 | Boundary | Responsibility |
 | --- | --- |
-| `shell_ui/` | Desktop UI, pages, themes, voice page, status displays |
-| `agent.py` | AI session wiring, tool list, provider interaction |
+| `shell_web_ui/` | Primary React/Vite/WebGL renderer and PyQt WebEngine host |
+| `shell_ui/` | Preserved legacy PyQt UI and shared rollback/boot assets |
+| `agent.py` | Classic LiveKit/Gemini session wiring and legacy tool list |
 | `shellai/` | Opt-in ShellAI Core CLI, agent loop, model routing, memory, skills, tools, monitor, cron, daemon |
 | `core/shellai_bridge.py` | Desktop feature flag bridge into ShellAI Core |
 | `shell_tool_gateway.py` | Safe tool dispatch from UI/chat |
+| `shell_nl_router.py` | Natural-language mapping for chart/chat/tool commands |
 | `shell_safe_executor.py` | Tool wrapper, timing, structured failures |
 | `core/` | Future-ready modular runtime systems |
 | `installer/` | Bootstrap, repair, health checks |
@@ -68,6 +70,16 @@ safety audit records.
 ## Cross-Platform Strategy
 
 - Windows is the primary target.
-- macOS/Linux support UI and many Python tools.
+- macOS/Linux support the Web UI, docs/dev workflows, and many Python tools.
 - Windows-MCP is Windows-only and must show clear unsupported-state messaging
   outside Windows.
+
+## Current Verified State
+
+- GitHub Actions CI is green on Python 3.10, 3.11, 3.12, and 3.13.
+- Security workflow is green for CodeQL, secret pattern guard, and Python
+  dependency audit.
+- Local CI-style pytest run passes with `538 passed`.
+- Real Web UI probes cover Dashboard chart/chat, Settings scroll/API keys,
+  Telegram controls, Control Center execution, Gallery save/render, fake
+  camera/screen streams, CSS animations, and voice buttons.

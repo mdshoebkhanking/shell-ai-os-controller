@@ -1,6 +1,43 @@
 ## Session: 2026-05-24
 
 ### Completed
+- Refreshed the public repository positioning for the current Shell Web UI + PyQt WebEngine architecture.
+- Updated README, architecture docs, public release notes, performance notes, current E2E audit, media documentation, screenshot documentation, and changelog.
+- Added a current repository status page and a media kit for screenshots, videos, brand assets, and capture standards.
+- Updated architecture/status SVG diagrams to match the current Web UI, QWebChannel, natural-language router, tool gateway, 468 tool entries, 37 agents, and safety-gated runtime.
+- Added a Remotion `ShellCurrentStateDemo` composition for the current 30-second vertical repo demo.
+- Rendered the current demo poster and MP4 from checked-in screenshots and Shell branding.
+
+### Changes Made
+- Updated `README.md`, `ARCHITECTURE.md`, `PUBLIC_RELEASE.md`, `CHANGELOG.md`, and `SESSION_LOG.md`.
+- Updated `docs/README.md`, `docs/ARCHITECTURE_GUIDE.md`, `docs/CURRENT_SYSTEM_E2E_AUDIT.md`, `docs/SHELL_PERFORMANCE_BENCHMARK.md`, `docs/assets/shell_architecture_map.svg`, and `docs/assets/shell_status_dashboard.svg`.
+- Added `docs/CURRENT_REPO_STATUS.md` and `docs/MEDIA_KIT.md`.
+- Updated `screenshots/README.md`, `screenshots/showcase/README.md`, and `videos/README.md`.
+- Added `videos/instagram-reel/src/ShellCurrentStateDemo.tsx`.
+- Updated `videos/instagram-reel/src/Root.tsx` and `videos/instagram-reel/package.json`.
+- Added `videos/instagram-reel/public/screenshots/settings-panel.png`.
+- Added rendered assets `videos/shell-current-state-demo.mp4` and `videos/shell-current-state-demo-poster.png`.
+
+### Current State
+- Remotion current demo poster render passed with `npm run still:current`.
+- Remotion current demo MP4 render passed with `npm run render:current`.
+- Rendered MP4 is a valid ISO media file; poster is a valid 720x1280 PNG.
+- Documentation/media references for the new current-state demo and status pages resolve in the repo.
+- `git diff --check` passes.
+- Secret-pattern quick scan found only an empty documented placeholder in `docs/SHELLAI_FABRIC.md`.
+
+### Next Steps
+1. Commit and push the repository refresh to `main`.
+2. Watch GitHub Actions for the pushed documentation/media commit.
+3. Use the new `docs/MEDIA_KIT.md` and `videos/shell-current-state-demo.mp4` for the public GitHub repo presentation.
+
+### Open Issues
+- The new Remotion video is generated from existing checked-in screenshots; live UI recapture should be repeated whenever the UI changes materially.
+- GitHub Actions still needs to run on the new pushed commit after this local refresh.
+
+## Session: 2026-05-24
+
+### Completed
 - Created six project-specific Codex skills in `/Users/m1/.codex/skills` to make future Shell AI work more consistent and project-aware:
   - `shell-ai-workflow`
   - `shell-ai-web-ui-qa`
