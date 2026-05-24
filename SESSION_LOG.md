@@ -37,6 +37,8 @@
 - Investigated the pushed commit checks, fixed GitHub Actions Web UI build setup plus CI Python health-check wiring for CI/security jobs, corrected GitHub author identity for future commits, and raised the CYBER_NEON subtle text contrast above the audit threshold.
 - Investigated the latest failed GitHub CI commit, found that the local `swarm/` source package was ignored and therefore missing from GitHub Actions.
 - Unignored and packaged the Shell swarm agents, added package initializers, stabilized config provider precedence against CI env overrides, and preserved explicit Telegram runtime env values across reloads.
+- Investigated the follow-up GitHub Actions failure on `1499d0b`; remaining Linux matrix failures were Telegram runtime env reload and `voice_status_tool` readiness gating for optional audio packages.
+- Patched Telegram reload to restore explicit process env values after `.env` reload, and made the voice status diagnostic tool executable without optional microphone/STT dependencies.
 - Re-ran the CI-failing test group and the full test suite with CI-style env; all tests pass locally.
 
 ### Changes Made
@@ -58,7 +60,7 @@
 - Updated `shell_nl_router.py`.
 - Updated `.github/workflows/ci.yml` and `.github/workflows/security.yml`.
 - Updated `shell_ui/design_tokens.py`.
-- Updated `.gitignore`, `shellai/config.py`, and `shell_telegram.py`.
+- Updated `.gitignore`, `shellai/config.py`, `shell_telegram.py`, and `core/tools/metadata.py`.
 - Added tracked `swarm/` source package files.
 - Updated `tools/chart_transcript_ui_probe.mjs`.
 - Added `tools/chart_tools_gallery_animation_probe.mjs`.
@@ -94,8 +96,10 @@
 - Latest CI root cause after push: `swarm/` was ignored locally and missing on GitHub, causing `ModuleNotFoundError` plus downstream test failures in the matrix jobs.
 - Targeted CI-failing group now passes with `SHELLAI_PROVIDER=openai`, `SHELL_PRODUCTION_MODE=1`, and `SHELL_PUBLIC_RELEASE=1`: `22 passed`.
 - Full local suite now passes under the same CI-style env: `538 passed`.
+- Latest follow-up targeted GitHub-failure regression passes without `SHELLAI_PROVIDER`: `3 passed`.
+- Latest full local CI-style suite passes after the follow-up patch: `538 passed`.
 - Local verification after the CI fix: `npm run build` passed, `tools/production_release_check.py --strict` passed, `tests/test_phase6_ui_ux.py` passed, and focused bridge/router/image tests passed (`38 passed`).
-- GitHub Actions fix is staged as a follow-up commit candidate; local worktree still has three unrelated unstaged deletions that were intentionally not pushed.
+- GitHub Actions `swarm/` packaging fix was pushed as `1499d0b`; the remaining Telegram/voice-status CI fix is ready as a follow-up commit.
 - Latest targeted regression passed: `45 passed, 1 warning`.
 - Latest all-tools probe passed across `468` catalog entries: `62` safe tools executed, `40` agent readiness-only, `10` expected-not-ready, `312` safety-skipped, `44` environment-skipped, `0` errors.
 - Latest agents probe passed: `37/37`.

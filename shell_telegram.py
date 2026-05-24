@@ -208,6 +208,8 @@ def _reload_runtime_config() -> None:
         config.reload()
     except Exception:
         pass
+    for name, value in preserved.items():
+        os.environ[name] = value
     Config.TELEGRAM_BOT_TOKEN = _env_or_config("TELEGRAM_BOT_TOKEN", "", preserved)
     Config.ADMIN_CHAT_IDS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ADMIN_CHAT_IDS", "", preserved))
     Config.ALLOWED_USERS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ALLOWED_CHAT_IDS", "", preserved))

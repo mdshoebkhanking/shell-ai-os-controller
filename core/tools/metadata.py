@@ -107,6 +107,8 @@ def _requirements_for(item: dict[str, Any]) -> tuple[list[str], list[str], list[
         "set_telegram_remote_config_tool",
     }:
         return platforms, dependencies, apis, permissions, fallback_available, "online"
+    if module == "shell_speech" and str(item.get("name") or "").lower() == "voice_status_tool":
+        return platforms, dependencies, apis, permissions, fallback_available, online_state
     if item.get("kind") == "agent":
         # Agent wrappers can answer text-only requests and choose their own
         # fallback path. Do not block the whole agent because its label or
