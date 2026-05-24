@@ -43,6 +43,19 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: shell_web_ui/package-lock.json
+
+      - name: Build Shell Web UI
+        run: |
+          npm ci
+          npm run build
+        working-directory: shell_web_ui
+
       - name: Validate public package excludes secrets
         run: |
           python tools/production_release_check.py --strict

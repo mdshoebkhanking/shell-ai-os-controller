@@ -94,7 +94,7 @@ WARM_DARK = _Palette(
 
     text          = "#f4f4f5",
     text_muted    = "#a1a1aa",
-    text_subtle   = "#52525b",
+    text_subtle   = "#71717a",
 
     accent        = "#10b981",
     accent_hover  = "#34d399",

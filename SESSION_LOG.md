@@ -33,6 +33,8 @@
 - Ran deep tool and agent probes: `468` tool catalog entries scanned with `0` probe errors, and `37/37` agents passed readiness/execution smoke checks.
 - Ran focused chart/transcript UI probe and backend bridge regressions to verify calculator commands, chart prompts, clear button behavior, and previous-task recall.
 - Added and ran a real UI chart/tools/Gallery/animation probe covering calculator, unit conversion, hash, base64, tools-list routing, Gallery save/render, and CSS animation runtime.
+- Pushed Shell Web UI and OS-control integration to GitHub on `main`.
+- Investigated the pushed commit checks, fixed GitHub Actions Web UI build setup for CI/security jobs, corrected GitHub author identity for future commits, and raised the CYBER_NEON subtle text contrast above the audit threshold.
 
 ### Changes Made
 - Added `/Users/m1/.codex/skills/shell-ai-workflow/SKILL.md`, `references/project-map.md`, `scripts/project_snapshot.py`, and `agents/openai.yaml`.
@@ -51,6 +53,8 @@
 - Updated `shell_web_ui/src/shellBridge.ts`.
 - Updated `shell_web_ui/src/assets/main.css`.
 - Updated `shell_nl_router.py`.
+- Updated `.github/workflows/ci.yml` and `.github/workflows/security.yml`.
+- Updated `shell_ui/design_tokens.py`.
 - Updated `tools/chart_transcript_ui_probe.mjs`.
 - Added `tools/chart_tools_gallery_animation_probe.mjs`.
 - Added `tests/test_shell_web_ui_bridge.py`.
@@ -78,6 +82,9 @@
   - Gallery bridge saved and rendered a generated image item
   - `animate-in fade-in zoom-in duration-300` resolves to the `shell-enter` animation at runtime
 - Regression tests passed: `66` base backend/router/voice tests, `43` performance/runtime tests, and `40` focused bridge/chart/router/import tests.
+- Latest commit health check found GitHub author metadata on the previous push was not linked to the `mdshoebkhanking` account; local git config now uses `mdshoebkhanking <255382462+mdshoebkhanking@users.noreply.github.com>`.
+- Local verification after the CI fix: `npm run build` passed, `tools/production_release_check.py --strict` passed, `tests/test_phase6_ui_ux.py` passed, and focused bridge/router/image tests passed (`38 passed`).
+- GitHub Actions fix is staged as a follow-up commit candidate; local worktree still has three unrelated unstaged deletions that were intentionally not pushed.
 - Latest targeted regression passed: `45 passed, 1 warning`.
 - Latest all-tools probe passed across `468` catalog entries: `62` safe tools executed, `40` agent readiness-only, `10` expected-not-ready, `312` safety-skipped, `44` environment-skipped, `0` errors.
 - Latest agents probe passed: `37/37`.
