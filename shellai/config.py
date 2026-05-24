@@ -297,7 +297,7 @@ class ShellAIConfig:
         models = ModelRoleConfig.from_dict(data.get("models") if isinstance(data.get("models"), dict) else None)
         models.apply_env_overrides()
 
-        provider_name = _env_first("SHELLAI_PROVIDER", "SHELL_AI_PROVIDER") or str(data.get("provider") or "openai")
+        provider_name = str(data.get("provider") or _env_first("SHELLAI_PROVIDER", "SHELL_AI_PROVIDER") or "openai")
         enabled_tools = dict(DEFAULT_ENABLED_TOOLS)
         enabled_tools.update(dict(data.get("enabled_tools") or {}))
 

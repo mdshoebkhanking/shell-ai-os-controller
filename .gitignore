@@ -79,7 +79,6 @@ shell.v1.0-main-main/
 shell_downloads/
 shell_projects/
 shell_workspace/
-swarm/
 
 # Local UI/probe captures and scratch artifacts
 _ui_cyber/

@@ -184,7 +184,9 @@ def _iso_or_never(value: Optional[datetime]) -> str:
     return value.strftime("%Y-%m-%d %H:%M:%S") if isinstance(value, datetime) else "never"
 
 
-def _env_or_config(name: str, default: str = "") -> str:
+def _env_or_config(name: str, default: str = "", preserved: Optional[dict[str, str]] = None) -> str:
+    if preserved and name in preserved:
+        return preserved[name]
     try:
         return os.environ.get(name) or config.get_str(name, default)
     except Exception:
@@ -193,16 +195,25 @@ def _env_or_config(name: str, default: str = "") -> str:
 
 def _reload_runtime_config() -> None:
     """Refresh token and safety gates after UI settings/.env changes."""
+    names = (
+        "TELEGRAM_BOT_TOKEN",
+        "SHELL_TELEGRAM_ADMIN_CHAT_IDS",
+        "SHELL_TELEGRAM_ALLOWED_CHAT_IDS",
+        "SHELL_TELEGRAM_BLOCKED_CHAT_IDS",
+        "SHELL_TELEGRAM_REMOTE_CONTROL_ENABLED",
+        "SHELL_TELEGRAM_ALLOW_TERMINAL",
+    )
+    preserved = {name: os.environ[name] for name in names if name in os.environ}
     try:
         config.reload()
     except Exception:
         pass
-    Config.TELEGRAM_BOT_TOKEN = _env_or_config("TELEGRAM_BOT_TOKEN", "")
-    Config.ADMIN_CHAT_IDS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ADMIN_CHAT_IDS", ""))
-    Config.ALLOWED_USERS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ALLOWED_CHAT_IDS", ""))
-    Config.BLOCKED_USERS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_BLOCKED_CHAT_IDS", ""))
-    Config.REMOTE_CONTROL_ENABLED = _truthy(_env_or_config("SHELL_TELEGRAM_REMOTE_CONTROL_ENABLED", "0"))
-    Config.ALLOW_TERMINAL = _truthy(_env_or_config("SHELL_TELEGRAM_ALLOW_TERMINAL", "0"))
+    Config.TELEGRAM_BOT_TOKEN = _env_or_config("TELEGRAM_BOT_TOKEN", "", preserved)
+    Config.ADMIN_CHAT_IDS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ADMIN_CHAT_IDS", "", preserved))
+    Config.ALLOWED_USERS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_ALLOWED_CHAT_IDS", "", preserved))
+    Config.BLOCKED_USERS = _parse_chat_ids(_env_or_config("SHELL_TELEGRAM_BLOCKED_CHAT_IDS", "", preserved))
+    Config.REMOTE_CONTROL_ENABLED = _truthy(_env_or_config("SHELL_TELEGRAM_REMOTE_CONTROL_ENABLED", "0", preserved))
+    Config.ALLOW_TERMINAL = _truthy(_env_or_config("SHELL_TELEGRAM_ALLOW_TERMINAL", "0", preserved))
 
 
 _reload_runtime_config()
