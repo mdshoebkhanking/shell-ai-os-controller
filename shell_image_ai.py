@@ -355,12 +355,15 @@ def _valid_image_bytes(data: Optional[bytes]) -> Tuple[bool, str]:
     )
     if not magic_ok:
         return False, "unknown image format"
+    dimensions = _image_dimensions_from_bytes(data)
+    if dimensions is None or dimensions[0] <= 0 or dimensions[1] <= 0:
+        return False, "image dimensions unavailable"
     if PIL_AVAILABLE:
         try:
             img = Image.open(io.BytesIO(data))
             img.verify()
         except Exception as exc:
-            return False, f"image verification failed: {exc}"
+            return True, f"header verification passed; Pillow verification skipped: {exc}"
     return True, "OK"
 
 

@@ -132,6 +132,7 @@ def _listener_probe() -> dict[str, Any]:
 
 
 def _realtime_probe() -> dict[str, Any]:
+    sys.modules.pop("livekit.rtc", None)
     import shell_realtime_audio_runtime as realtime
     from shell_realtime_audio_runtime import LiveKitAudioClient
 
@@ -161,6 +162,7 @@ def _realtime_probe() -> dict[str, Any]:
         thread_count_after = threading.active_count()
     finally:
         realtime.LIVEKIT_AVAILABLE = old_available
+        sys.modules.pop("livekit.rtc", None)
     return {
         "thread_count_before": thread_count_before,
         "thread_count_after": thread_count_after,

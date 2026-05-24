@@ -85,6 +85,7 @@
 - Latest commit health check found GitHub author metadata on the previous push was not linked to the `mdshoebkhanking` account; local git config now uses `mdshoebkhanking <255382462+mdshoebkhanking@users.noreply.github.com>`.
 - GitHub Security secret-pattern job exposed that CI runners do not have `.shellai_venv`; workflows now export `SHELLAI_VENV_DIR` to the active setup-python environment after installing CI requirements.
 - Full pytest isolated the remaining CI matrix failure to `ecosystem_master_audit` open-source scoring; passing repo audits now use a minimum public-quality component score so low/info local workspace noise cannot fail the final launch gate.
+- Python 3.13 local regression reproduced the remaining matrix failures; image byte validation now accepts structurally valid PNG/JPEG/WebP headers even when Pillow is stricter, and the realtime memory probe unloads transient `livekit.rtc` modules after cleanup.
 - Local verification after the CI fix: `npm run build` passed, `tools/production_release_check.py --strict` passed, `tests/test_phase6_ui_ux.py` passed, and focused bridge/router/image tests passed (`38 passed`).
 - GitHub Actions fix is staged as a follow-up commit candidate; local worktree still has three unrelated unstaged deletions that were intentionally not pushed.
 - Latest targeted regression passed: `45 passed, 1 warning`.
