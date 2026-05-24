@@ -65,7 +65,7 @@ pywinauto>=0.6.8;  sys_platform == "win32"
 
 
 # ── Audio input/output ──────────────────────────────────────────────
-livekit>=0.18.0               # rtc package used by shell_ui LiveKit client
+livekit>=1.1.8               # rtc package used by shell_ui LiveKit client
 sounddevice>=0.4.6
 SpeechRecognition>=3.10.0     # microphone speech-to-text used by VoiceListenerThread
 openwakeword>=0.6.0           # optional wake word detection for "Hey Shell"
