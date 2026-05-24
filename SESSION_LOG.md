@@ -7,6 +7,7 @@
 - Updated architecture/status SVG diagrams to match the current Web UI, QWebChannel, natural-language router, tool gateway, 468 tool entries, 37 agents, and safety-gated runtime.
 - Added a Remotion `ShellCurrentStateDemo` composition for the current 30-second vertical repo demo.
 - Rendered the current demo poster and MP4 from checked-in screenshots and Shell branding.
+- Fixed the follow-up GitHub CI public launch failure by restoring the README reference to `videos/shell-launch-demo-poster.png` while keeping the new current Web UI demo primary.
 
 ### Changes Made
 - Updated `README.md`, `ARCHITECTURE.md`, `PUBLIC_RELEASE.md`, `CHANGELOG.md`, and `SESSION_LOG.md`.
@@ -25,10 +26,11 @@
 - Documentation/media references for the new current-state demo and status pages resolve in the repo.
 - `git diff --check` passes.
 - Secret-pattern quick scan found only an empty documented placeholder in `docs/SHELLAI_FABRIC.md`.
+- Targeted public launch regression passes locally: `5 passed`.
 
 ### Next Steps
-1. Commit and push the repository refresh to `main`.
-2. Watch GitHub Actions for the pushed documentation/media commit.
+1. Push the README CI-fix follow-up commit to `main`.
+2. Watch GitHub Actions for the final pushed commit.
 3. Use the new `docs/MEDIA_KIT.md` and `videos/shell-current-state-demo.mp4` for the public GitHub repo presentation.
 
 ### Open Issues

@@ -305,6 +305,7 @@ Real public showcase screenshots are stored in `screenshots/showcase/`.
 | Media | Preview |
 | --- | --- |
 | Current Web UI Demo | <a href="videos/shell-current-state-demo.mp4"><img src="videos/shell-current-state-demo-poster.png" alt="Shell current Web UI demo poster" width="420"></a> |
+| Classic Launch Demo | <a href="videos/shell-launch-demo.mp4"><img src="videos/shell-launch-demo-poster.png" alt="Shell AI classic launch demo poster" width="420"></a> |
 | Launch Preview GIF | <a href="videos/shell-launch-demo.mp4"><img src="gifs/shell-launch-preview.gif" alt="Shell AI launch preview GIF" width="420"></a> |
 | Realtime Assistant Demo | <img src="gifs/shell-realtime-demo.svg" alt="Animated Shell realtime chat and voice demo" width="420"> |
 | One-Click Install Flow | <img src="gifs/shell-install-flow.svg" alt="Animated Shell one-click installation flow" width="420"> |
@@ -327,6 +328,7 @@ Storyboards:
 - [Current Web UI demo MP4](videos/shell-current-state-demo.mp4)
 - [Current Web UI demo poster](videos/shell-current-state-demo-poster.png)
 - [Launch demo MP4](videos/shell-launch-demo.mp4)
+- [Launch demo poster](videos/shell-launch-demo-poster.png)
 - [Launch demo voiceover script](videos/shell-launch-demo-voiceover.md)
 - [GIF demo storyboards](gifs/storyboards/README.md)
 - [Launch video storyboards](videos/storyboards/README.md)
