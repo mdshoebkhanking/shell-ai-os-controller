@@ -16,12 +16,26 @@ def test_natural_math_route():
     assert route["args"] == {"expression": "2 + 3 * 4"}
 
 
+def test_natural_unit_alias_route():
+    route = route_natural_command("convert 2 meter to centimeter")
+
+    assert route["tool"] == "shell_calculator:unit_convert_tool"
+    assert route["args"] == {"value": 2, "from_unit": "m", "to_unit": "cm"}
+
+
 def test_natural_agent_route():
     route = route_natural_command("developer agent fix the login bug")
 
     assert route["tool"] == "shell_agents:developer_agent_tool"
     assert route["kind"] == "agent"
     assert route["args"] == {"task": "fix the login bug"}
+
+
+def test_natural_list_tools_route():
+    route = route_natural_command("show all tools")
+
+    assert route["tool"] == "shell_agent_tools:list_all_tools"
+    assert route["kind"] == "tool"
 
 
 def test_natural_search_route_uses_cross_platform_url_tool():
@@ -41,12 +55,38 @@ def test_natural_youtube_song_play_route_does_not_use_terminal():
     assert route["args"] == {"query": "palpal song", "number": 1}
 
 
+def test_generic_song_play_route_uses_youtube_player():
+    route = route_natural_command("song play karo")
+
+    assert route["tool"] == "shell_browser_CTRL:play_youtube_video"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"query": "song", "number": 1}
+
+
 def test_shell_address_youtube_song_play_route_does_not_use_terminal():
     route = route_natural_command("shell se youtube pe palpal song play karo")
 
     assert route["tool"] == "shell_browser_CTRL:play_youtube_video"
     assert route["kind"] == "tool"
     assert route["args"] == {"query": "palpal song", "number": 1}
+
+
+def test_direct_website_build_route_uses_code_engine_not_chat_fallback():
+    route = route_natural_command("website banao landing page for bakery")
+
+    assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["project_name"] == "bakery"
+    assert route["args"]["app_type"] == "website banao landing page for bakery"
+
+
+def test_hinglish_photo_generation_routes_to_image_tool():
+    route = route_natural_command("neon shell city ki photo banao")
+
+    assert route["tool"] == "shell_image_ai:generate_image_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["description"] == "neon shell city"
+    assert route["args"]["quality"] == "excellent"
 
 
 def test_natural_click_route_uses_cross_platform_desktop_tool():

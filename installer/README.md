@@ -9,7 +9,7 @@ Use the one-click installer for your OS:
 After install:
 
 - Windows: double-click `Start_ShellAI.bat`
-- macOS: double-click `Start_ShellAI.command`
+- macOS: double-click `start_shellai.command`
 - Linux: run `./start_shellai.sh`
 
 Repair tools:
@@ -34,6 +34,7 @@ Installer behavior:
 - Creates and uses a managed `.shellai_venv` virtual environment.
 - Installs `requirements.txt`.
 - Installs `shell_ui/requirements_ui.txt`.
+- Installs `shell_web_ui/package.json` dependencies and builds `shell_web_ui/dist/index.html`.
 - Installs Playwright Chromium.
 - Installs ffmpeg, Tesseract OCR, uv/uvx, Python, and Node.js when the OS package manager supports it.
 - Creates `.env` automatically if missing.
@@ -41,7 +42,7 @@ Installer behavior:
 
 Python policy:
 
-- Core Shell runtime supports Python 3.9+.
-- Windows launchers prefer 3.13, 3.12, 3.11, 3.10, then 3.9 automatically.
+- Core Shell runtime supports Python 3.10+.
+- Windows launchers prefer 3.13, 3.12, 3.11, then 3.10 automatically.
 - If no compatible Python is found on Windows, the installer attempts Python 3.13 through winget.
 - CursorTouch Windows-MCP desktop automation still requires Windows, Python 3.13+, and uv/uvx.

@@ -48,7 +48,11 @@ try:
     except Exception as _cfg_err:
         print(f"Config load failed (non-fatal): {_cfg_err}", flush=True)
 
-    from shell_cinematic_full import ShellHoloUI
+    use_legacy_ui = os.environ.get("SHELL_LEGACY_UI", "0").strip().lower() in {"1", "true", "yes", "on"}
+    if use_legacy_ui:
+        from shell_cinematic_full import ShellHoloUI
+    else:
+        from shell_web_ui.host import ShellWebUI
     print("Imports OK", flush=True)
 
     app = QApplication(sys.argv)
@@ -88,7 +92,7 @@ try:
         splash = None
 
     print("Creating UI...", flush=True)
-    w = ShellHoloUI()
+    w = ShellHoloUI() if use_legacy_ui else ShellWebUI()
     # Fit inside the visible desktop work area. This prevents the macOS Dock
     # or Windows taskbar from covering the bottom action rows.
     try:
@@ -100,7 +104,8 @@ try:
     except Exception:
         w.resize(1180, 640)
     w.show()
-    print("Shell OS 1.0.0 is live. Window open. Created by mdshoebking.", flush=True)
+    ui_name = "legacy PyQt UI" if use_legacy_ui else "Shell AI Web UI"
+    print(f"Shell OS 1.0.0 is live with {ui_name}. Window open. Created by mdshoebking.", flush=True)
 
     # Once the main window is up, fade the splash out smoothly.
     if splash is not None:

@@ -1,3 +1,166 @@
+## Session: 2026-05-24
+
+### Completed
+- Created six project-specific Codex skills in `/Users/m1/.codex/skills` to make future Shell AI work more consistent and project-aware:
+  - `shell-ai-workflow`
+  - `shell-ai-web-ui-qa`
+  - `shell-ai-installer-release`
+  - `shell-ai-voice-os`
+  - `shell-ai-agent-tools`
+  - `shell-ai-performance`
+- Added focused reference maps for Shell architecture, Web UI QA, installer/release behavior, voice/OS automation, agent/tool routing, and performance.
+- Added a reusable `project_snapshot.py` helper inside `shell-ai-workflow`.
+- Validated skill frontmatter, naming, metadata presence, and TODO cleanup with a local structural check.
+- Verified `project_snapshot.py` runs against the current Shell repo and reports root/build state.
+- Updated the one-click installer and repair path for the current Shell Web UI.
+- Added `shell_web_ui` npm dependency install plus production build into `installer/bootstrap.py`.
+- Added a Web UI build readiness check so health reports fail clearly when `shell_web_ui/dist/index.html` is missing.
+- Updated Windows/macOS/Linux launchers to default to the current Web UI with `SHELL_LEGACY_UI=0`.
+- Aligned macOS docs/tests with the tracked `start_shellai.command` launcher name.
+- Updated installer docs and README beginner install instructions for the React Shell Web UI build step.
+- Deep-tested the live Shell Web UI through the Qt remote debugging port, including Dashboard, chart transcript, voice controls, Settings tabs, Telegram panel, Control Center, Phone, Notes, camera, and screen-share UI paths.
+- Fixed chart/transcript memory recall so Shell remembers the immediately previous text or voice task when the user asks "tumhe yaad hai" / recall-style prompts.
+- Kept chart text interaction text-only: chart/transcript commands now answer in chat without triggering voice playback unless the input source is voice or the user explicitly presses the speaker control.
+- Added local backend handling for telemetry chart prompts such as CPU/RAM chart requests so they do not fall through to provider-unavailable replies.
+- Fixed a PyQtGraph availability check regression so importing the legacy UI no longer eagerly imports `pyqtgraph` / `numpy`.
+- Fixed Web UI Gallery integration: the Python bridge now scans `~/Pictures/Shell_Generated`, supports `save-image-to-gallery`, delete, reveal, and save-copy actions, and returns file URLs that the Gallery view can render.
+- Fixed image-generation chat formatting so successful backend image paths are surfaced as Gallery-saved results, and failed provider attempts remain honest instead of pretending success.
+- Added Hinglish/natural photo routing such as `neon shell city ki photo banao` to `shell_image_ai:generate_image_tool` with excellent/photorealistic defaults.
+- Added chart-chat routing for `show all tools` and `tool health status`.
+- Fixed common unit aliases so chart text such as `convert 2 meter to centimeter` routes as `m -> cm` and returns `200 cm`.
+- Fixed Dashboard text/chart input robustness for RDP/automation/IME paths by reading the live input ref when React state is stale.
+- Restored missing CSS enter animation utility classes (`animate-in`, `fade-in`, `zoom-in`, slide-in variants, animation duration/delay handling) so modal/widget UI animations actually run.
+- Ran deep tool and agent probes: `468` tool catalog entries scanned with `0` probe errors, and `37/37` agents passed readiness/execution smoke checks.
+- Ran focused chart/transcript UI probe and backend bridge regressions to verify calculator commands, chart prompts, clear button behavior, and previous-task recall.
+- Added and ran a real UI chart/tools/Gallery/animation probe covering calculator, unit conversion, hash, base64, tools-list routing, Gallery save/render, and CSS animation runtime.
+
+### Changes Made
+- Added `/Users/m1/.codex/skills/shell-ai-workflow/SKILL.md`, `references/project-map.md`, `scripts/project_snapshot.py`, and `agents/openai.yaml`.
+- Added `/Users/m1/.codex/skills/shell-ai-web-ui-qa/SKILL.md`, `references/web-ui-map.md`, and `agents/openai.yaml`.
+- Added `/Users/m1/.codex/skills/shell-ai-installer-release/SKILL.md`, `references/installer-contract.md`, and `agents/openai.yaml`.
+- Added `/Users/m1/.codex/skills/shell-ai-voice-os/SKILL.md`, `references/voice-os-map.md`, and `agents/openai.yaml`.
+- Added `/Users/m1/.codex/skills/shell-ai-agent-tools/SKILL.md`, `references/agent-tool-map.md`, and `agents/openai.yaml`.
+- Added `/Users/m1/.codex/skills/shell-ai-performance/SKILL.md`, `references/performance-map.md`, and `agents/openai.yaml`.
+- Updated `installer/bootstrap.py`.
+- Updated `ONE_CLICK_INSTALL.bat`, `ONE_CLICK_INSTALL.command`, `Repair_ShellAI.bat`, `Start_ShellAI.bat`, `start_shellai.command`, `start_shellai.sh`, and `installer/install_mac.command`.
+- Updated `installer/README.md`, `README.md`, and `tests/test_installer_bootstrap.py`.
+- Updated `shell_ui/shell_cinematic_full.py`.
+- Updated `shell_web_ui/host.py`.
+- Updated `shell_web_ui/src/views/Dashboard.tsx`.
+- Updated `shell_web_ui/src/views/Gallery.tsx`.
+- Updated `shell_web_ui/src/shellBridge.ts`.
+- Updated `shell_web_ui/src/assets/main.css`.
+- Updated `shell_nl_router.py`.
+- Updated `tools/chart_transcript_ui_probe.mjs`.
+- Added `tools/chart_tools_gallery_animation_probe.mjs`.
+- Added `tests/test_shell_web_ui_bridge.py`.
+- Updated `tests/test_nl_router.py`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- Project-specific skills are discoverable under `/Users/m1/.codex/skills`.
+- Manual structural validation passed for all six new skills.
+- Official `quick_validate.py` is blocked in the current Python environments because `PyYAML` / `yaml` is missing.
+- Installer tests pass: `18 passed`.
+- Python compile passes for `installer/bootstrap.py`, `launch.py`, and `shell_web_ui/host.py`.
+- `shell_web_ui` production build passes and writes `shell_web_ui/dist/index.html`.
+- Bootstrap health now confirms `[OK] Shell Web UI build: shell_web_ui/dist/index.html`.
+- Local `.codex_ui_venv` still reports Python `3.9.6` as too old; the managed one-click `.shellai_venv` path requires Python `3.10+`.
+- Live Shell Web UI is running with remote debugging on port `9235` and rendered successfully without console errors in the deep UI probe.
+- Full UI probe passed `30/30` checks, including scrollable Settings sections, logo/titlebar cleanup, Telegram status, Control Center command execution, fake camera/screen streams, transcript prompt, chart route, and voice button clicks.
+- Chart/transcript probe passed all checks: clear transcript, normal text Q&A, chart prompt, calculator command, previous-task recall, text-only voice counter, and clear-after-messages.
+- Chart/tools/Gallery/animation probe passed all checks from the real UI:
+  - `calculate 11*11` -> `Result: 121`
+  - `convert 2 meter to centimeter` -> `2.0 m = 200 cm`
+  - `hash shell with sha256` -> SHA-256 digest
+  - `encode hello as base64` -> `aGVsbG8=`
+  - `show all tools` routes through the backend tool gateway
+  - Gallery bridge saved and rendered a generated image item
+  - `animate-in fade-in zoom-in duration-300` resolves to the `shell-enter` animation at runtime
+- Regression tests passed: `66` base backend/router/voice tests, `43` performance/runtime tests, and `40` focused bridge/chart/router/import tests.
+- Latest targeted regression passed: `45 passed, 1 warning`.
+- Latest all-tools probe passed across `468` catalog entries: `62` safe tools executed, `40` agent readiness-only, `10` expected-not-ready, `312` safety-skipped, `44` environment-skipped, `0` errors.
+- Latest agents probe passed: `37/37`.
+- `npm run build` passes for `shell_web_ui`; Vite still reports only non-blocking `face-api.js` browser externalization and large chunk warnings.
+- `installer/bootstrap.py health` currently reports `NEEDS_REPAIR` because `.codex_ui_venv` is Python `3.9.6`; Web UI build, PyQt6, WebEngine, telemetry, sounddevice, speech recognition, LiveKit, wake word, and VAD are OK.
+- macOS audio health reports `AudioQueueStart failed (-66680)`, so audible Shell voice still depends on a working output device or RDP/Parsec audio forwarding path.
+
+### Next Steps
+1. Run `ONE_CLICK_INSTALL` on the target machine to create/repair `.shellai_venv` with Python 3.10+.
+2. Start Shell through `Start_ShellAI.bat` on Windows or `start_shellai.command` on macOS.
+3. Re-run `installer/bootstrap.py health` inside the managed `.shellai_venv` after install.
+4. Add/configure the Gemini API key and verify real Gemini Live voice over the final RDP/Parsec audio output path.
+5. Grant macOS Accessibility, Microphone, Camera, and Screen Recording permissions to the Python/Terminal runner for real OS input automation and real media capture.
+
+### Open Issues
+- Vite still emits non-blocking warnings for `face-api.js` browser-externalized `fs` and a large main chunk.
+- macOS audio health still reports `AudioQueueStart failed (-66680)` until an output device/remote audio path is available.
+- Several optional dependencies remain warnings until the repair/install path installs them or their feature flags are enabled.
+- Real dangerous/destructive tools were intentionally not executed by the all-tools probe; they remain safety-gated by design.
+
+## Session: 2026-05-23
+
+### Completed
+- Used four parallel agents for UI audit, code review, UI testing recommendations, and assistant UI/media research.
+- Removed the redundant centered `Shell OS // MAC/SYSTEM` titlebar label and the custom macOS-style three-dot chrome from the Web UI.
+- Fixed typed transcript/chart policy: text input now stays text-only, and voice output only auto-runs for voice-source backend replies or the explicit speaker button.
+- Reworked dashboard chart mode so chart prompts keep the selected metric family instead of being overwritten by live core metric refresh.
+- Made Dashboard transcript/chart input responsive on narrower screens instead of hiding it below large desktop widths.
+- Fixed Settings layout scrolling by removing hardcoded absolute tab panels; General/API/Security now scroll inside the tab content while the Settings tab strip stays visible.
+- Added the Shell logo to the Web UI header and verified it loads from the local renderer asset.
+- Improved camera/screen-share behavior: vision can start independently of voice connection, uses `getDisplayMedia()` first, enables Qt WebEngine media/screen permissions, updates active state before video playback, and adds an explicit `STOP CAPTURE` control.
+- Added Telegram Remote Control management inside Settings > API Keys: token field, allowed chat IDs, PC-control toggle, terminal safety toggle, status/start/stop controls, and test-message send.
+- Fixed Control Center selected-tool layout so the Execute button no longer overlaps the result panel at desktop/RDP heights, and verified backend calculator execution from the UI.
+- Fixed backend voice mute bridge and source metadata propagation from voice recognition into chat events.
+- Cleaned two voice runtime bugs found by review: duplicate `ai-force-speak` listeners and mismatched `index_Folder` / `index_directory` tool names.
+
+### Changes Made
+- Updated `shell_web_ui/src/views/Dashboard.tsx`.
+- Updated `shell_web_ui/src/IndexRoot.tsx`.
+- Updated `shell_web_ui/src/UI/ShellAI.tsx`.
+- Updated `shell_web_ui/src/components/Titlebar.tsx`.
+- Updated `shell_web_ui/src/views/Settings.tsx`.
+- Updated `shell_web_ui/src/views/ControlCenter.tsx`.
+- Added `shell_web_ui/src/public/shell-logo.png`.
+- Updated `shell_web_ui/host.py`.
+- Updated `shell_web_ui/src/shellBridge.ts`.
+- Updated `shell_web_ui/src/services/shell-voice-ai.ts`.
+- Updated `tools/real_web_ui_cdp_probe.mjs` with scroll, text-only speech, titlebar, Telegram status, Control Center execution, Phone error-state, vision modal, and fake camera/screen stream checks.
+- Updated `README.md`.
+- Updated `SESSION_LOG.md`.
+
+### Current State
+- `npm run build` passes for `shell_web_ui`.
+- Python compile passes for `shell_web_ui/host.py` and `launch.py`.
+- Real visible Shell Web UI probe passed with `30/30` checks:
+  - all main tabs opened,
+  - Settings System/General/API/Security opened,
+  - General scroll container verified,
+  - API Keys scroll container verified,
+  - Telegram status panel executed through the backend tool gateway,
+  - Control Center selected `shell_calculator:calculate_tool` and returned `Result: 4`,
+  - Phone manual connection error state rendered cleanly,
+  - Notes create/save worked,
+  - chart prompt updated chart/transcript without voice calls,
+  - chart text command route returned calculator output without voice calls,
+  - vision modal opened,
+  - fake camera and fake screen streams activated,
+  - transcript prompt worked,
+  - voice test/start/stop buttons were clickable,
+  - console error count was `0`.
+- Latest probe report: `.shell_runtime/real_web_ui_cdp_probe_latest/report.json`.
+
+### Next Steps
+1. User should visually test the currently opened Shell window over RDP/Parsec.
+2. For real screen sharing on macOS, grant the Python/Terminal runner Screen Recording permission if macOS prompts.
+3. For real Gemini voice, add the Gemini API key in Settings > API Keys > Gemini Pro Core.
+4. For Telegram remote control, add the BotFather token and allowed chat ID in Settings > API Keys > Telegram Remote Control, then enable only the safety gates you need.
+
+### Open Issues
+- macOS screen share may still require OS-level Privacy & Security permission and sometimes an app restart after permission is granted.
+- Vite still emits the non-blocking `face-api.js` browser `fs` externalization warning and large chunk warning.
+- Existing unrelated dirty worktree changes remain untouched.
+
 ## Session: 2026-05-20
 
 ### Completed
@@ -1474,3 +1637,514 @@
 - macOS Accessibility permission remains untrusted in probes, so some desktop-control capabilities remain OS-gated.
 - Python 3.9 / LibreSSL warnings remain from the local runtime environment.
 - Local `.env` exists and must not be included in public release packages.
+
+## Session: 2026-05-23
+
+### Completed
+- Updated Shell Web UI per user correction: API key management stays inside `SETTINGS > API KEYS`; no separate API tab was added.
+- Added a new top-level `CONTROL` tab for backend-accessible tools, agents, and actions.
+- Added Dashboard Transcript chat input so typed messages can call lightweight natural-command backend routing from the UI.
+- Added a Dashboard chart prompt/card inside the Transcript panel.
+- Reworked Dashboard/Settings/Control overflow behavior to use scrollable panels instead of shrinking the visual design.
+
+### Changes Made
+- Updated `shell_web_ui/src/views/Dashboard.tsx` with transcript chat, chart prompt, scrollable left stack, and restored lower control dock placement.
+- Added `shell_web_ui/src/views/ControlCenter.tsx` and wired it into `shell_web_ui/src/UI/ShellAI.tsx`.
+- Expanded `shell_web_ui/src/views/Settings.tsx` API Keys section for Shell-required provider keys: Gemini, Groq, Hugging Face, Tavily, LiveKit, OpenAI, OpenRouter, Mistral, Google Search, CSE, and OpenWeather.
+- Expanded `shell_web_ui/host.py` bridge channels for `chat-message`, `get-capabilities`, `execute-tool`, `list-api-keys`, and fuller `secure-save-keys`.
+- Added `TAVILY_API_KEY` to `.env.example` and the API manager allowlist.
+- Updated `tools/real_web_ui_cdp_probe.mjs` to test the new Control tab, chart prompt, and transcript prompt from the actual rendered UI.
+
+### Current State
+- Python syntax validation passed for `shell_web_ui/host.py`, `shell_api_manager.py`, and `launch.py`.
+- `npm run build` passed after the new UI changes.
+- Real visible QWebEngine UI validation passed via CDP: `18/18` steps, `0` console errors.
+- Final report: `.shell_runtime/real_web_ui_cdp_probe_final_scroll_control/report.json`.
+- Final screenshots: `.shell_runtime/real_web_ui_cdp_probe_final_scroll_control/`.
+
+### Next Steps
+1. Decide whether the `CONTROL` tab should execute guarded tools directly or require an extra confirmation modal.
+2. Wire free-form transcript chat to the full production AI brain after the user confirms preferred behavior; current implementation routes known natural commands and avoids heavy agent imports for stability.
+3. Optimize the large web bundle and lazy-load heavier visual/vision dependencies.
+
+### Open Issues
+- The Vite build still warns about a large main chunk and browser-externalized `fs` from `face-api.js`; non-blocking.
+- Full voice runtime start/stop is still scaffolded at the bridge layer.
+- Existing unrelated deleted files are still present in the worktree and were not reverted.
+
+## Session: 2026-05-22
+
+### Completed
+- Analyzed an external assistant UI reference and extracted transferable dashboard, voice, memory, codebase, remote-access, and automation patterns.
+- Mapped the reference architecture into Shell-owned PyQt modules, preserving the existing Shell backend and safety boundaries.
+- Replaced Shell's primary chat surface with a native PyQt Shell-style Neural OS dashboard while preserving Shell's backend APIs.
+- Added Shell neural feature modules for streaming voice state, core memory, deep focus, remote access records, project scanning/coding assist, and background process inspection.
+- Added docs and targeted tests for the migration.
+- Implemented Phase 1 PyQtGraph telemetry charts for the System page with legacy QPainter rollback.
+- Implemented Phase 1 wake-word/VAD pipeline scaffolding with openWakeWord and Silero VAD adapters behind default-off flags.
+- Implemented Phase 2 Feature 3 pywinauto Windows automation layer behind `SHELL_PYWINAUTO_ENABLED=0`.
+- Implemented Phase 2 Feature 4 Memory v2 behind `SHELL_MEMORY_V2_ENABLED=0`.
+- Implemented Phase 2 Feature 5 offline sherpa-onnx STT fallback behind `SHELL_LOCAL_STT_ENABLED=0`.
+- Implemented Phase 3 Feature 6 Project RAG v2 behind `SHELL_PROJECT_RAG_ENABLED=0`.
+- Implemented Phase 3 Feature 7 Secure Coding Sandbox behind `SHELL_SECURE_SANDBOX_ENABLED=0`.
+- Implemented Phase 3 Feature 8 Agent Workflow Checkpoints behind `SHELL_WORKFLOW_CHECKPOINTS_ENABLED=0`.
+
+### Changes Made
+- Added `shell_ui/neural_dashboard.py`.
+- Updated `shell_ui/design_tokens.py` to use the Shell near-black + emerald CYBER_NEON palette.
+- Updated `shell_ui/shell_cinematic_full.py` for Shell branding, dashboard routing, and Shell feature phrase detection.
+- Updated `shell_ui/shell_cinematic_full.py` so System telemetry charts select `PyQtGraphLineChart` by default and preserve `_LegacyLiveLineChart` behind `SHELL_PYQTGRAPH_ENABLED=0`.
+- Added `shell_voice_pipeline.py` with `VoicePipelineManager`, openWakeWord adapter, Silero VAD adapter, fake-detector hooks, false-positive measurement, and state snapshots.
+- Updated `shell_voice_listener_runtime.py` to route mic input through optional wake-word and VAD stages while preserving the existing timing endpoint fallback.
+- Updated `shell_ui/shell_cinematic_full.py` with wake-word sensitivity settings and voice pipeline interrupt handoff.
+- Updated `shell_settings_manager.py`, `requirements.txt`, `shell_ui/requirements_ui.txt`, and `installer/bootstrap.py` for wake-word/VAD settings and optional dependencies.
+- Added `core/automation/windows_pywinauto.py` with a Windows-only pywinauto driver for app launch/focus/close/minimize/maximize/resize/window listing and a common Notepad/Calculator/File Explorer test plan.
+- Updated `shell_window_CTRL.py` to try pywinauto first on Windows when enabled, while preserving pywin32/pygetwindow/PyAutoGUI fallbacks.
+- Updated `core/computer_control/readiness.py` and `installer/bootstrap.py` with pywinauto readiness/dependency metadata.
+- Added `core/memory/v2.py` with local SQLite storage, redaction-before-write, tags, importance scoring, time decay, recall audit logs, soft deletes, and legacy JSON migration.
+- Added `shell_memory_v2.py` with `save_memory()`, `recall_memory()`, `forget_memory()`, migration/status helpers, and discoverable Memory v2 tools.
+- Updated `shell_memory.py` so existing memory tools route to Memory v2 when `SHELL_MEMORY_V2_ENABLED=1`, while legacy JSON remains the default path.
+- Updated `agent.py` to expose Memory v2 tools in the main agent tool list.
+- Added `shell_local_stt.py` with a lazy sherpa-onnx streaming recognizer, auto model path detection, local-primary mode, fallback status tool, and fake-testable streaming API.
+- Updated `shell_voice_listener_runtime.py` so SpeechRecognition API errors can fall back to local STT when enabled; `SHELL_LOCAL_STT_PRIMARY=1` tries sherpa-onnx first and falls back to the API path on local load failure.
+- Updated `requirements.txt`, `shell_ui/requirements_ui.txt`, `installer/bootstrap.py`, and `core/health/startup.py` with `sherpa-onnx>=1.12.38` / `sherpa_onnx` readiness metadata.
+- Added `core/project_rag/` with incremental SQLite indexing, `.gitignore`-style ignore rules, supported code/doc extension scanning, chunking, optional embeddings, and lexical BM25 fallback.
+- Added `shell_project_rag.py` with index/query/status tools and wired Project RAG v2 into Shell coding assistance when enabled.
+- Updated `agent.py`, `requirements.txt`, `installer/bootstrap.py`, and `core/health/startup.py` with Project RAG tools and optional `rank-bm25` / `sentence_transformers` metadata.
+- Added `core/secure_sandbox.py` with isolated per-run workspaces, timeout enforcement, environment secret scrubbing, rollback cleanup, redacted audit logging, and a Python network import guard.
+- Added `shell_secure_sandbox.py` with sandbox run/status tools and wired the sandbox into `shell_terminal.py`, `shell_code_engine.py`, and `agent.py` when `SHELL_SECURE_SANDBOX_ENABLED=1`.
+- Updated `requirements.txt`, `installer/bootstrap.py`, and `core/health/startup.py` with optional `docker` metadata for a future container-backed sandbox path.
+- Added `core/workflow_checkpoints.py` with SQLite/JSON checkpoint storage, last-action workflow state, resume loading, rollback checkpoint creation, pruning, and event publication.
+- Added `shell_workflow_checkpoints.py` with public `save_checkpoint()`, `load_checkpoint()`, and `rollback()` APIs plus discoverable workflow checkpoint tools.
+- Updated `agent.py` to expose workflow checkpoint save/load/rollback/status tools in the main tool list.
+- Added `tests/test_workflow_checkpoints.py`.
+- Added `shell_neural_voice.py`, `shell_core_memory.py`, `shell_focus_mode.py`, `shell_remote_access.py`, `shell_coding_assist.py`, and `shell_process_inspector.py`.
+- Added `docs/SHELL_NEURAL_INTEGRATION_REPORT.md` and `docs/SHELL_PERFORMANCE_BENCHMARK.md`.
+- Updated `README.md` with Shell UI migration documentation links and the PyQtGraph rollback flag.
+- Updated `requirements.txt`, `requirements-ci.txt`, and `shell_ui/requirements_ui.txt` with `pyqtgraph>=0.13.7`.
+- Added `openwakeword>=0.6.0` and `silero-vad>=5.1.2` to full/UI requirements.
+- Added `pywinauto>=0.6.8; sys_platform == "win32"` to full requirements.
+- Added `tests/test_neural_shell_integration.py`, `tests/test_pyqtgraph_telemetry_charts.py`, and `tests/test_voice_pipeline_manager.py`.
+- Added `tests/test_pywinauto_windows_driver.py`.
+
+### Current State
+- Targeted validation passed: `18 passed in 1.01s` for `tests/test_neural_shell_integration.py`, `tests/test_low_latency_interaction.py`, and `tests/test_ui_working_smoke.py`.
+- PyQtGraph chart validation passed: `3 passed in 0.46s` after installing `pyqtgraph==0.13.7` in `.codex_ui_venv`.
+- Targeted Neural UI/latency regression passed with PyQtGraph backend: `21 passed in 2.56s`.
+- PyQtGraph telemetry micro-benchmark: `0.138 ms` average and `2.785 ms` max over 200 offscreen updates, below the `<50 ms` target.
+- Voice pipeline manager/listener tests passed: `10 passed in 0.65s` initially, then `62 passed, 1 warning` across pipeline, listener, latency, page layout, realtime session, and TTS policy regression tests.
+- Final targeted Phase 1 regression passed: `84 passed, 1 warning` across voice pipeline, listener extraction, voice latency, voice UI, realtime session, chat TTS policy, UI smoke, Shell neural integration, PyQtGraph charts, and low-latency interaction tests.
+- Silero VAD real dependency smoke passed after installing `silero-vad==5.1.2`: `0.127 ms` average and `0.502 ms` max over 40 silent 512-sample frames.
+- openWakeWord real package installed and adapter smoke tested. Default "Hey Shell" correctly falls back to button mode because openWakeWord does not ship a built-in "Hey Shell" model; deployment requires `SHELL_WAKE_WORD_MODEL_PATHS`.
+- pywinauto driver targeted tests passed on fake Windows wrappers: `41 passed in 1.34s`; compile validation clean.
+- pywinauto/computer-control/security/UI regression passed: `65 passed, 1 warning`.
+- Real pywinauto app-control success rate is not measured on this macOS host; Notepad/Calculator/File Explorer plan is ready for Windows validation.
+- Memory v2 tests passed: `8 passed`.
+- Memory v2/SHELL/pywinauto/readiness/NL/security/UI regression passed: `74 passed, 1 warning`.
+- Memory v2 micro-benchmark: save `1.403 ms` average over 200 inserts; recall `4.103 ms` average and `4.603 ms` max over 100 recalls against 200 memories.
+- Local STT focused regression passed: `50 passed, 1 warning` across local STT, voice listener extraction, voice pipeline, and voice latency tests.
+- Local STT/installer/platform/security/UI regression passed with unrelated launcher assertion deselected: `93 passed, 1 deselected, 1 warning`.
+- Local STT fake-recognizer micro-benchmark: `0.011 ms` average and `0.030 ms` max adapter overhead over 100 transcribes. Real model latency still requires a downloaded sherpa-onnx model.
+- Project RAG focused regression passed: `15 passed`.
+- Memory/voice/local STT/Project RAG/SHELL/pywinauto/readiness/NL/security/UI regression passed with unrelated launcher assertion deselected: `111 passed, 1 deselected, 1 warning`.
+- Project RAG micro-benchmark: index `10.298 ms` for 120 files / 120 chunks; query `1.304 ms` average and `1.478 ms` max over 100 lexical queries.
+- Secure Sandbox compile validation passed for `core/secure_sandbox.py`, `shell_secure_sandbox.py`, `shell_terminal.py`, `shell_code_engine.py`, `agent.py`, `installer/bootstrap.py`, and `core/health/startup.py`.
+- Secure Sandbox focused regression passed: `25 passed, 1 warning` across sandbox, tool catalog, and security regression tests.
+- Secure Sandbox broad regression passed with unrelated launcher assertion deselected: `120 passed, 1 deselected, 1 warning`.
+- Secure Sandbox micro-benchmark: isolated Python run `21.771 ms` average and `23.449 ms` max over 20 runs with 0 failures.
+- Workflow Checkpoints compile validation passed for `core/workflow_checkpoints.py`, `shell_workflow_checkpoints.py`, and `agent.py`.
+- Workflow Checkpoints focused regression passed: `8 passed`.
+- Workflow Checkpoints broad regression passed with unrelated launcher assertion deselected: `128 passed, 1 deselected, 1 warning`.
+- Workflow Checkpoints micro-benchmark: SQLite save `1.931 ms` average, load `0.335 ms` average, rollback `1.878 ms` average.
+- Python compile validation passed for all new Shell neural modules using `PYTHONPYCACHEPREFIX=/private/tmp/shell_pycache`.
+- Latency probe passed overall. Latest local observations include fast local chat candidate `0.312 ms`, local reply `0.002 ms`, streaming first-token provider metric `11.111 ms`, and voice realtime control overhead `0.016 ms`.
+- Sandbox blocked the direct local Shell-v2 socket sample with `Operation not permitted`; mocked SSE and provider streaming probes passed.
+
+### Next Steps
+1. Capture fresh visible screenshots for the new Shell dashboard and replace the old public showcase screenshots.
+2. Wire real remote tunneling only after choosing an approved tunnel provider and safety policy.
+3. Add optional OS-level focus automation for notification muting/app blocking behind explicit user approval.
+4. Add a real microphone partial-transcript bridge into `shell_neural_voice.VOICE_COORDINATOR`.
+5. Add or train a real openWakeWord "Hey Shell" model and set `SHELL_WAKE_WORD_MODEL_PATHS` before enabling wake-word mode by default.
+6. Validate pywinauto against Notepad, Calculator, and File Explorer on a real Windows desktop/RDP session.
+7. Capture fresh visible screenshots for the new Shell dashboard and replace the old public showcase screenshots.
+8. Run full test suite on a machine with the complete dependency set before release packaging.
+
+### Open Issues
+- True `0 ms` latency is physically impossible; current implementation uses streaming-first updates and records first partial/response timings.
+- Browser-only optimizations such as Service Workers, IndexedDB, Web Workers, and WebAssembly are not directly applicable to the PyQt desktop surface.
+- Remote access is currently safe session tracking plus localhost port checks, not public tunneling.
+- Existing unrelated deleted files are present in the worktree and were not reverted.
+- `tests/test_installer_bootstrap.py::test_mac_launchers_use_bootstrap_directly` fails if run because `Start_ShellAI.command` is missing in the current worktree; this predates the Offline STT work and was not recreated.
+- Wake-word mode remains default-off and requires a custom "Hey Shell" model path for real activation.
+- pywinauto mode remains default-off and still needs real Windows UAT for the 90% app-control success target.
+- Memory v2 remains default-off pending user migration validation from legacy JSON memory.
+- Offline STT remains default-off and needs a real sherpa-onnx model directory for end-to-end microphone latency and accuracy validation.
+- Project RAG v2 remains default-off; semantic embedding quality requires installing `sentence-transformers` and selecting an available embedding model.
+- Secure Sandbox remains default-off. Timeout, rollback, env scrubbing, and audit logs are validated locally; network isolation is a Python import guard until a Docker/bubblewrap backend is explicitly added and enabled.
+- Workflow Checkpoints remain default-off. SQLite/JSON persistence and rollback APIs are validated locally; post-crash resume still needs a user-facing UI prompt after app restart.
+
+## Session: 2026-05-22
+
+### Completed
+- Removed all project-visible legacy external UI branding strings and filenames from code, tests, docs, README, and session notes.
+- Renamed the dashboard and feature modules to Shell-owned neutral names.
+- Updated tool function names, imports, env vars, docs, and tests to use Shell Neural/Core naming.
+- Verified no remaining case-insensitive legacy branding references with repository-wide `rg` scans.
+
+### Changes Made
+- Renamed `shell_ui/neural_dashboard.py` as the primary Shell Neural dashboard module.
+- Renamed feature modules to `shell_neural_voice.py`, `shell_core_memory.py`, `shell_focus_mode.py`, `shell_remote_access.py`, `shell_coding_assist.py`, and `shell_process_inspector.py`.
+- Renamed docs to `docs/SHELL_NEURAL_INTEGRATION_REPORT.md` and `docs/SHELL_PERFORMANCE_BENCHMARK.md`.
+- Renamed integration tests to `tests/test_neural_shell_integration.py`.
+- Updated `shell_ui/shell_cinematic_full.py`, `README.md`, docs, and tests to remove old branding and use Shell Neural labels.
+
+### Current State
+- Repository-wide text scan for the removed brand returns no matches.
+- Repository filename scan for the removed brand returns no matches.
+- Syntax validation passed for renamed Shell Neural modules and UI files.
+- Focused regression passed: `25 passed`.
+- Broad Phase regression passed with unrelated launcher assertion deselected: `128 passed, 1 deselected, 1 warning`.
+
+### Next Steps
+1. Relaunch Shell UI and visually confirm the top bar/window title use Shell branding.
+2. Replace old public screenshots with fresh Shell Neural UI screenshots.
+
+### Open Issues
+- Existing unrelated deleted files are still present in the worktree and were not reverted.
+- `tests/test_installer_bootstrap.py::test_mac_launchers_use_bootstrap_directly` remains deselected because `Start_ShellAI.command` is missing in the current worktree.
+
+## Session: 2026-05-23
+
+### Completed
+- Ran a full safe tool/agent QA sweep after the user requested deep testing of all tools and agents.
+- Fixed `tools/agents_ui_probe.py` so nested report paths create their parent directory before writing.
+- Added a safe local UI-smoke response path for `shell_agent_tools:deploy_swarm_tool` so swarm readiness tests do not falsely fail when cloud AI providers or network access are unavailable.
+- Fixed the Web UI bridge startup race that could make the first Dashboard `CLEAR` click clear only local fallback history instead of backend history.
+- Rebuilt and relaunched the Shell Web UI with the bridge timing fix.
+- Updated the chart/transcript focused probe to accept the current concise `Memory in Python...` answer wording.
+
+### Changes Made
+- Updated `shell_agent_tools.py`.
+- Updated `tests/test_agent_safety.py`.
+- Updated `tools/agents_ui_probe.py`.
+- Updated `shell_web_ui/src/shellBridge.ts`.
+- Updated `tools/chart_transcript_ui_probe.mjs`.
+- Rebuilt `shell_web_ui/dist/`.
+
+### Current State
+- Tool catalog QA passed: `468` catalog entries audited, `62` safe tools executed, `40` agents readiness-only, `10` expected-not-ready, `312` safety-skipped, `44` environment-skipped, `0` unexpected errors.
+- Agents UI QA passed: `38/38` agents passed, including `DeploySwarm`.
+- Real Web UI deep probe passed: `30/30` click/type/screenshot checks, `0` console events.
+- Chart/transcript focused probe passed: `7/7`, including initial clear, normal questions, explicit chart prompt, calculator route, and text-mode no-voice policy.
+- Targeted tests passed: `tests/test_agent_safety.py` `11 passed`; `tests/test_nl_router.py` `23 passed`.
+- Python compile validation passed for updated Python probe/backend files.
+- Shell Web UI is running visibly on debug port `9235`.
+
+### Next Steps
+1. For real external actions such as YouTube playback, email/Telegram sending, downloads, or terminal execution, run manual tests only after the relevant API keys/safety flags are intentionally enabled.
+2. For website/code generation, explicitly enable `SHELL_ALLOW_CODE_WRITE=1` in `.env` before expecting Shell to write generated files.
+3. Optimize remaining large Vite bundle warnings in a later performance pass.
+
+### Open Issues
+- Several catalog entries are correctly marked `NEEDS_API_KEY`, `MISSING_DEPENDENCY`, `WINDOWS_ONLY`, `BLOCKED_BY_SAFETY`, or `EXPERIMENTAL`; these were not force-executed.
+- macOS Accessibility permission remains required for some real desktop-control input actions.
+- Vite still reports non-blocking large-chunk and `face-api.js` browser `fs` externalization warnings.
+
+## Session: 2026-05-23
+
+### Completed
+- Investigated why normal user commands like `song play karo` and `website banao ...` were falling through instead of controlling Shell tools.
+- Added deterministic NL routes for generic music/video playback commands without requiring the word `YouTube`.
+- Added deterministic NL routes for direct website/webpage/site creation prompts so they reach the code-engine scaffold tool.
+- Improved web UI chat formatting for safety-blocked website/code creation so the user sees a clear reason instead of a confusing generic tool response.
+- Restarted the visible Shell Web UI so the updated router/backend is loaded.
+
+### Changes Made
+- Updated `shell_nl_router.py` with generic media playback routing and direct website scaffold routing.
+- Updated `tests/test_nl_router.py` with regression coverage for `song play karo` and `website banao landing page for bakery`.
+- Updated `shell_web_ui/host.py` to present code-write safety blocks clearly in chat/chart replies.
+
+### Current State
+- `tests/test_nl_router.py`: `23 passed`.
+- Python compile validation passed for `shell_web_ui/host.py` and `shell_nl_router.py`.
+- Route probe confirms:
+  - `song play karo` -> `shell_browser_CTRL:play_youtube_video`.
+  - `website banao landing page for bakery` -> `shell_code_engine:create_fullstack_app_tool`.
+  - `make a website for calculator` -> `shell_code_engine:create_fullstack_app_tool`.
+  - `open calculator` remains routed to `shell_window_CTRL:open_app`.
+- Chat backend smoke confirms website creation returns a clear blocked message while `SHELL_ALLOW_CODE_WRITE` is off.
+- Shell UI is running on Qt WebEngine remote debugging port `9235`.
+
+### Next Steps
+1. If trusted website/code generation is desired, explicitly enable `SHELL_ALLOW_CODE_WRITE=1` in `.env`, restart Shell, and test scaffold output in an isolated workspace.
+2. UI-test the real `song play karo` flow from the Shell window, accepting that it will open YouTube or a browser search.
+3. Continue expanding direct NL routes for other common Hinglish commands as they are found.
+
+### Open Issues
+- Website/code file writing remains intentionally disabled until the safety flag is explicitly enabled.
+- Real YouTube playback was not triggered in the automated test to avoid unexpectedly opening/playing media.
+
+## Session: 2026-05-23
+
+### Completed
+- Performed a real visible Shell Web UI QA pass through the launched PyQt WebEngine app using the CDP probe.
+- Tested the primary UI tabs one by one: Dashboard, Macros, Apps, Notes, Gallery, Phone, Control, and Settings.
+- Tested the Settings subtabs: System, General, API Keys, and Security.
+- Verified Notes create/save from the UI path.
+- Verified Dashboard transcript prompt from the UI path with `calculate 2+2`, which returned `4`.
+- Verified Dashboard chart prompt from the UI path.
+- Verified voice start/stop from the UI path; the Dashboard entered the real `LISTENING` voice state.
+- Removed the duplicate chart prompt surface by keeping one dashboard chart panel and one shared transcript input with separate chart/send actions.
+- Fixed dashboard chart/transcript placement so the chart stays inside the transcript area instead of creating another competing input.
+- Fixed Macros sidebar toggle placement so it anchors at the sidebar edge.
+- Fixed Phone tab spacing so the new-device card is visible and not cut off.
+- Wired the web UI voice controls into the production `VoiceListenerThread` runtime instead of only emitting bridge scaffold events.
+
+### Changes Made
+- Updated `shell_web_ui/host.py` with real voice runtime start/stop, coordinator usage, voice status events, transcript forwarding, amplitude events, latency events, and graceful error handling.
+- Updated `shell_web_ui/src/IndexRoot.tsx` to track backend voice state and reflect real LISTENING/STOPPED/ERROR statuses in the UI.
+- Updated `shell_web_ui/src/UI/ShellAI.tsx` to pass backend voice state into the Dashboard.
+- Updated `shell_web_ui/src/views/Dashboard.tsx` to consolidate chart and transcript input behavior and improve chart visibility/status text.
+- Updated `shell_web_ui/src/views/WorkFlowEditor.tsx` to correct the sidebar toggle position.
+- Updated `shell_web_ui/src/views/Phone.tsx` to reduce oversized vertical spacing and keep device cards visible.
+- Updated `SESSION_LOG.md` with the latest visible UI QA state.
+
+### Current State
+- `npm run build` passes for `shell_web_ui/`.
+- Python syntax validation passes for `shell_web_ui/host.py`, `shell_api_manager.py`, and `launch.py`.
+- Final real UI deep probe passed: `18/18` steps, `0` failed, `0` console events.
+- Probe report: `.shell_runtime/real_web_ui_deep_probe_final_alltabs/report.json`.
+- Probe screenshots: `.shell_runtime/real_web_ui_deep_probe_final_alltabs/`.
+- Main voice listener dependencies are available and the UI reached `TRANSCRIPT LISTENING`.
+
+### Next Steps
+1. Install/configure the offline STT dependency if offline speech fallback is required in this environment.
+2. Optimize remaining Vite large-chunk warnings with code splitting.
+3. Re-run a longer manual microphone dictation pass with an available input device and real spoken commands.
+
+### Open Issues
+- `sherpa_onnx` is not installed, so the offline STT fallback is not active.
+- Vite still reports non-blocking warnings for `face-api.js` browser-externalized `fs` and a large generated chunk.
+- Existing unrelated deleted files remain in the worktree and were not reverted.
+
+## Session: 2026-05-23
+
+### Completed
+- Added audible Shell voice output from the Web UI through a backend `speak-text` bridge.
+- Added a Dashboard speaker button so the user can hear "Shell AI voice ready hai" directly from the UI.
+- Made backend chat replies speak through local TTS after `chat-updated` events.
+- Reworked Dashboard chart prompts so chart questions stay local, concise, and metric-focused instead of routing into long backend chat answers.
+- Added short chart replies such as network/RAM/CPU/temp summaries and stored them in the transcript history.
+- Reduced Dashboard clutter by removing the fake battery indicator, making top status meaningful, compacting the left rail, and fixing the blank optics/network/core metric sizing.
+- Kept one chart panel and one shared transcript input with separate chart/send buttons.
+- Extended the real UI CDP probe to verify the new Shell voice speaker button and concise chart response.
+
+### Changes Made
+- Updated `shell_web_ui/host.py` with `speak-text` and `stop-speech` channels using local OS TTS (`say` on macOS, PowerShell speech on Windows, `spd-say`/`espeak` on Linux).
+- Updated `shell_web_ui/src/shellBridge.ts` and `shell_web_ui/src/env.d.ts` with speech bridge support and browser fallback speech synthesis.
+- Updated `shell_web_ui/src/views/Dashboard.tsx` with concise chart replies, speech output, speaker control, compact left dashboard panels, and cleaner transcript controls.
+- Updated `shell_web_ui/src/UI/ShellAI.tsx` to remove the fake battery readout and show a meaningful READY/LISTENING state.
+- Updated `shell_web_ui/src/views/Settings.tsx` so Settings fills the available app viewport instead of forcing a nested screen height.
+- Updated `tools/real_web_ui_cdp_probe.mjs` to test the speaker button and assert concise chart transcript output.
+- Updated `SESSION_LOG.md` with the latest UI/voice/chart QA state.
+
+### Current State
+- Backend TTS smoke test returned success and started local speech output.
+- `npm run build` passes for `shell_web_ui/`.
+- Python syntax validation passes for `shell_web_ui/host.py`, `shell_api_manager.py`, and `launch.py`.
+- Final real visible UI probe passed: `19/19` steps, `0` failed, `0` console events.
+- Final probe report: `.shell_runtime/real_web_ui_deep_probe_voice_chart_cleanup_final2/report.json`.
+- Final probe screenshots: `.shell_runtime/real_web_ui_deep_probe_voice_chart_cleanup_final2/`.
+
+### Next Steps
+1. Run a longer manual microphone dictation test with the user's actual mic selected and macOS microphone permissions confirmed.
+2. Add code splitting for heavy renderer chunks to reduce the remaining Vite large-chunk warning.
+3. Decide whether the optics panel should stay on Dashboard or move behind a vision-specific mode if the user wants an even cleaner voice/chart-only dashboard.
+
+### Open Issues
+- `sherpa_onnx` is still not installed, so offline STT fallback is not active.
+- Vite still reports non-blocking warnings for `face-api.js` browser-externalized `fs` and a large generated chunk.
+- Existing unrelated deleted files remain in the worktree and were not reverted.
+
+## Session: 2026-05-23
+
+### Completed
+- Investigated why Shell voice was not audible to the user.
+- Verified macOS volume was `100` and output mute was `false`.
+- Verified `/usr/bin/say` and `/usr/bin/afplay` are present.
+- Confirmed macOS `say` can render a valid AIFF file at `/private/tmp/shell_voice_test.aiff`.
+- Found CLI playback failure: `afplay` returned `AudioQueueStart failed (-66680)`, so backend command-line playback cannot be trusted in this environment.
+- Switched Shell Web UI speech to use browser/QWebEngine `speechSynthesis` first, with backend OS TTS kept as fallback.
+- Rebuilt the web UI and relaunched Shell visibly.
+- Clicked the Dashboard speaker button through the real UI; browser speech support was present and `speechSynthesis.speaking` became `true`.
+
+### Changes Made
+- Updated `shell_web_ui/src/views/Dashboard.tsx` so `speakShell()` uses browser speech first and falls back to the backend `speak-text` bridge only if needed.
+- Updated `shell_web_ui/src/shellBridge.ts` so `window.shellAPI.speakText()` also prefers browser speech before Python backend speech.
+- Updated `SESSION_LOG.md` with the audio diagnosis and browser speech fix.
+
+### Current State
+- `npm run build` passes for `shell_web_ui/`.
+- Python syntax validation passes for `shell_web_ui/host.py` and `launch.py`.
+- Visible Shell UI is launched for user testing on debug port `9233`.
+- Speaker button click test succeeded at the UI level: `speechSynthesis.speaking: true`.
+
+### Next Steps
+1. User should click the Dashboard speaker button once in the visible Shell UI.
+2. If no sound is heard while `speechSynthesis.speaking` is true, check macOS Sound Output and select real speakers/headphones instead of virtual devices such as BlackHole.
+
+### Open Issues
+- CLI playback via `afplay` fails with `AudioQueueStart failed (-66680)` in this environment.
+- `sherpa_onnx` is still not installed, so offline STT fallback is not active.
+- Vite still reports non-blocking warnings for `face-api.js` browser-externalized `fs` and a large generated chunk.
+
+## Session: 2026-05-23
+
+### Completed
+- Ran the requested multi-agent UI review loop and converted the findings into a 5-loop fix/test cycle.
+- Fixed Dashboard chart chat so normal questions are answered as text instead of being hijacked by telemetry keywords.
+- Added a compact `CLEAR` button to the Dashboard transcript and made it clear persisted web UI history.
+- Added visible `CHART` and `SEND` labels to the transcript controls.
+- Fixed bridge startup races by waiting briefly for QWebChannel before falling back to browser-only handlers.
+- Added backend `clear-history` and ADB fallback handlers so hidden PhoneView cannot crash the app during startup.
+- Made TerminalOverlay lazy-render only when terminal output is visible, removing hidden terminal banner/PID text from the UI DOM.
+- Added a dedicated chart/transcript UI probe for normal QA, telemetry charting, calculator command routing, text-only voice policy, and transcript clearing.
+- Re-ran full real WebEngine UI QA after fixes.
+
+### Changes Made
+- Updated `shell_web_ui/src/views/Dashboard.tsx`.
+- Updated `shell_web_ui/src/UI/ShellAI.tsx`.
+- Updated `shell_web_ui/src/shellBridge.ts`.
+- Updated `shell_web_ui/host.py`.
+- Updated `shell_web_ui/src/views/Phone.tsx`.
+- Rebuilt `shell_web_ui/src/components/TerminalOverlay.tsx` as a lazy overlay.
+- Added `tools/chart_transcript_ui_probe.mjs`.
+- Updated `tools/real_web_ui_cdp_probe.mjs`.
+- Updated `README.md` with the web UI QA behavior and probe commands.
+
+### Current State
+- `npm run build` passes for `shell_web_ui/`.
+- Python syntax validation passes for `shell_web_ui/host.py`.
+- Dedicated chart/transcript probe passes: `7/7` functional steps, text mode voice counters remain `0`, hidden terminal text absent.
+- Full real UI probe passes: `30/30` steps, `consoleEvents: 0`.
+- Shell is running visibly on debug port `9235` for user testing.
+
+### Next Steps
+1. User can test Dashboard chart chat directly with normal questions, telemetry prompts, and OS/tool commands.
+2. Continue security hardening for API-key redaction and guarded command confirmation in a later pass.
+3. Consider code-splitting the large web UI bundle before release.
+
+### Open Issues
+- Vite still reports non-blocking warnings for `face-api.js` browser-externalized `fs` and a large generated chunk.
+- Three.js emits an upstream deprecation warning for `THREE.Clock`; functional probes ignore warnings and fail only on errors/exceptions.
+- Existing unrelated worktree changes remain untouched.
+
+## Session: 2026-05-23
+
+### Completed
+- Corrected the voice route after the user clarified they want the real Shell/Gemini Live voice, not local/browser TTS.
+- Verified the existing Gemini Live service already supports native audio output with Gemini voice names `Puck` and `Aoede`.
+- Added runtime support so the PyQt Web UI can use Gemini Live voice by default instead of forcing the Python backend voice listener path.
+- Added `GeminiLiveService.waitUntilReady()` and `GeminiLiveService.forceSpeak()` so the Dashboard speaker button can send a real Gemini Live prompt after the socket is open.
+- Added a Settings > General voice runtime selector: `GEMINI LIVE` and `LOCAL FALLBACK`.
+- Verified the current environment has no Gemini API key available, so real Gemini voice cannot connect until the user adds one.
+- Rebuilt and relaunched Shell with the Gemini Live voice route enabled.
+
+### Changes Made
+- Updated `shell_web_ui/src/services/shell-voice-ai.ts` with Gemini socket readiness and force-speak helpers.
+- Updated `shell_web_ui/src/IndexRoot.tsx` to default to `gemini` voice runtime and route start/stop/speaker actions through Gemini Live unless the user selects backend fallback.
+- Updated `shell_web_ui/src/UI/ShellAI.tsx` to carry the new voice runtime props.
+- Updated `shell_web_ui/src/views/Dashboard.tsx` so the speaker button asks Gemini Live to speak first when `GEMINI LIVE` is selected.
+- Updated `shell_web_ui/src/views/Settings.tsx` with the voice runtime selector.
+- Updated `SESSION_LOG.md` with the real voice routing state.
+
+### Current State
+- `npm run build` passes for `shell_web_ui/`.
+- Python syntax validation passes for `shell_web_ui/host.py` and `launch.py`.
+- Shell is relaunched with the new build on debug port `9235`.
+- Gemini Live is now the default intended voice runtime.
+
+### Next Steps
+1. Add a Gemini API key in `Settings > API Keys > Gemini Pro Core`, then save all keys.
+2. Return to Dashboard and press the speaker button or phone button to hear the real Gemini voice.
+3. Keep remote audio forwarding enabled in Parsec/RDP, otherwise even real Gemini audio will not reach the local computer.
+
+### Open Issues
+- Gemini API key is currently missing, so real Gemini Live voice cannot connect yet.
+- Remote audio forwarding is still a separate RDP/Parsec client-side requirement.
+- Vite still reports non-blocking warnings for `face-api.js` browser-externalized `fs` and a large generated chunk.
+
+## Session: 2026-05-23
+
+### Completed
+- Backed up the existing `shell_ui/` directory into `shell_ui_LEGACY/` without deleting the working legacy UI.
+- Added `shell_web_ui/` as the new React/Vite/WebGL renderer and applied Shell AI branding throughout the imported renderer source.
+- Removed remaining external assistant and personal branding strings from the new web renderer source.
+- Added a PyQt WebEngine host with QWebChannel communication between the React UI and Shell's Python backend.
+- Made `launch.py` default to the new Shell Web UI, with `SHELL_LEGACY_UI=1` rollback to the preserved PyQt UI.
+- Documented the web renderer launch, dev server, build flow, bridge API, and rollback flags in `README.md`.
+
+### Changes Made
+- Added `shell_web_ui/host.py`, `shell_web_ui/src/shellBridge.ts`, `shell_web_ui/src/main.tsx`, renderer config files, package files, assets, and branded UI source.
+- Updated `launch.py` to choose `ShellWebUI` by default and retain legacy PyQt launch behind an environment flag.
+- Updated `README.md` with the Shell Web UI architecture, commands, and new environment flags.
+- Updated this session log with the web renderer migration state.
+
+### Current State
+- `npm install --no-audit --no-fund --loglevel=info` completed for `shell_web_ui/`.
+- `npm run build` passed in `1.49s`.
+- Python syntax validation passed for `shell_web_ui/host.py` and `launch.py`.
+- Bridge smoke test passed for system stats, installed apps, and voice-start request handling.
+- Repository scan across `shell_web_ui`, docs, README, session log, and launcher returns no remaining old external UI brand strings.
+- Local Vite server starts successfully with elevated localhost permission and reports ready in `116 ms`.
+- Follow-up validation after launching Shell:
+  - Targeted agent/tool/feature regression passed: `148 passed, 1 warning`.
+  - Agents UI probe passed: `37/37` agents executed through the chat UI path.
+  - All-tools UI probe passed across `468` catalog entries: `62` safe tools executed, `40` agents readiness-only, `10` expected-not-ready, `312` safety-skipped, `44` environment-skipped, `0` errors.
+  - Shell Web UI build passed again in `1.41s`.
+  - Shell Web UI bridge smoke passed for system stats, installed apps, running apps, history, secure keys, start voice, stop voice, and memory search.
+  - Actual `launch.py` GUI smoke opened the default Shell AI Web UI successfully.
+  - First GUI smoke exposed a CSP block for `qrc:///qtwebchannel/qwebchannel.js`; fixed by adding `qrc:` to the renderer CSP and replacing null IPC fallbacks with safe default values.
+  - Second GUI smoke opened Shell AI Web UI without CSP/runtime bridge errors. Remaining console output was a non-blocking Three.js deprecation warning.
+  - Latency probe passed overall; key observations included catalog discovery `79.642 ms`, local chat candidate `0.117 ms`, local reply `0.002 ms`, UI first paint `1607.407 ms`, provider runtime init `3.445 ms`, streaming first token `11.115 ms`, voice control overhead `0.017 ms`, and platform supervisor score `88`.
+
+### Next Steps
+1. Capture fresh screenshots/video for the Shell Web UI now that visible launch is working.
+2. Wire `start-voice` and `stop-voice` bridge handlers into the full production voice runtime instead of the current request/emit scaffold.
+3. Add code splitting for large renderer chunks, especially heavy widgets and face/vision dependencies.
+4. Expand the bridge handlers for notes, gallery, terminal overlay, live coding, and widget-specific actions.
+5. Run full regression after resolving the pre-existing missing launcher file in the worktree.
+
+### Open Issues
+- Visual screenshot automation could not complete through the in-app browser backend; visible `launch.py` GUI smoke did run successfully.
+- The Vite build still warns about a large main chunk and browser-externalized `fs` from `face-api.js`; both are non-blocking but should be optimized before release.
+- `start-voice` / `stop-voice` currently confirm bridge flow and emit UI events; full microphone pipeline start/stop wiring remains the next integration step.
+- `tools/latency_probe.py` reports `shell_v2.connect_1s` as blocked by the sandbox's local socket permission, while mocked SSE/runtime/provider streaming checks pass.
+- Existing unrelated deleted files are still present in the worktree and were not reverted.
+
+## Session: 2026-05-22
+
+### Completed
+- Re-cloned and deeply analyzed the approved external assistant UI repository in `/private/tmp`.
+- Mapped the source UI layout: compact top identity strip, tab rail, left optics/network/metrics column, center particle sphere with control dock, right live transcript, and modal-style research/RAG/remote widgets.
+- Upgraded Shell's PyQt Neural dashboard to more closely match that structure while keeping Shell branding and Shell backend wiring.
+- Added dashboard-local live charts, a richer 3D-style particle sphere, Shell Neural widget cards for Deep Research, Project RAG, Remote Link, and Live Coding, plus responsive side rails.
+
+### Changes Made
+- Updated `shell_ui/neural_dashboard.py` with the richer dashboard layout and visual behavior.
+- Kept `shell_ui/shell_cinematic_full.py` Shell-branded and routed dashboard feature cards through existing Shell command handling.
+
+### Current State
+- Syntax validation passed for the updated dashboard.
+- Focused UI/RAG regression passed: `23 passed`.
+- Broad Phase regression passed with unrelated launcher assertion deselected: `128 passed, 1 deselected, 1 warning`.
+- Repository-wide removed-brand text and filename scans still return no matches.
+
+### Next Steps
+1. Visually test the relaunched Shell UI and tune spacing/scale based on what is visible on the actual screen.
+2. Capture fresh Shell Neural dashboard screenshots after visual approval.
+
+### Open Issues
+- Existing unrelated deleted files are still present in the worktree and were not reverted.
+- `tests/test_installer_bootstrap.py::test_mac_launchers_use_bootstrap_directly` remains deselected because `Start_ShellAI.command` is missing in the current worktree.

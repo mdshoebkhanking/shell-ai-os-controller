@@ -117,7 +117,13 @@ def _app_control_group(system: str) -> dict[str, Any]:
         if not checks["macos_open_cli"]:
             risks.append("macOS open command is unavailable")
     elif system == "windows":
-        checks.update({"windows_mcp_catalog": _file_available("shell_windows_mcp.py")})
+        checks.update({
+            "windows_mcp_catalog": _file_available("shell_windows_mcp.py"),
+            "pywinauto_driver": _file_available("core", "automation", "windows_pywinauto.py"),
+            "pywinauto_optional": _module_available("pywinauto"),
+            "pywinauto_enabled": _truthy(os.environ.get("SHELL_PYWINAUTO_ENABLED")),
+        })
+        signals.append("pywinauto is available as the primary Windows UI Automation driver when explicitly enabled")
     elif system == "linux":
         checks.update({"linux_xdg_open": _which("xdg-open"), "linux_gtk_launch": _which("gtk-launch")})
         if not checks["linux_xdg_open"] and not checks["linux_gtk_launch"]:
@@ -149,7 +155,10 @@ def _input_control_group(system: str) -> dict[str, Any]:
         risks.append("macOS input control cannot be trusted until Accessibility permission is granted by the user")
         score_penalty = 16
     elif system == "windows":
-        checks.update({"windows_mcp_static_actions": _file_available("shell_windows_mcp.py")})
+        checks.update({
+            "windows_mcp_static_actions": _file_available("shell_windows_mcp.py"),
+            "pywinauto_driver": _file_available("core", "automation", "windows_pywinauto.py"),
+        })
         signals.append("Windows-MCP provides the native mouse/keyboard action surface on Windows")
     elif system == "linux":
         checks.update({"linux_xdotool": _which("xdotool"), "linux_wtype": _which("wtype")})

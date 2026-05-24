@@ -10,6 +10,14 @@ logger = logging.getLogger("shell_memory")
 
 MEMORY_FILE = os.path.join(os.path.expanduser("~"), ".shell_smart_memory.json")
 
+def _memory_v2_active() -> bool:
+    try:
+        from shell_memory_v2 import memory_v2_enabled
+        return bool(memory_v2_enabled())
+    except Exception as e:
+        logger.debug("Memory v2 unavailable, using legacy JSON memory: %s", e)
+        return False
+
 def load_memory() -> Dict[str, Any]:
     if os.path.exists(MEMORY_FILE):
         try:
@@ -65,6 +73,22 @@ async def update_memory_tool(category: str, key: str, value: str) -> str:
         key: The specific item (e.g., 'nickname', 'music_choice', 'python_goal').
         value: The information to remember.
     """
+    if _memory_v2_active():
+        try:
+            from shell_memory_v2 import save_memory as save_memory_v2
+
+            result = save_memory_v2(
+                f"{key}: {value}",
+                tags=[category, key],
+                source="legacy_memory_tool",
+                metadata={"legacy_category": category, "legacy_key": key},
+            )
+            memory_id = result.get("memory", {}).get("memory_id", "")
+            logger.info("Memory v2 updated: [%s] %s id=%s", category, key, memory_id)
+            return f"✅ Done boss! Memory v2 mein yaad ho gaya. id={memory_id}"
+        except Exception as e:
+            logger.warning("Memory v2 save failed, falling back to legacy JSON: %s", e)
+
     memory = load_memory()
     if category not in memory:
         return f"❌ Invalid category: {category}"
@@ -81,6 +105,28 @@ async def get_full_memory() -> str:
     Shows entry counts per category, file size, and last modified date.
     Use this to personalize your conversation.
     """
+    if _memory_v2_active():
+        try:
+            from core.memory.v2 import MemoryV2Store, default_memory_v2_path
+
+            store = MemoryV2Store(default_memory_v2_path())
+            stats = store.stats()
+            memories = [item.to_dict() for item in store.recall_memory("", limit=50)]
+            if not memories:
+                return "🧠 Memory v2 empty hai (koi zaroori baat yaad nahi)."
+            output = "--- MEMORY V2 DATA ---\n"
+            output += (
+                f"Store: {stats['path']} | Active: {stats['active_memories']} | "
+                f"Recall audit: {stats['audit_entries']}\n"
+            )
+            for index, row in enumerate(memories, 1):
+                tags = ", ".join(row.get("tags") or [])
+                output += f"\n{index}. {row.get('redacted_text') or row.get('text')}\n"
+                output += f"   importance={row.get('importance')} | tags={tags}\n"
+            return output[:3900] + ("\n\n... [TRUNCATED DUE TO SIZE] ..." if len(output) > 3900 else "")
+        except Exception as e:
+            logger.warning("Memory v2 full read failed, falling back to legacy JSON: %s", e)
+
     memory = load_memory()
 
     # File metadata
@@ -133,6 +179,19 @@ async def delete_memory_tool(category: str, key: str) -> str:
         category: The category to delete from (e.g., 'personal_info', 'preferences').
         key: The specific key to delete (e.g., 'nickname', 'music_choice').
     """
+    if _memory_v2_active():
+        try:
+            from shell_memory_v2 import forget_memory as forget_memory_v2
+
+            result = forget_memory_v2(query=key, tag=category)
+            count = int(result.get("forgotten") or 0)
+            if count <= 0:
+                return f"❌ Memory v2 mein '{category}/{key}' match nahi mila."
+            logger.info("Memory v2 deleted: [%s] %s count=%s", category, key, count)
+            return f"🗑️ Memory v2 se {count} entrie(s) delete ho gayi."
+        except Exception as e:
+            logger.warning("Memory v2 delete failed, falling back to legacy JSON: %s", e)
+
     memory = load_memory()
 
     if category not in memory:
@@ -160,6 +219,15 @@ async def search_memory_tool(query: str) -> str:
     """
     if not query or not query.strip():
         return "❌ Please provide a search query."
+
+    if _memory_v2_active():
+        try:
+            from shell_memory_v2 import format_recall_results, recall_memory as recall_memory_v2
+
+            result = recall_memory_v2(query, limit=10)
+            return format_recall_results(result, empty_message=f"❌ No Memory v2 entries found matching: '{query}'")
+        except Exception as e:
+            logger.warning("Memory v2 search failed, falling back to legacy JSON: %s", e)
 
     query_lower = query.lower().strip()
     memory = load_memory()

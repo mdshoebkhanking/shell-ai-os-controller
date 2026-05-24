@@ -100,17 +100,154 @@ Shell is designed around visible confidence:
 | --- | --- |
 | Chat | Text chat with streaming-style UI, tool routing, and grounded responses |
 | Voice | Gemini voice path plus local TTS fallback and low-latency voice UI |
+| Voice Pipeline | Optional wake-word, Silero VAD, and local sherpa-onnx STT fallback with safe button-mode fallback |
 | Tools | 300+ Python tools behind a guarded execution gateway |
 | Desktop | App/window control, screenshots, clipboard, keyboard/mouse automation |
+| Windows Control | Optional pywinauto UI Automation driver with PyAutoGUI/pywin32 fallback |
 | Browser | Browser automation wrappers with safety gates and dry-run support |
-| Telegram | Remote-control bot with explicit token setup and permission controls |
+| Telegram | Remote-control bot with Settings > API Keys controls for token, allowlist, status, start/stop, and test send |
 | Email | SMTP sending with clear Gmail app-password diagnostics |
 | Media | Image generation, QR tools, PDF tools, YouTube summaries, OCR hooks |
 | Runtime | Health checks, readiness states, logs, production release gates |
+| Telemetry | PyQtGraph-backed live CPU/RAM/GPU/network charts with legacy QPainter rollback |
 | Installer | One-click Windows bootstrap plus macOS/Linux launch helpers |
 | ShellAI Core | `python -m shellai` CLI, agent loop, model routing, memory, skills, tools, monitor, cron, daemon |
 | AI OS Fabric | Coordinator/Shell/Safety/Memory/UI/Optimizer agents wired in-process behind stable APIs |
+| Memory v2 | Optional local SQLite memory with tags, importance scoring, time decay, redaction, recall audit, and legacy JSON migration |
+| Project RAG v2 | Optional incremental codebase index with `.gitignore`-style scanning, BM25/TF-IDF fallback, semantic embeddings, and coding context queries |
+| Secure Sandbox | Optional per-run coding workspace with timeout enforcement, secret-scrubbed environment, audit log, rollback cleanup, and network import guard |
+| Workflow Checkpoints | Optional agent workflow persistence with last-action tracking, SQLite/JSON storage, resume loading, and auditable rollback checkpoints |
 | Safety | SAFE/ASK/BLOCK shell policy, dry-run behavior, audit logs, blocked destructive commands |
+| Neural UI | React/WebGL Shell Neural OS renderer embedded in PyQt WebEngine with emerald glass panels, live transcript rail, central particle orb, optics status, and telemetry cards |
+| Shell Neural Features | Streaming voice state, permanent core memory, deep focus sessions, remote access records, project folder scanning, coding context packs, and background process inspection |
+
+## Shell Neural UI
+
+Shell's primary desktop interface now uses a React/Vite renderer embedded in
+PyQt WebEngine. The renderer lives in `shell_web_ui/` and keeps Shell's Python
+backend, tool gateway, voice pipeline, memory, RAG, and safety model behind a
+QWebChannel bridge. The older PyQt interface is preserved for rollback in
+`shell_ui/`. Local migration backups such as `shell_ui_LEGACY/` are ignored and
+should not be committed.
+
+The web renderer is the default path:
+
+```bash
+.codex_ui_venv/bin/python launch.py
+```
+
+Rollback to the previous PyQt UI:
+
+```bash
+SHELL_LEGACY_UI=1 .codex_ui_venv/bin/python launch.py
+```
+
+For renderer development:
+
+```bash
+cd shell_web_ui
+npm install
+npm run dev
+SHELL_WEB_UI_URL=http://127.0.0.1:5173 ../.codex_ui_venv/bin/python ../launch.py
+```
+
+For packaged/local launch without the dev server, build once:
+
+```bash
+cd shell_web_ui
+npm run build
+```
+
+The JavaScript bridge exposes `window.shellAPI.startVoice()`,
+`window.shellAPI.stopVoice()`, `window.shellAPI.executeCommand(cmd)`,
+`window.shellAPI.getSystemMetrics()`, and `window.shellAPI.searchMemory(query)`.
+The renderer also polyfills the original Electron IPC calls so imported visual
+components can call Shell's Python backend without changing their UI timing,
+animation, or layout code.
+
+Current Web UI notes:
+
+- The Dashboard transcript and chart composer are both text-capable. Typed
+  messages stay text-only; voice output is only triggered by voice-source
+  replies or the explicit speaker control.
+- Settings keeps its tab strip visible while General/API/Security content
+  scrolls inside the panel.
+- Settings > API Keys includes Telegram Remote Control setup: BotFather token,
+  allowed chat IDs, PC-control gate, terminal gate, bot status, start/stop, and
+  test-message send.
+- Camera and screen share use browser/WebEngine media APIs, with an explicit
+  source selector and `STOP CAPTURE` control.
+- The checked-in real WebEngine probe is `tools/real_web_ui_cdp_probe.mjs`; it
+  exercises main tabs plus nested controls such as Settings scroll, Telegram
+  status, Control Center tool execution, Phone error handling, Notes save,
+  chart command routing, transcript text, fake camera/screen streams, and voice
+  start/stop buttons.
+
+The feature modules are documented in
+[`docs/SHELL_NEURAL_INTEGRATION_REPORT.md`](docs/SHELL_NEURAL_INTEGRATION_REPORT.md), and
+latency notes are tracked in
+[`docs/SHELL_PERFORMANCE_BENCHMARK.md`](docs/SHELL_PERFORMANCE_BENCHMARK.md).
+
+### Performance Flags
+
+- `SHELL_PYQTGRAPH_ENABLED=1` (default) uses PyQtGraph for live telemetry
+  charts. Set `SHELL_PYQTGRAPH_ENABLED=0` to roll back to the preserved legacy
+  QPainter chart implementation.
+- `SHELL_WAKE_WORD_ENABLED=0` (default) keeps hands-free wake detection off
+  until explicitly tested. Enable with `SHELL_WAKE_WORD_ENABLED=1` and provide a
+  custom "Hey Shell" openWakeWord model via `SHELL_WAKE_WORD_MODEL_PATHS`.
+- `SHELL_VAD_ENABLED=0` (default) keeps the current timing endpointing path.
+  Enable with `SHELL_VAD_ENABLED=1` to use Silero streaming VAD; if loading
+  fails, Shell falls back to the existing timing logic.
+- Wake-word sensitivity can be tuned in Settings under Voice & Speech, or with
+  `SHELL_WAKE_WORD_SENSITIVITY` / `SHELL_WAKE_WORD_THRESHOLD`.
+- `SHELL_PYWINAUTO_ENABLED=0` (default) keeps legacy Windows automation active.
+  Set `SHELL_PYWINAUTO_ENABLED=1` on Windows to prefer pywinauto's UI Automation
+  backend for app launch, focus, close, resize, minimize, maximize, and window
+  listing. PyAutoGUI/pywin32 remain fallback paths.
+- `SHELL_MEMORY_V2_ENABLED=0` (default) keeps the legacy JSON memory tools as
+  the primary path. Set `SHELL_MEMORY_V2_ENABLED=1` to route memory tools to
+  the local SQLite Memory v2 store. Optional `SHELL_MEMORY_V2_PATH` selects the
+  database path, and `SHELL_MEMORY_V2_DECAY_DAYS` tunes time-decay half-life.
+  Public APIs are `save_memory()`, `recall_memory()`, and `forget_memory()` in
+  `shell_memory_v2.py`; `memory_v2_migrate_legacy_tool` imports
+  `~/.shell_smart_memory.json`.
+- `SHELL_LOCAL_STT_ENABLED=0` (default) keeps Google/SpeechRecognition as the
+  active STT path. Set `SHELL_LOCAL_STT_ENABLED=1` plus
+  `SHELL_LOCAL_STT_MODEL_DIR=/path/to/sherpa-model` to enable offline
+  sherpa-onnx fallback when the speech API is unavailable. Optional
+  `SHELL_LOCAL_STT_PRIMARY=1` tries local STT first and falls back to the
+  current API path if local model loading fails.
+- `SHELL_PROJECT_RAG_ENABLED=0` (default) keeps project indexing off. Set
+  `SHELL_PROJECT_RAG_ENABLED=1` to enable incremental local codebase indexing
+  and `project_rag_query_tool` / `project_rag_index_tool`. Optional
+  `SHELL_PROJECT_RAG_EMBEDDINGS_ENABLED=1` enables sentence-transformers
+  embeddings when a local/available model is configured; lexical BM25/TF-IDF
+  fallback remains available without embeddings.
+- `SHELL_SECURE_SANDBOX_ENABLED=0` (default) keeps existing direct code
+  execution behavior. Set `SHELL_SECURE_SANDBOX_ENABLED=1` to route Python code
+  execution through an isolated temporary workspace with secret-scrubbed
+  environment variables, timeout enforcement, rollback cleanup, and JSONL audit
+  records. Optional settings include `SHELL_SECURE_SANDBOX_TIMEOUT_S`,
+  `SHELL_SECURE_SANDBOX_NETWORK`, `SHELL_SECURE_SANDBOX_AUDIT`,
+  `SHELL_SECURE_SANDBOX_ROOT`, and `SHELL_SECURE_SANDBOX_KEEP_SUCCESS`.
+  Network blocking currently uses a Python import guard by default; future
+  Docker/bubblewrap isolation can be added behind the same flag.
+- `SHELL_WORKFLOW_CHECKPOINTS_ENABLED=0` (default) keeps agent workflow state
+  persistence off. Set `SHELL_WORKFLOW_CHECKPOINTS_ENABLED=1` to enable
+  `save_checkpoint()`, `load_checkpoint()`, and `rollback()` in
+  `shell_workflow_checkpoints.py`, plus checkpoint tools for multi-step agents.
+  Optional settings include `SHELL_WORKFLOW_CHECKPOINTS_BACKEND=sqlite|json`,
+  `SHELL_WORKFLOW_CHECKPOINTS_PATH`, and
+  `SHELL_WORKFLOW_CHECKPOINTS_MAX_PER_WORKFLOW`.
+- `SHELL_LEGACY_UI=0` (default) launches the new Shell Web UI through
+  PyQt WebEngine. Set `SHELL_LEGACY_UI=1` for rollback to the previous PyQt
+  interface.
+- `SHELL_WEB_UI_URL` points the PyQt host at a running Vite dev server instead
+  of `shell_web_ui/dist/index.html`.
+- `VITE_SHELL_WEB_USE_GEMINI=1` re-enables the renderer's direct Gemini live
+  voice path during web UI development. By default, the power/mic controls call
+  Shell's Python bridge.
 
 ## Screenshots
 
@@ -201,7 +338,8 @@ User / CLI / Desktop feature flag
 .
 ├── agent.py                         # Main AI agent runtime
 ├── shellai/                         # ShellAI Core CLI, agent loop, fabric, memory, skills, tools
-├── shell_ui/                        # PyQt desktop interface
+├── shell_web_ui/                    # React/Vite/WebGL renderer embedded by PyQt WebEngine
+├── shell_ui/                        # Legacy PyQt desktop interface and shared boot assets
 ├── core/shellai_bridge.py           # Feature-flagged desktop bridge to ShellAI Core
 ├── shell_tool_gateway.py            # Tool execution gateway
 ├── shell_telegram.py                # Telegram bot integration
@@ -241,6 +379,7 @@ What the installer does:
 - Detects Python.
 - Creates a virtual environment.
 - Installs Python dependencies.
+- Installs and builds the React Shell Web UI in `shell_web_ui/`.
 - Runs health checks.
 - Prepares runtime folders.
 - Starts Shell through the production launcher.
@@ -427,6 +566,19 @@ but Windows-MCP is Windows-only.
 **Does it include API keys?**
 
 No. Users must provide their own keys in `.env`. Never commit `.env`.
+
+## Web UI QA Notes
+
+- Dashboard transcript now has a small `CLEAR` button that clears persisted web UI history.
+- The Dashboard `CHART` button supports both telemetry prompts and normal text prompts:
+  - `show CPU chart` updates the chart and writes a short chart reply.
+  - `what is memory in Python?` and `explain network protocols` route to text chat, not telemetry.
+  - `calculate 2+2` routes through the Shell backend command/tool path and stays text-only.
+- Text-originated chart/transcript messages do not trigger voice output.
+- Settings `GENERAL` and `API KEYS` panels are scrollable where needed, and Telegram Remote Control lives inside `Settings > API Keys`.
+- Real UI probes are available:
+  - `node tools/real_web_ui_cdp_probe.mjs 9235 .shell_runtime/real_web_ui_cdp_probe_loop5_final`
+  - `node tools/chart_transcript_ui_probe.mjs 9235 .shell_runtime/chart_transcript_ui_probe_loop4_clean_pass`
 
 ## Roadmap
 

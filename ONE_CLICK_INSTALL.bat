@@ -6,6 +6,7 @@ color 0B
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "SHELL_TTS_ENGINE=fast"
+set "SHELL_LEGACY_UI=0"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
 
 echo.
@@ -17,6 +18,7 @@ echo   - find or install Python 3.10+
 echo   - create the managed .shellai_venv virtual environment
 echo   - install Python requirements
 echo   - install all UI requirements from shell_ui\requirements_ui.txt
+echo   - install and build the React Shell Web UI in shell_web_ui
 echo   - install Playwright Chromium
 echo   - install ffmpeg, OCR, uv/uvx, and Node.js where winget supports it
 echo   - create .env and runtime folders

@@ -137,6 +137,19 @@ def test_swarm_smoke_and_no_write_requests_route_to_reviewer():
     assert orch._route_step("Do not create files; just inspect status") == "reviewer"
 
 
+def test_deploy_swarm_ui_smoke_avoids_provider_calls():
+    import shell_agent_tools
+
+    result = asyncio.run(
+        shell_agent_tools.deploy_swarm_tool(
+            "UI smoke test only: produce a one-line readiness report. Do not create files."
+        )
+    )
+
+    assert "Swarm is ready" in result
+    assert "no files" in result.lower()
+
+
 def test_swarm_agent_provider_failure_is_human_readable():
     from swarm.agents.reviewer import ReviewerAgent
     from swarm.base import BaseAgent, SwarmState

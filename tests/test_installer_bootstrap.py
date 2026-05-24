@@ -80,6 +80,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "installer\\bootstrap.py launch --repair-if-needed" in start
     assert "installer\\bootstrap.py install --yes" in one_click
     assert "shell_ui\\requirements_ui.txt" in one_click
+    assert "shell_web_ui" in one_click
     assert ".shellai_venv" in one_click
     assert "ui.log" in start
     assert "hub.log" in start
@@ -87,6 +88,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "PYTHONUTF8=1" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
+    assert "SHELL_LEGACY_UI=0" in start
     assert "Start_ShellAI.bat" in legacy
     assert "Start_ShellAI.bat" in run
     assert "C:\\Users\\Administrator" not in run
@@ -97,13 +99,15 @@ def test_windows_launchers_use_modern_diagnostic_path():
 
 def test_mac_launchers_use_bootstrap_directly():
     install = open("ONE_CLICK_INSTALL.command", encoding="utf-8").read()
-    start = open("Start_ShellAI.command", encoding="utf-8").read()
+    start = open("start_shellai.command", encoding="utf-8").read()
 
     assert "installer/bootstrap.py install --yes" in install
     assert "shell_ui/requirements_ui.txt" in install
+    assert "shell_web_ui" in install
     assert "Python 3.10+" in install
+    assert "SHELL_LEGACY_UI" in start
     assert "installer/bootstrap.py launch --repair-if-needed" in start
-    assert "exec ./Start_ShellAI.command" not in start
+    assert "exec ./start_shellai.command" not in start
 
 
 def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):
@@ -118,6 +122,34 @@ def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):
 
     assert any("shell_ui/requirements_ui.txt" in " ".join(call).replace("\\", "/") for call in calls)
     assert "PyQt6.QtWebEngineWidgets" in bootstrap.UI_IMPORTS
+
+
+def test_bootstrap_installs_and_builds_shell_web_ui(monkeypatch):
+    calls = []
+
+    def fake_run_cmd(argv, **kwargs):
+        calls.append((kwargs.get("cwd", bootstrap.ROOT), [str(part) for part in argv], kwargs.get("name", "")))
+        return bootstrap.StepResult(kwargs.get("name", "cmd"), True, "OK", "")
+
+    monkeypatch.setattr(bootstrap, "run_cmd", fake_run_cmd)
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda name: "/usr/bin/npm" if name == "npm" else None)
+
+    results = bootstrap.install_node_deps()
+
+    assert all(result.ok for result in results)
+    assert any(cwd == bootstrap.WEB_UI_ROOT and "install Shell Web UI" in name for cwd, _argv, name in calls)
+    assert any(cwd == bootstrap.WEB_UI_ROOT and argv == ["npm", "run", "build"] for cwd, argv, _name in calls)
+
+
+def test_web_ui_build_readiness_reports_missing_dist(monkeypatch):
+    monkeypatch.delenv("SHELL_WEB_UI_URL", raising=False)
+    monkeypatch.setattr(bootstrap.Path, "exists", lambda self: False if self == bootstrap.WEB_UI_DIST_INDEX else True)
+
+    result = bootstrap.web_ui_build_readiness()
+
+    assert result.ok is False
+    assert result.status == "ERROR"
+    assert "shell_web_ui/dist/index.html" in result.message
 
 
 def test_windows_preflight_helpers_are_safe_on_non_windows():

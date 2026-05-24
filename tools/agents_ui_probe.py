@@ -192,7 +192,9 @@ def main() -> int:
         window.close()
         _process_events(app, 0.3)
 
-    Path(args.json_out).write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    out = Path(args.json_out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     print(json.dumps(report, indent=2, sort_keys=True), flush=True)
     return 0 if report.get("ok") else 1
 

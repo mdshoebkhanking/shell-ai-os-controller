@@ -249,10 +249,36 @@ def _find_window_hwnd(title_keyword):
     win32gui.EnumWindows(callback, None)
     return result[0] if result else None
 
+def _get_pywinauto_driver():
+    try:
+        from core.automation.windows_pywinauto import create_pywinauto_driver
+        return create_pywinauto_driver()
+    except Exception as exc:
+        logger.debug("pywinauto driver unavailable: %s", exc)
+        return None
+
+async def _run_pywinauto(action: str, *args):
+    driver = _get_pywinauto_driver()
+    if driver is None:
+        return None
+    method = getattr(driver, action, None)
+    if method is None:
+        return None
+    try:
+        return await asyncio.to_thread(method, *args)
+    except Exception as exc:
+        logger.debug("pywinauto %s failed: %s", action, exc)
+        return None
+
 # -------------------------
 # Global focus utility
 # -------------------------
 async def focus_window(title_keyword: str) -> bool:
+    if sys.platform.startswith("win"):
+        result = await _run_pywinauto("focus_window", title_keyword)
+        if result is not None and getattr(result, "ok", False):
+            return True
+
     if not gw:
         logger.warning("pygetwindow not available")
         return False
@@ -493,6 +519,16 @@ async def open_app(app_title: str) -> str:
         if sys.platform.startswith("linux"):
             return await _open_app_linux(app_title, app_command)
 
+        install_path_hint = _find_app_install_path(app_title)
+        pywinauto_result = await _run_pywinauto(
+            "open_app",
+            app_title,
+            app_command,
+            install_path_hint,
+        )
+        if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+            return pywinauto_result.message
+
         proc = None
 
         # Special case for settings (URI protocol)
@@ -541,7 +577,7 @@ async def open_app(app_title: str) -> str:
                 proc = subprocess.Popen(app_path)
             else:
                 # 2) Try known install paths
-                install_path = _find_app_install_path(app_title)
+                install_path = install_path_hint
                 if install_path:
                     proc = subprocess.Popen(install_path)
                 else:
@@ -579,6 +615,10 @@ async def close_app(window_title: str) -> str:
     if sys.platform.startswith("linux"):
         return await _close_app_linux(window_title)
 
+    pywinauto_result = await _run_pywinauto("close_window", window_title)
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        return pywinauto_result.message
+
     if not win32gui:
         logger.warning("win32gui module not available")
         return "win32gui not available"
@@ -610,6 +650,9 @@ async def minimize_window(window_title: str) -> str:
     Args:
         window_title: The name/title of the window (e.g., 'chrome', 'notepad').
     """
+    pywinauto_result = await _run_pywinauto("minimize_window", window_title)
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        return pywinauto_result.message
     if not win32gui: return "System module missing"
     try:
         found = False
@@ -633,6 +676,9 @@ async def maximize_window(window_title: str) -> str:
     Args:
         window_title: The name/title of the window.
     """
+    pywinauto_result = await _run_pywinauto("maximize_window", window_title)
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        return pywinauto_result.message
     if not win32gui: return "System module missing"
     try:
         found = False
@@ -658,6 +704,9 @@ async def resize_window(window_title: str, width: int = 800, height: int = 600) 
         width: New width in pixels.
         height: New height in pixels.
     """
+    pywinauto_result = await _run_pywinauto("resize_window", window_title, width, height)
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        return pywinauto_result.message
     if not win32gui: return "System module missing"
     try:
         found = False
@@ -800,6 +849,21 @@ async def list_open_windows_tool() -> str:
     Lists all visible windows with their titles, positions, sizes, window handle, and process name.
     Uses win32gui.EnumWindows to enumerate all top-level windows.
     """
+    pywinauto_result = await _run_pywinauto("list_windows")
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        rows = pywinauto_result.details.get("windows", [])
+        if not rows:
+            return "No visible windows found via pywinauto."
+        lines = [f"{'PID':<10} {'Size':<12} {'Position':<14} Title"]
+        lines.append("-" * 80)
+        for row in rows:
+            pid = row.get("process_id") or "-"
+            lines.append(
+                f"{pid!s:<10} {row.get('size', ''):<12} {row.get('position', ''):<14} {row.get('title', '')}"
+            )
+        lines.append(f"\nTotal: {len(rows)} windows (pywinauto)")
+        return "\n".join(lines)
+
     if not win32gui:
         return "win32gui not available. Install pywin32."
 
@@ -952,6 +1016,10 @@ async def switch_to_window_tool(window_title: str) -> str:
     Args:
         window_title: The title (or partial title) of the window to switch to.
     """
+    pywinauto_result = await _run_pywinauto("focus_window", window_title)
+    if pywinauto_result is not None and getattr(pywinauto_result, "ok", False):
+        return pywinauto_result.message
+
     if not win32gui:
         return "win32gui not available. Install pywin32."
 

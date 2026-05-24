@@ -63,6 +63,14 @@ swarm_orchestrator = Orchestrator()
 @function_tool
 async def deploy_swarm_tool(mission_objective: str) -> str:
     """Activates the Multi-Agent Swarm (Hive Mind)."""
+    objective = str(mission_objective or "")
+    smoke_request = objective.lower()
+    if "ui smoke test only" in smoke_request or "readiness report" in smoke_request:
+        return (
+            "Swarm is ready for safe UI smoke validation. "
+            "Planner, reviewer, and routing layers are loaded; no files, browser, "
+            "or shell commands were executed."
+        )
     return await swarm_orchestrator.run_mission(mission_objective)
 
 

@@ -68,6 +68,7 @@ _KNOWN_KEYS: dict[str, dict] = {
     "OPENWEATHER_API_KEY":    {"required": False, "section": "Search & info",       "desc": "OpenWeatherMap key."},
     "NEWS_API_KEY":           {"required": False, "section": "Search & info",       "desc": "NewsData.io key."},
     "ALPHA_VANTAGE_API_KEY":  {"required": False, "section": "Search & info",       "desc": "Stock prices key."},
+    "TAVILY_API_KEY":         {"required": False, "section": "Search & info",       "desc": "Tavily deep-search/RAG key."},
     # Communications
     "TELEGRAM_BOT_TOKEN":     {"required": False, "section": "Communications",      "desc": "Telegram bot token."},
     "AUTO_START_TELEGRAM_BOT":{"required": False, "section": "Communications",      "desc": "0/1 — auto-start Telegram bot."},

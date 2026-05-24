@@ -157,11 +157,62 @@ def _youtube_media_query(raw: str, lower: str) -> str:
     return query or "music"
 
 
+def _project_slug_from_text(raw: str, fallback: str = "shell_site") -> str:
+    text = raw.lower()
+    text = re.sub(
+        r"\b(?:please|pls|make|create|build|generate|design|scaffold|website|webpage|web\s+page|"
+        r"landing\s+page|site|banao|bana|banado|banaao|kar\s+do|for|ke\s+liye|ka|ki|ek|a|an)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    slug = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
+    slug = re.sub(r"_+", "_", slug)[:48].strip("_")
+    return slug or fallback
+
+
 def _looks_like_math(expr: str) -> bool:
     expr = expr.strip()
     if not re.search(r"\d", expr):
         return False
     return bool(re.search(r"[+\-*/%^()]|\b(sqrt|sin|cos|tan|log|factorial|pow)\b", expr, flags=re.I))
+
+
+def _unit_alias(unit: str) -> str:
+    normalized = str(unit or "").strip().lower().replace(" ", "_")
+    aliases = {
+        "meter": "m",
+        "meters": "m",
+        "metre": "m",
+        "metres": "m",
+        "centimeter": "cm",
+        "centimeters": "cm",
+        "centimetre": "cm",
+        "centimetres": "cm",
+        "kilometer": "km",
+        "kilometers": "km",
+        "kilometre": "km",
+        "kilometres": "km",
+        "millimeter": "mm",
+        "millimeters": "mm",
+        "millimetre": "mm",
+        "millimetres": "mm",
+        "gram": "g",
+        "grams": "g",
+        "kilogram": "kg",
+        "kilograms": "kg",
+        "liter": "l",
+        "liters": "l",
+        "litre": "l",
+        "litres": "l",
+        "second": "sec",
+        "seconds": "sec",
+        "minute": "min",
+        "minutes": "min",
+        "hour": "hr",
+        "hours": "hr",
+    }
+    return aliases.get(normalized, normalized)
 
 
 def _number(value: str) -> float:
@@ -388,6 +439,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
 
     if re.search(r"\b(list|show|dikha|dikhao)\s+(all\s+)?agents\b", lower) or "kaun se agents" in lower:
         return _route("shell_agents:list_agents_tool", kind="agent", confidence=0.95)
+    if re.search(r"\b(list|show|dikha|dikhao)\s+(all\s+)?tools\b", lower) or "kaun se tools" in lower:
+        return _route("shell_agent_tools:list_all_tools", confidence=0.95)
+    if re.search(r"\b(tool|tools)\s+(health|status|readiness)\b", lower):
+        return _route("shell_agent_tools:system_health_dashboard", confidence=0.9)
 
     telegram = _telegram_route(raw, lower)
     if telegram:
@@ -410,6 +465,19 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             tool_id, param = _AGENTS[label]
             return _route(tool_id, {param: task}, kind="agent", confidence=0.9)
 
+    if re.search(
+        r"\b(make|create|build|generate|design|scaffold|banao|bana|banado|banaao)\b",
+        lower,
+    ) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
+        return _route(
+            "shell_code_engine:create_fullstack_app_tool",
+            {
+                "project_name": _project_slug_from_text(raw, "shell_site"),
+                "app_type": _strip_quotes(raw),
+            },
+            confidence=0.91,
+        )
+
     workspace_read = _workspace_file_read_route(raw, lower)
     if workspace_read:
         return workspace_read
@@ -422,6 +490,17 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
         query = re.sub(r"^(search\s+google|google\s+search|google)\s*(for)?\s*", "", raw, flags=re.I).strip()
         url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(query)
         return _route("shell_desktop_tools:open_url_tool", {"url": url}, confidence=0.9)
+
+    if re.search(
+        r"\b(play|chalao|chala|bajao|baja|lagao|laga|sunao|suna)\b",
+        lower,
+    ) and re.search(r"\b(song|gaana|gana|music|video)\b", lower):
+        query = _youtube_media_query(raw, lower)
+        return _route(
+            "shell_browser_CTRL:play_youtube_video",
+            {"query": query, "number": 1},
+            confidence=0.9,
+        )
 
     if re.search(r"\b(youtube|you\s*tube)\b", lower) and re.search(
         r"\b(play|chalao|chala|bajao|baja|lagao|laga|sunao|suna|song|gaana|gana|music|video)\b",
@@ -478,9 +557,35 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     if ps_match:
         return _route("shell_terminal:run_command_tool", {"command": _strip_quotes(ps_match.group(1))}, confidence=0.86)
 
-    image_match = re.match(r"^(?:generate|create|make)\s+(?:an?\s+)?image\s+(?:of|for|:)?\s*(.+)$", raw, flags=re.I | re.S)
+    image_match = re.match(
+        r"^(?:generate|create|make|draw|design|banao|bana|banado|banaao)\s+"
+        r"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
+        r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)\s*"
+        r"(?:of|for|ki|ka|ke|:)?\s*(.+)$",
+        raw,
+        flags=re.I | re.S,
+    )
+    if not image_match:
+        image_match = re.match(
+            r"^(.+?)\s+(?:ki|ka|ke)?\s*"
+            r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)\s+"
+            r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)$",
+            raw,
+            flags=re.I | re.S,
+        )
     if image_match:
-        return _route("shell_image_ai:generate_image_tool", {"description": _strip_quotes(image_match.group(1))}, confidence=0.88)
+        prompt = _strip_quotes(image_match.group(1))
+        return _route(
+            "shell_image_ai:generate_image_tool",
+            {
+                "description": prompt,
+                "device_type": "pc",
+                "style": "photorealistic",
+                "quality": "excellent",
+                "use_ai_enhancement": True,
+            },
+            confidence=0.9,
+        )
 
     convert_match = re.match(
         r"^(?:convert\s+)?(-?\d+(?:\.\d+)?)\s*([a-zA-Z_]+)\s+(?:to|in)\s+([a-zA-Z_]+)$",
@@ -492,8 +597,8 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             "shell_calculator:unit_convert_tool",
             {
                 "value": _number(convert_match.group(1)),
-                "from_unit": convert_match.group(2),
-                "to_unit": convert_match.group(3),
+                "from_unit": _unit_alias(convert_match.group(2)),
+                "to_unit": _unit_alias(convert_match.group(3)),
             },
             confidence=0.94,
         )

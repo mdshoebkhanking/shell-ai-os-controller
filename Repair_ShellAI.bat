@@ -5,6 +5,7 @@ title Repair Shell AI
 set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "SHELL_TTS_ENGINE=fast"
+set "SHELL_LEGACY_UI=0"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
 set "PY_CMD="
 call :choose_python

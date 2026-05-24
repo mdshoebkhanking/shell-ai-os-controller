@@ -21,6 +21,10 @@ _PYTHON_PACKAGES = {
     "sounddevice": "local microphone capture",
     "speech_recognition": "microphone speech-to-text",
     "livekit": "realtime voice",
+    "sherpa_onnx": "offline streaming speech-to-text",
+    "sentence_transformers": "Project RAG embeddings",
+    "rank_bm25": "Project RAG lexical retrieval",
+    "docker": "optional secure sandbox container backend",
     "google.genai": "Gemini provider",
     "openai": "OpenAI provider",
 }

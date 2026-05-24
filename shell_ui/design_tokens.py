@@ -82,44 +82,44 @@ class _Palette:
 
 
 WARM_DARK = _Palette(
-    # Cyber Neon — deep blue-black control surface with cyan as the
-    # operational accent and violet/emerald as supporting notes.
-    bg            = "#050814",
-    surface       = "#0b1020",
-    surface_2     = "#121a2e",
-    surface_3     = "#1a2540",
+    # Shell Neural OS — near-black glass with emerald as the operating
+    # accent and cyan/purple/orange telemetry notes.
+    bg            = "#030303",
+    surface       = "#09090b",
+    surface_2     = "#18181b",
+    surface_3     = "#27272a",
 
-    border         = "rgba(134,220,255,0.12)",
-    border_strong  = "rgba(134,220,255,0.24)",
+    border         = "rgba(255,255,255,0.07)",
+    border_strong  = "rgba(16,185,129,0.30)",
 
-    text          = "#edf7ff",
-    text_muted    = "#9aacc4",
-    text_subtle   = "#64758f",
+    text          = "#f4f4f5",
+    text_muted    = "#a1a1aa",
+    text_subtle   = "#52525b",
 
-    accent        = "#22d3ee",
-    accent_hover  = "#67e8f9",
-    accent_soft   = "rgba(34,211,238,0.14)",
+    accent        = "#10b981",
+    accent_hover  = "#34d399",
+    accent_soft   = "rgba(16,185,129,0.18)",
 
-    success       = "#3ee3a8",
-    warning       = "#ffc24b",
-    error         = "#ff6b6b",
+    success       = "#34d399",
+    warning       = "#f97316",
+    error         = "#ef4444",
 
-    scrim         = "rgba(2,4,9,0.65)",
-    backdrop      = "rgba(34,211,238,0.05)",
+    scrim         = "rgba(0,0,0,0.72)",
+    backdrop      = "rgba(16,185,129,0.07)",
 
-    # Glass — translucent cyan-tinted panel + warm purple shimmer.
-    glass         = "rgba(18,27,48,0.58)",
-    glass_strong  = "rgba(24,36,62,0.76)",
-    glass_hi      = "rgba(194,246,255,0.18)",
-    glass_border  = "rgba(134,220,255,0.20)",
+    # Glass — translucent zinc-black panel with emerald light catch.
+    glass         = "rgba(9,9,11,0.58)",
+    glass_strong  = "rgba(12,12,14,0.78)",
+    glass_hi      = "rgba(52,211,153,0.18)",
+    glass_border  = "rgba(255,255,255,0.08)",
 
-    accent_glow   = "rgba(34,211,238,0.24)",
+    accent_glow   = "rgba(16,185,129,0.28)",
 
     # Apple-glassy additions
-    vibrancy_dark  = "rgba(13,20,38,0.62)",
-    vibrancy_light = "rgba(28,40,66,0.72)",
-    hover_overlay  = "rgba(134,220,255,0.10)",
-    selection      = "rgba(34,211,238,0.24)",
+    vibrancy_dark  = "rgba(9,9,11,0.72)",
+    vibrancy_light = "rgba(24,24,27,0.78)",
+    hover_overlay  = "rgba(16,185,129,0.12)",
+    selection      = "rgba(16,185,129,0.24)",
 )
 
 WARM_LIGHT = _Palette(

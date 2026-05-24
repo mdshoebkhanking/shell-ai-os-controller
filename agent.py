@@ -352,7 +352,31 @@ class Assistant(Agent):
             analyze_ui_state_tool
         )
         from shell_auto_planner import generate_task_plan, set_plan_reminder
-        from shell_memory import update_memory_tool, get_full_memory
+        from shell_memory import update_memory_tool, get_full_memory, search_memory_tool
+        from shell_memory_v2 import (
+            memory_v2_forget_tool,
+            memory_v2_migrate_legacy_tool,
+            memory_v2_recall_tool,
+            memory_v2_save_tool,
+            memory_v2_status_tool,
+        )
+        from shell_local_stt import local_stt_status_tool
+        from shell_project_rag import (
+            project_rag_index_tool,
+            project_rag_query_tool,
+            project_rag_status_tool,
+        )
+        from shell_secure_sandbox import (
+            secure_sandbox_run_file_tool,
+            secure_sandbox_run_python_tool,
+            secure_sandbox_status_tool,
+        )
+        from shell_workflow_checkpoints import (
+            workflow_checkpoint_load_tool,
+            workflow_checkpoint_rollback_tool,
+            workflow_checkpoint_save_tool,
+            workflow_checkpoint_status_tool,
+        )
         from shell_diagnostics import scan_system_health
         from shell_network import get_network_info
         from shell_organizer import organize_folder_tool
@@ -806,12 +830,28 @@ class Assistant(Agent):
             remember_tool,
             recall_tool,
             update_memory_tool,
+            search_memory_tool,
             get_full_memory,
+            memory_v2_save_tool,
+            memory_v2_recall_tool,
+            memory_v2_forget_tool,
+            memory_v2_migrate_legacy_tool,
+            memory_v2_status_tool,
             
             # ═══════ Code Engine ═══════
             write_code_tool,
             execute_code_tool,
             create_fullstack_app_tool,
+            project_rag_index_tool,
+            project_rag_query_tool,
+            project_rag_status_tool,
+            secure_sandbox_run_python_tool,
+            secure_sandbox_run_file_tool,
+            secure_sandbox_status_tool,
+            workflow_checkpoint_save_tool,
+            workflow_checkpoint_load_tool,
+            workflow_checkpoint_rollback_tool,
+            workflow_checkpoint_status_tool,
             
             # ═══════ Core Utilities ═══════
             get_current_datetime,
@@ -828,6 +868,7 @@ class Assistant(Agent):
             upscale_image_tool,
             apply_image_filter_tool,
             remove_background_tool,
+            local_stt_status_tool,
             video_summary_tool,
             get_selected_text,
             convert_to_pdf_tool,

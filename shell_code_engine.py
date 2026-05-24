@@ -274,6 +274,14 @@ async def execute_code_tool(filename: str, path: str = None) -> str:
     if not os.path.exists(full_path):
         return f"❌ File not found: {full_path}"
 
+    try:
+        from core.secure_sandbox import secure_sandbox_enabled
+        if secure_sandbox_enabled() and (filename.endswith(".py") or filename.endswith(".js")):
+            from shell_secure_sandbox import format_sandbox_result, run_file_in_sandbox
+            return format_sandbox_result(await run_file_in_sandbox(full_path, timeout_s=30.0))
+    except Exception as sandbox_exc:
+        return f"❌ Sandbox failed before execution: {sandbox_exc}"
+
     cmd = []
     if filename.endswith(".py"):
         cmd = ["python", full_path]

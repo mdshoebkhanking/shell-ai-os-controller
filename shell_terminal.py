@@ -216,6 +216,14 @@ async def run_python_tool(code: str) -> str:
         if not code.strip():
             return "Error: Code cannot be empty."
 
+        try:
+            from core.secure_sandbox import secure_sandbox_enabled
+            if secure_sandbox_enabled():
+                from shell_secure_sandbox import format_sandbox_result, run_python_in_sandbox
+                return format_sandbox_result(await run_python_in_sandbox(code, timeout_s=30.0))
+        except Exception as sandbox_exc:
+            return f"Sandbox failed before execution: {sandbox_exc}"
+
         allowed, reason = _terminal_exec_allowed()
         if not allowed:
             return f"BLOCKED: {reason}"

@@ -10,7 +10,7 @@ import os as _os
 _os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
 _os.environ.setdefault("OMP_NUM_THREADS", "1")
 
-import asyncio, json, logging, math, os, random, re, sys, time as _time
+import asyncio, importlib.util, json, logging, math, os, random, re, sys, time as _time
 from collections import deque
 from datetime import datetime
 
@@ -249,6 +249,28 @@ class ShellActionExecutor:
         # Network info
         (["network info", "wifi info", "ip address", "mera ip", "my ip"],
          "shell_network", "get_network_info", "netinfo"),
+
+        # ═══════════════ SHELL NEURAL CAPABILITIES ═══════════════
+        # Streaming voice diagnostics
+        (["streaming voice", "voice stream", "prime voice", "realtime voice status"],
+         "shell_neural_voice", "shell_streaming_voice_prime_tool", "shellvoice"),
+        # Permanent core memory
+        (["core memory", "shell memory", "permanent memory"],
+         "shell_core_memory", "shell_recall_core_memory_tool", "shellmemory"),
+        # Deep focus automation
+        (["deep focus", "focus automation", "focus mode automation", "start focus"],
+         "shell_focus_mode", "shell_deep_focus_mode_tool", "deepfocus"),
+        # Remote access / wormhole records
+        (["remote access", "wormhole", "share localhost", "expose localhost"],
+         "shell_remote_access", "shell_remote_access_tool", "remote"),
+        # Project scanning and coding context
+        (["scan project", "project scan", "index folder", "scan codebase", "ingest codebase"],
+         "shell_coding_assist", "shell_scan_project_folder_tool", "projectscan"),
+        (["coding assist", "automated coding", "code assistant", "code context"],
+         "shell_coding_assist", "shell_automated_coding_assist_tool", "codingassist"),
+        # Background process manager
+        (["background processes", "process manager", "background jobs", "process status"],
+         "shell_process_inspector", "shell_background_processes_tool", "bgprocess"),
 
         # ═══════════════ CORE TOOLS ═══════════════
         # Screenshot
@@ -1938,8 +1960,9 @@ class TopBar(QWidget):
         lay.setContentsMargins(24, 0, 24, 0)
         lay.setSpacing(0)
 
-        # "Shell" logo — soft, quiet, no aggressive negative kerning.
-        logo = QLabel("Shell")
+        # Primary chrome uses Shell's Neural OS identity while keeping the
+        # existing backend wiring intact.
+        logo = QLabel("SHELL AI")
         logo.setStyleSheet(
             f"color:{_bar_text}; font-family:'{_FONT}'; font-size:18px; "
             f"font-weight:600; border:none; background:transparent;"
@@ -1954,8 +1977,8 @@ class TopBar(QWidget):
         lay.addWidget(divider)
         lay.addSpacing(16)
 
-        # Context label — page name, mixed case, no letter-spacing.
-        self.context_lbl = QLabel("Chat")
+        # Context label — Shell-style telemetry label.
+        self.context_lbl = QLabel("NEURAL INTERFACE")
         self.context_lbl.setStyleSheet(
             f"color:{_bar_text_muted}; font-family:'{_FONT}'; font-size:13px; "
             f"font-weight:500; border:none; background:transparent;"
@@ -2182,15 +2205,15 @@ class SidebarNav(QWidget):
     history_delete_requested = pyqtSignal(str)
 
     NAV_ITEMS = [
-        ("Chat", 0, "chat"),
+        ("Dashboard", 0, "chat"),
         ("Voice", 1, "voice"),
         ("System", 2, "system"),
         ("Agents", 3, "agent"),
         ("Tools", 4, "tools"),
-        ("Settings", 5, "settings"),
+        ("Command", 5, "settings"),
     ]
 
-    CONTEXT_LABELS = ["CORE INTERFACE", "VOICE CORE", "SYSTEM DASHBOARD", "AGENT ORCHESTRATION", "TOOLS / MCP", "CONFIGURATION"]
+    CONTEXT_LABELS = ["NEURAL DASHBOARD", "VOICE STREAM", "SYSTEM TELEMETRY", "AGENT ORCHESTRATION", "TOOLS / MCP", "COMMAND CENTER"]
 
     def __init__(self, parent=None, history_store=None):
         super().__init__(parent)
@@ -6851,7 +6874,224 @@ def _hex_to_qcolor(s: str, alpha: int | None = None) -> QColor:
         return QColor(143, 245, 255, alpha if alpha is not None else 255)
 
 
-class LiveLineChart(QWidget):
+def _env_flag_enabled(name: str, default: bool = True) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() not in {"0", "false", "no", "off", "disabled"}
+
+
+_PYQTGRAPH_MODULE = None
+_PYQTGRAPH_IMPORT_ERROR = None
+
+
+def _load_pyqtgraph():
+    global _PYQTGRAPH_MODULE, _PYQTGRAPH_IMPORT_ERROR
+    if _PYQTGRAPH_MODULE is not None:
+        return _PYQTGRAPH_MODULE
+    if _PYQTGRAPH_IMPORT_ERROR is not None:
+        return None
+    try:
+        import pyqtgraph as pg  # type: ignore
+        try:
+            pg.setConfigOptions(antialias=True)
+        except Exception as _e:
+            logger.debug("pyqtgraph config setup failed: %s", _e)
+        _PYQTGRAPH_MODULE = pg
+        return pg
+    except Exception as exc:
+        _PYQTGRAPH_IMPORT_ERROR = exc
+        logger.debug("pyqtgraph unavailable; telemetry charts use legacy fallback: %s", exc)
+        return None
+
+
+class PyQtGraphLineChart(QWidget):
+    """Low-latency PyQtGraph telemetry chart for live system metrics."""
+
+    _SAMPLES = 60
+
+    @classmethod
+    def available(cls) -> bool:
+        # Keep module import lightweight: importing pyqtgraph pulls in numpy,
+        # so only check discoverability here and load the backend on widget
+        # construction.
+        return (
+            _env_flag_enabled("SHELL_PYQTGRAPH_ENABLED", True)
+            and importlib.util.find_spec("pyqtgraph") is not None
+        )
+
+    def __init__(self, label: str = "", units: str = "%", *,
+                 value_max: float = 100.0,
+                 fmt: str = "{:.0f}",
+                 parent=None):
+        super().__init__(parent)
+        pg = _load_pyqtgraph()
+        if pg is None:
+            raise RuntimeError("pyqtgraph chart backend is unavailable")
+
+        from shell_ui import design_tokens as DT
+
+        self._pg = pg
+        self._label = label
+        self._units = units
+        self._value_max = max(1.0, float(value_max))
+        self._fmt = fmt
+        self._data: deque[float] = deque([0.0] * self._SAMPLES, maxlen=self._SAMPLES)
+        self._x = list(range(self._SAMPLES))
+        self._target = 0.0
+        self._display = 0.0
+        self._auto_max = float(value_max)
+        self._autoscale = (value_max <= 0)
+        self._last_scale = None
+        self._render_count = 0
+
+        self.setMinimumHeight(160)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.setStyleSheet("background:transparent;border:none;")
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(3)
+
+        header = QHBoxLayout()
+        header.setContentsMargins(2, 0, 2, 0)
+        header.setSpacing(8)
+
+        self._label_widget = QLabel(label)
+        self._label_widget.setStyleSheet(
+            f"color:{DT.C.text_muted}; font-family:'{DT.T.family}'; "
+            f"font-size:10px; font-weight:700; background:transparent; border:none;"
+        )
+        header.addWidget(self._label_widget, 1)
+
+        self._value_widget = QLabel(self._format_value(0.0))
+        self._value_widget.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self._value_widget.setStyleSheet(
+            f"color:{DT.C.accent}; font-family:'{DT.T.family}'; "
+            f"font-size:{DT.T.h1_size}px; font-weight:800; "
+            f"background:transparent; border:none;"
+        )
+        header.addWidget(self._value_widget, 0)
+        lay.addLayout(header)
+
+        self._plot = pg.PlotWidget()
+        self._plot.setMinimumHeight(110)
+        self._plot.setStyleSheet("background:transparent; border:none;")
+        try:
+            self._plot.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+            self._plot.setBackground(None)
+        except Exception as _e:
+            logger.debug("pyqtgraph transparent background setup failed: %s", _e)
+
+        self._plot_item = self._plot.getPlotItem()
+        self._plot_item.setContentsMargins(0, 0, 0, 0)
+        self._plot_item.hideAxis("bottom")
+        self._plot_item.hideAxis("left")
+        try:
+            self._plot_item.setMenuEnabled(False)
+            self._plot.hideButtons()
+            self._plot.setMouseEnabled(x=False, y=False)
+            self._plot_item.setDownsampling(auto=True, mode="peak")
+            self._plot_item.setClipToView(True)
+            self._plot_item.showGrid(x=False, y=True, alpha=0.18)
+        except Exception as _e:
+            logger.debug("pyqtgraph chart interaction setup failed: %s", _e)
+
+        accent = _hex_to_qcolor(DT.C.accent)
+        fill = QColor(accent.red(), accent.green(), accent.blue(), 34)
+        self._curve = self._plot_item.plot(
+            self._x,
+            list(self._data),
+            pen=pg.mkPen(accent, width=1.8),
+            fillLevel=0.0,
+            brush=pg.mkBrush(fill),
+        )
+        try:
+            self._curve.setClipToView(True)
+        except Exception as _e:
+            logger.debug("pyqtgraph curve clip setup failed: %s", _e)
+        self._plot_item.setXRange(0, self._SAMPLES - 1, padding=0)
+        self._plot_item.setYRange(0, self._current_scale(), padding=0)
+        lay.addWidget(self._plot, 1)
+
+        if units:
+            self._units_widget = QLabel(units)
+            self._units_widget.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            self._units_widget.setStyleSheet(
+                f"color:{DT.C.text_muted}; font-family:'{DT.T.family_mono}'; "
+                f"font-size:9px; background:transparent; border:none;"
+            )
+            lay.addWidget(self._units_widget)
+        else:
+            self._units_widget = None
+
+        self._t = QTimer(self)
+        self._t.timeout.connect(self._tick)
+        self._t.start(33)
+
+    def _current_scale(self) -> float:
+        scale = self._auto_max if self._autoscale else self._value_max
+        return max(float(scale), 1.0)
+
+    def _format_value(self, value: float) -> str:
+        try:
+            return self._fmt.format(value)
+        except Exception:
+            return f"{value:.1f}"
+
+    def push(self, v: float) -> None:
+        try:
+            v = float(v)
+        except Exception:
+            return
+        if v < 0:
+            v = 0.0
+        self._target = v
+        if self._autoscale and v > self._auto_max:
+            self._auto_max = v * 1.15
+
+    def _tick(self) -> None:
+        self._display += (self._target - self._display) * 0.18
+        if self._data:
+            self._data[-1] = self._display
+        self._render()
+
+    def advance(self) -> None:
+        self._data.append(self._display)
+        self._render()
+
+    def start(self) -> None:
+        if not self._t.isActive():
+            self._t.start(33)
+
+    def stop(self) -> None:
+        self._t.stop()
+
+    def _render(self) -> None:
+        started = _time.perf_counter()
+        try:
+            values = list(self._data)
+            self._curve.setData(self._x[:len(values)], values)
+            scale = self._current_scale()
+            if self._last_scale is None or scale > self._last_scale * 1.08:
+                self._plot_item.setYRange(0, scale, padding=0)
+                self._last_scale = scale
+            self._value_widget.setText(self._format_value(self._display))
+            self._render_count += 1
+            elapsed_ms = (_time.perf_counter() - started) * 1000.0
+            if elapsed_ms > 50.0 or self._render_count % 120 == 0:
+                try:
+                    from core.performance import LOW_LATENCY_RECORDER
+                    LOW_LATENCY_RECORDER.record("ui.chart.pyqtgraph_render", elapsed_ms)
+                except Exception as _e:
+                    logger.debug("chart latency record failed: %s", _e)
+        except Exception as _e:
+            logger.debug("pyqtgraph chart render failed: %s", _e)
+
+
+# Legacy backup: previous custom QPainter chart is preserved for rollback
+# via SHELL_PYQTGRAPH_ENABLED=0 or when pyqtgraph is not installed.
+class _LegacyLiveLineChart(QWidget):
     """Rolling line chart — last 60 samples of one metric.
 
     * Smooth bezier-style line, gradient fill below to fade-to-zero.
@@ -7046,6 +7286,21 @@ class LiveLineChart(QWidget):
         p.end()
 
 
+def _select_live_line_chart_class():
+    if _env_flag_enabled("SHELL_PYQTGRAPH_ENABLED", True):
+        if PyQtGraphLineChart.available():
+            logger.info("System telemetry charts using PyQtGraph backend")
+            return PyQtGraphLineChart
+        logger.debug("SHELL_PYQTGRAPH_ENABLED is on but pyqtgraph is unavailable; using legacy charts")
+    else:
+        logger.info("System telemetry charts using legacy backend because SHELL_PYQTGRAPH_ENABLED=0")
+    return _LegacyLiveLineChart
+
+
+LiveLineChart = _select_live_line_chart_class()
+SYSTEM_CHART_BACKEND = "pyqtgraph" if LiveLineChart is PyQtGraphLineChart else "legacy_qpainter"
+
+
 class SystemPage(QWidget):
     """Real-time system page — 2x2 chart grid + activity log + top processes.
 
@@ -7172,7 +7427,7 @@ class SystemPage(QWidget):
         platform_lay.addWidget(self._platform_risks)
         content_lay.addWidget(platform_card, 0)
 
-        # ---- 2x2 grid of LiveLineChart cards --------------------------
+        # ---- 2x2 grid of low-latency telemetry chart cards ------------
         chart_grid = QGridLayout()
         chart_grid.setSpacing(DT.S.md)
         chart_grid.setContentsMargins(0, 0, 0, 0)
@@ -7680,7 +7935,9 @@ class SystemPage(QWidget):
         for ch in (self.cpu_chart, self.ram_chart,
                    self.gpu_chart, self.net_chart):
             try:
-                if not ch._t.isActive():
+                if hasattr(ch, "start"):
+                    ch.start()
+                elif not ch._t.isActive():
                     ch._t.start(33)
             except Exception as _e:
                 logger.debug("chart timer start failed: %s", _e)
@@ -7697,7 +7954,10 @@ class SystemPage(QWidget):
         for ch in (self.cpu_chart, self.ram_chart,
                    self.gpu_chart, self.net_chart):
             try:
-                ch._t.stop()
+                if hasattr(ch, "stop"):
+                    ch.stop()
+                else:
+                    ch._t.stop()
             except Exception as _e:
                 logger.debug("chart timer stop failed: %s", _e)
         try:
@@ -9232,6 +9492,25 @@ class SettingsPage(QWidget):
         wrap = QWidget(); wrap.setStyleSheet("background:transparent; border:none;")
         wrap.setLayout(labels_row)
         lay.addWidget(wrap)
+        col.addWidget(card)
+
+        # Wake word sensitivity.
+        card, lay = self._make_setting_card(
+            "Wake word sensitivity",
+            "Detection threshold for hands-free Hey Shell activation.",
+        )
+        wake_sens = int(self._read_setting("wake_word_sensitivity", 65))
+        wake_sens = max(0, min(100, wake_sens))
+        wake_slider = self._styled_slider(wake_sens, 0, 100)
+        wake_lbl = self._Muted(f"Hey Shell sensitivity: {wake_sens}%")
+
+        def _on_wake_sensitivity(v):
+            wake_lbl.setText(f"Hey Shell sensitivity: {int(v)}%")
+            self._save_toggle("wake_word_sensitivity", int(v))
+
+        wake_slider.valueChanged.connect(_on_wake_sensitivity)
+        lay.addWidget(wake_slider)
+        lay.addWidget(wake_lbl)
         col.addWidget(card)
 
         # Speech rate.
@@ -11154,7 +11433,7 @@ class _HostResizeFilter(QObject):
 class ShellHoloUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle(f"Shell OS {APP_VERSION} - by {APP_CREATOR}")
+        self.setWindowTitle(f"Shell AI OS {APP_VERSION} - by {APP_CREATOR}")
         self.setMinimumSize(1100, 650)
         self.resize(1366, 768)
 
@@ -11329,7 +11608,13 @@ class ShellHoloUI(QMainWindow):
         self.pages = QStackedWidget()
         self.pages.setStyleSheet("background:transparent; border:none;")
 
-        self.chat_page = ChatPage()
+        try:
+            from shell_ui.neural_dashboard import NeuralDashboardPage
+
+            self.chat_page = NeuralDashboardPage()
+        except Exception as exc:
+            logger.warning("Shell dashboard failed to initialize, using legacy chat page: %s", exc)
+            self.chat_page = ChatPage()
         self.voice_page = VoicePage()
         self.system_page = SystemPage()
         self.agents_page = AgentsPage()
@@ -11695,7 +11980,7 @@ class ShellHoloUI(QMainWindow):
 
         # Start on chat page by default. Tests/manual QA can start directly
         # on a specific page with SHELL_START_PAGE=voice/system/agents/tools/settings.
-        start_map = {"chat": 0, "voice": 1, "system": 2, "agents": 3, "tools": 4, "settings": 5}
+        start_map = {"chat": 0, "dashboard": 0, "neural": 0, "voice": 1, "system": 2, "agents": 3, "tools": 4, "settings": 5, "command": 5}
         self._initial_page_index = start_map.get(
             (os.environ.get("SHELL_START_PAGE") or "").strip().lower(),
             0,
@@ -11732,7 +12017,7 @@ class ShellHoloUI(QMainWindow):
             try:
                 self.sidebar._active = target
                 self.sidebar._apply_styles()
-                contexts = ["Chat", "Voice", "System", "Agents", "Tools", "Settings"]
+                contexts = ["Neural", "Voice", "System", "Agents", "Tools", "Command"]
                 if target < len(contexts):
                     self.top_bar.set_context(contexts[target])
             except Exception as _style_e:
@@ -11750,7 +12035,7 @@ class ShellHoloUI(QMainWindow):
         # Step 2 — defer everything else.
         def _post_swap():
             try:
-                contexts = ["Chat", "Voice", "System", "Agents", "Tools", "Settings"]
+                contexts = ["Neural", "Voice", "System", "Agents", "Tools", "Command"]
                 if idx < len(contexts):
                     self.top_bar.set_context(contexts[idx])
             except Exception as _e:
@@ -12525,6 +12810,12 @@ class ShellHoloUI(QMainWindow):
                 session.interrupt(reason)
         except Exception:
             pass
+        try:
+            listener = getattr(self, "_voice_listener", None)
+            if listener is not None and hasattr(listener, "interrupt_pipeline"):
+                listener.interrupt_pipeline(reason)
+        except Exception as _e:
+            logger.debug("voice pipeline interrupt failed: %s", _e)
         active_tts = False
         try:
             active_tts = bool(getattr(self, "_tts", None) is not None and self._tts.is_speaking())

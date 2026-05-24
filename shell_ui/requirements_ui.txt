@@ -1,6 +1,7 @@
 # Shell Premium UI Dependencies
 PyQt6>=6.6.0
 PyQt6-WebEngine>=6.6.0
+pyqtgraph>=0.13.7
 PyOpenGL>=3.1.7
 psutil>=5.9.0
 GPUtil>=1.4.0
@@ -11,6 +12,9 @@ aiohttp>=3.9.0
 livekit>=0.17.0
 pynput>=1.7.6
 keyboard>=0.13.5
+openwakeword>=0.6.0
+silero-vad>=5.1.2
+sherpa-onnx>=1.12.38
 edge-tts>=6.1.0
 pyttsx3>=2.90
 

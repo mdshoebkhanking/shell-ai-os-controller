@@ -61,12 +61,16 @@ pygetwindow>=0.0.9; sys_platform == "win32"
 pywin32>=306;      sys_platform == "win32"
 comtypes>=1.4.0;   sys_platform == "win32"
 wmi>=1.5.1;        sys_platform == "win32"
+pywinauto>=0.6.8;  sys_platform == "win32"
 
 
 # ── Audio input/output ──────────────────────────────────────────────
 livekit>=0.18.0               # rtc package used by shell_ui LiveKit client
 sounddevice>=0.4.6
 SpeechRecognition>=3.10.0     # microphone speech-to-text used by VoiceListenerThread
+openwakeword>=0.6.0           # optional wake word detection for "Hey Shell"
+silero-vad>=5.1.2             # optional streaming voice activity detection
+sherpa-onnx>=1.12.38          # optional offline streaming STT fallback
 edge-tts>=6.1.0               # optional neural TTS; system TTS remains fastest fallback
 pyttsx3>=2.90                 # offline TTS fallback (shell_speech)
 gtts>=2.4.0                   # Google TTS for save-to-mp3 (shell_speech)
@@ -87,7 +91,9 @@ python-Levenshtein>=0.25.0    # C-speedup for fuzzywuzzy (silent fallback w/o it
 youtube-transcript-api>=0.6.0
 yt-dlp>=2024.1.0              # youtube download (shell_downloader, shell_youtube_summary)
 sentence-transformers>=2.2.0  # semantic search in brain/memory_core
+rank-bm25>=0.2.2              # optional BM25 lexical retrieval for Project RAG v2
 scikit-learn>=1.3.0           # classifiers in brain/predictive_engine
+docker>=7.1.0                 # optional future container backend for secure sandbox
 deep-translator>=1.11.4       # alternate translation backend (shell_translator)
 
 
@@ -98,6 +104,7 @@ instagrapi>=2.0.0
 # ── UI (PyQt6 glass interface) ──────────────────────────────────────
 PyQt6>=6.6.0
 PyQt6-WebEngine>=6.6.0        # WebGL voice orb / QtWebEngine visualizer
+pyqtgraph>=0.13.7             # low-latency live telemetry charts
 PyOpenGL>=3.1.7               # shell_ui 3D orb visualizer
 GPUtil>=1.4.0                 # GPU stats in hub + UI
 pygame-ce>=2.5.0              # audio fx in shell_music and UI particles

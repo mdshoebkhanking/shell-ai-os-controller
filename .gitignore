@@ -72,6 +72,7 @@ shell_telegram_stats.json
 *.spec
 .gstack/
 _backups_/
+shell_ui_LEGACY/
 Desktop/
 integrations/external/
 shell.v1.0-main-main/

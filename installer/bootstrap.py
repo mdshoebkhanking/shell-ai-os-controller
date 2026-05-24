@@ -20,6 +20,8 @@ RUNTIME_DIR = ROOT / ".shell_runtime"
 LOG_DIR = RUNTIME_DIR / "logs"
 HEALTH_REPORT = RUNTIME_DIR / "install_health.json"
 PORT_HINT = ROOT / ".shell_hub_port"
+WEB_UI_ROOT = ROOT / "shell_web_ui"
+WEB_UI_DIST_INDEX = WEB_UI_ROOT / "dist" / "index.html"
 SUPPORTED_PYTHON_MIN = (3, 10)
 STABLE_PYTHON_LINES = ("3.13", "3.12", "3.11", "3.10")
 
@@ -49,6 +51,13 @@ OPTIONAL_IMPORTS = {
     "sounddevice": "microphone capture",
     "speech_recognition": "microphone speech-to-text",
     "livekit": "realtime voice runtime",
+    "openwakeword": "optional wake word detection",
+    "pywinauto": "Windows UI Automation driver",
+    "silero_vad": "optional voice activity detection",
+    "sherpa_onnx": "optional offline streaming STT fallback",
+    "sentence_transformers": "optional semantic embeddings for Project RAG",
+    "rank_bm25": "optional BM25 lexical retrieval for Project RAG",
+    "docker": "optional container backend for secure sandbox",
     "edge_tts": "optional neural TTS",
     "pyttsx3": "offline low-latency TTS fallback",
 }
@@ -63,23 +72,29 @@ OPTIONAL_EXECUTABLES = {
 
 OPTIONAL_REQUIREMENT_NAMES = {
     "deep-translator",
+    "docker",
     "edge-tts",
     "gtts",
     "instagrapi",
     "pdf2image",
     "playwright",
     "pyaudio",
+    "openwakeword",
     "pyinstaller",
+    "pywinauto",
     "pygame-ce",
     "pygetwindow",
     "pypdf",
     "pyttsx3",
     "pywin32",
     "pyzbar",
+    "rank-bm25",
     "rembg",
     "scikit-learn",
     "selenium",
     "sentence-transformers",
+    "sherpa-onnx",
+    "silero-vad",
     "ursina",
     "wmi",
     "yfinance",
@@ -406,14 +421,44 @@ def install_requirement_file(py: Path, req: Path, name: str, *, repair: bool, ti
     return results
 
 
-def install_node_deps() -> list[StepResult]:
-    package_json = ROOT / "package.json"
+def _npm_project_install(project: Path, label: str, *, build: bool = False) -> list[StepResult]:
+    package_json = project / "package.json"
     if not package_json.exists():
-        return [StepResult("node dependencies", True, "OK", "No package.json found")]
+        return [StepResult(label, True, "OK", f"No package.json found in {project.relative_to(ROOT)}")]
     if shutil.which("npm") is None:
-        return [StepResult("node dependencies", True, "WARN", "npm not found; optional web integration packages were skipped")]
-    cmd = ["npm", "ci"] if (ROOT / "package-lock.json").exists() else ["npm", "install"]
-    return [run_cmd(cmd, name="install node dependencies", timeout=900)]
+        if build and WEB_UI_DIST_INDEX.exists():
+            return [StepResult(label, True, "WARN", "npm not found; using existing Shell Web UI build")]
+        status = "ERROR" if build else "WARN"
+        return [StepResult(label, not build, status, "npm not found; install Node.js LTS and run Repair Shell AI")]
+
+    cmd = ["npm", "ci"] if (project / "package-lock.json").exists() else ["npm", "install"]
+    results = [run_cmd(cmd, name=f"install {label}", timeout=1200, cwd=project)]
+    if build and results[-1].ok:
+        results.append(run_cmd(["npm", "run", "build"], name=f"build {label}", timeout=900, cwd=project))
+    return results
+
+
+def install_node_deps() -> list[StepResult]:
+    results: list[StepResult] = []
+    results.extend(_npm_project_install(ROOT, "root node helpers", build=False))
+    if WEB_UI_ROOT.exists():
+        results.extend(_npm_project_install(WEB_UI_ROOT, "Shell Web UI", build=True))
+    else:
+        results.append(StepResult("Shell Web UI", False, "ERROR", "shell_web_ui directory is missing"))
+    return results
+
+
+def web_ui_build_readiness() -> StepResult:
+    if os.environ.get("SHELL_WEB_UI_URL", "").strip():
+        return StepResult("Shell Web UI build", True, "OK", "Using SHELL_WEB_UI_URL dev renderer")
+    if WEB_UI_DIST_INDEX.exists():
+        return StepResult("Shell Web UI build", True, "OK", str(WEB_UI_DIST_INDEX.relative_to(ROOT)))
+    return StepResult(
+        "Shell Web UI build",
+        False,
+        "ERROR",
+        "shell_web_ui/dist/index.html is missing. Run ONE_CLICK_INSTALL or Repair Shell AI to install npm dependencies and build the renderer.",
+    )
 
 
 def windows_mcp_readiness(path: Path) -> StepResult:
@@ -609,6 +654,7 @@ def health_report(path: Path | None = None) -> dict[str, object]:
                 {"executable": sys.executable, "supported_min": ".".join(map(str, SUPPORTED_PYTHON_MIN))},
             )
         )
+    results.append(web_ui_build_readiness())
     for exe, purpose in OPTIONAL_EXECUTABLES.items():
         found = shutil.which(exe) is not None
         if not found and py.exists():

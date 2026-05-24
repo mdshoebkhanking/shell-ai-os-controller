@@ -18,4 +18,3 @@ fi
 
 python3 installer/bootstrap.py install --yes
 echo "Install complete. Use ./start_shellai.sh to launch Shell AI."
-

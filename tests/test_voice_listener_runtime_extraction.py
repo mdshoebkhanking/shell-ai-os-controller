@@ -9,7 +9,10 @@ def test_voice_listener_runtime_import_does_not_load_full_ui_or_audio_libs():
         "import shell_voice_listener_runtime; "
         "print('shell_ui.shell_cinematic_full' in sys.modules); "
         "print('sounddevice' in sys.modules); "
-        "print('speech_recognition' in sys.modules)"
+        "print('speech_recognition' in sys.modules); "
+        "print('openwakeword' in sys.modules); "
+        "print('silero_vad' in sys.modules); "
+        "print('sherpa_onnx' in sys.modules)"
     )
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -19,7 +22,7 @@ def test_voice_listener_runtime_import_does_not_load_full_ui_or_audio_libs():
         check=True,
     )
 
-    assert result.stdout.strip().splitlines() == ["False", "False", "False"]
+    assert result.stdout.strip().splitlines() == ["False", "False", "False", "False", "False", "False"]
 
 
 def test_ui_reexports_voice_listener_runtime_for_backward_compatibility(monkeypatch):

@@ -17,6 +17,8 @@ import time
 
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from shell_voice_pipeline import VoicePipelineEvent, VoicePipelineManager
+
 
 _SD_AVAILABLE = importlib.util.find_spec("sounddevice") is not None
 _SR_AVAILABLE = importlib.util.find_spec("speech_recognition") is not None
@@ -145,12 +147,26 @@ class VoiceListenerThread(QThread):
         }
         self._noise_floor = 0.0
         self._last_endpoint_timeout = self._speech_timeout
+        self._pipeline: VoicePipelineManager | None = None
+        self._manual_trigger = _env_bool("SHELL_VOICE_BUTTON_BYPASSES_WAKE", True)
+        self._local_stt_enabled = _env_bool("SHELL_LOCAL_STT_ENABLED", False)
+        self._local_stt_primary = _env_bool("SHELL_LOCAL_STT_PRIMARY", False)
+        self._local_stt = None
+        self._local_stt_error_reported = False
 
     def set_muted(self, muted):
         self._muted = bool(muted)
 
     def stop_listening(self):
         self._running = False
+
+    def interrupt_pipeline(self, reason: str = "barge_in"):
+        pipeline = getattr(self, "_pipeline", None)
+        if pipeline is not None:
+            try:
+                pipeline.interrupt(reason)
+            except Exception:
+                pass
 
     def _emit_latency(self, event: str, started: float, **payload):
         try:
@@ -160,6 +176,65 @@ class VoiceListenerThread(QThread):
             self.latency_event.emit(str(event), payload)
         except Exception:
             pass
+
+    def _emit_pipeline_event(self, event: VoicePipelineEvent | None):
+        if event is None or event.event in {"wake_frame", "vad_frame", "wake_ignored", "vad_ignored"}:
+            return
+        try:
+            payload = {
+                "state": event.state,
+                "elapsed_ms": round(float(event.elapsed_ms or 0.0), 3),
+            }
+            if event.score:
+                payload["score"] = round(float(event.score), 4)
+            if event.label:
+                payload["label"] = event.label
+            if event.error:
+                payload["error"] = event.error
+            payload.update(dict(event.payload or {}))
+            self.latency_event.emit(f"pipeline.{event.event}", payload)
+        except Exception:
+            pass
+
+    def _get_local_stt(self):
+        if not self._local_stt_enabled:
+            return None
+        if self._local_stt is None:
+            from shell_local_stt import SherpaOnnxStreamingSTT
+
+            self._local_stt = SherpaOnnxStreamingSTT.from_environment()
+            self.latency_event.emit(
+                "local_stt.ready",
+                {
+                    "load_ms": getattr(self._local_stt, "load_ms", 0.0),
+                    "model_kind": self._local_stt.config.configured_kind(),
+                    "provider": self._local_stt.config.provider,
+                },
+            )
+        return self._local_stt
+
+    def _recognize_with_local_stt(self, audio_data, started: float, *, reason: str) -> str:
+        stt = self._get_local_stt()
+        if stt is None:
+            raise RuntimeError("Local STT disabled")
+        try:
+            result = stt.transcribe(audio_data, sample_rate=self._sample_rate)
+            self._emit_latency(
+                "local_stt_done",
+                started,
+                reason=reason,
+                local_elapsed_ms=result.elapsed_ms,
+                source=result.source,
+            )
+            if not result.ok:
+                raise RuntimeError(result.error or "Local STT failed")
+            return result.text.strip()
+        except Exception as exc:
+            self._emit_latency("local_stt_error", started, reason=reason, error=str(exc))
+            if not self._local_stt_error_reported:
+                self._local_stt_error_reported = True
+                self.error_occurred.emit(f"Local STT fallback unavailable: {exc}")
+            raise
 
     def _adaptive_speech_timeout(self, speech_duration_s: float, *, noise_floor: float = 0.0) -> float:
         if not self._adaptive_endpointing:
@@ -365,6 +440,30 @@ class VoiceListenerThread(QThread):
             self.error_occurred.emit(f"Speech recognizer unavailable: {exc}")
             return
 
+        try:
+            self._pipeline = VoicePipelineManager.from_environment(
+                manual_trigger=self._manual_trigger,
+            )
+            snap = self._pipeline.snapshot()
+            self.latency_event.emit(
+                "pipeline.ready",
+                {
+                    "state": snap.get("state"),
+                    "wake_enabled": snap.get("wake_enabled"),
+                    "wake_available": snap.get("wake_available"),
+                    "vad_enabled": snap.get("vad_enabled"),
+                    "vad_available": snap.get("vad_available"),
+                    "errors": snap.get("errors", []),
+                },
+            )
+        except Exception as exc:
+            logging.warning("Voice pipeline setup failed: %s", exc)
+            self._pipeline = None
+            self.latency_event.emit(
+                "pipeline.setup_failed",
+                {"state": "timing_fallback", "elapsed_ms": 0.0, "error": str(exc)},
+            )
+
         self._running = True
         self.listening_started.emit()
 
@@ -377,6 +476,46 @@ class VoiceListenerThread(QThread):
 
                 try:
                     self.status_changed.emit("LISTENING")
+                    pipeline = getattr(self, "_pipeline", None)
+                    if pipeline is not None and pipeline.waiting_for_wake():
+                        self.status_changed.emit("SAY HEY SHELL")
+                        wake_chunk_duration = max(0.04, float(pipeline.config.wake_idle_frame_ms) / 1000.0)
+                        wake_chunk_size = max(1, int(self._sample_rate * wake_chunk_duration))
+                        while self._running and not self._muted and pipeline.waiting_for_wake():
+                            try:
+                                audio_chunk = sd.rec(
+                                    wake_chunk_size,
+                                    samplerate=self._sample_rate,
+                                    channels=self._channels,
+                                    dtype="int16",
+                                    blocking=True,
+                                )
+                            except Exception:
+                                self.msleep(200)
+                                continue
+                            amp = float(np.abs(audio_chunk).mean()) / 32768.0
+                            self.amplitude_changed.emit(min(1.0, amp * 5.0))
+                            event = pipeline.process_wake_frame(audio_chunk)
+                            self._emit_pipeline_event(event)
+                            if event.event == "wake_detected":
+                                self.status_changed.emit("WAKE DETECTED")
+                                break
+                            if event.event == "wake_error_fallback":
+                                self.status_changed.emit("LISTENING")
+                                break
+                        if not self._running or self._muted:
+                            continue
+                        if pipeline.waiting_for_wake():
+                            continue
+
+                    use_vad = bool(pipeline is not None and pipeline.should_use_vad())
+                    chunk_duration = self._chunk_duration
+                    if use_vad:
+                        chunk_size = max(1, int(pipeline.config.vad_window_samples))
+                        chunk_duration = chunk_size / float(self._sample_rate)
+                    else:
+                        chunk_size = max(1, int(self._sample_rate * chunk_duration))
+
                     speech_frames = []
                     silence_count = 0
                     speech_started = False
@@ -384,8 +523,7 @@ class VoiceListenerThread(QThread):
                     speech_ended_at = 0.0
                     total_frames = 0
                     max_frames = int(self._max_speech_duration * self._sample_rate)
-                    chunk_size = max(1, int(self._sample_rate * self._chunk_duration))
-                    silence_limit = max(1, int(self._speech_timeout / self._chunk_duration))
+                    silence_limit = max(1, int(self._speech_timeout / chunk_duration))
                     noise_floor = self._noise_floor
                     self._last_endpoint_timeout = self._speech_timeout
 
@@ -405,7 +543,38 @@ class VoiceListenerThread(QThread):
                         amp = float(np.abs(audio_chunk).mean()) / 32768.0
                         self.amplitude_changed.emit(min(1.0, amp * 5.0))
 
-                        if amp > self._silence_threshold:
+                        if use_vad and pipeline is not None:
+                            event = pipeline.process_vad_frame(audio_chunk)
+                            self._emit_pipeline_event(event)
+                            if event.event == "vad_error_fallback":
+                                use_vad = False
+                                self.status_changed.emit("LISTENING")
+                                continue
+                            if event.event == "vad_speech_started" and not speech_started:
+                                speech_started = True
+                                speech_started_at = time.perf_counter()
+                                self.status_changed.emit("HEARING YOU...")
+                                self._emit_latency(
+                                    "speech_started",
+                                    speech_started_at,
+                                    chunk_ms=round(chunk_duration * 1000.0, 2),
+                                    detector="silero_vad",
+                                    threshold=round(float(pipeline.config.vad_threshold), 4),
+                                )
+                            if speech_started:
+                                speech_frames.append(audio_chunk.copy())
+                                total_frames += chunk_size
+                                silence_count = 0
+                                if event.event == "vad_speech_ended":
+                                    speech_ended_at = time.perf_counter()
+                                    break
+                            else:
+                                if noise_floor <= 0:
+                                    noise_floor = amp
+                                else:
+                                    noise_floor = (noise_floor * 0.92) + (amp * 0.08)
+                                self._noise_floor = noise_floor
+                        elif amp > self._silence_threshold:
                             if not speech_started:
                                 speech_started = True
                                 speech_started_at = time.perf_counter()
@@ -413,7 +582,7 @@ class VoiceListenerThread(QThread):
                                 self._emit_latency(
                                     "speech_started",
                                     speech_started_at,
-                                    chunk_ms=round(self._chunk_duration * 1000.0, 2),
+                                    chunk_ms=round(chunk_duration * 1000.0, 2),
                                     threshold=round(self._silence_threshold, 4),
                                 )
                             speech_frames.append(audio_chunk.copy())
@@ -435,7 +604,7 @@ class VoiceListenerThread(QThread):
                                 noise_floor=noise_floor,
                             )
                             self._last_endpoint_timeout = effective_timeout
-                            silence_limit = max(1, int(effective_timeout / self._chunk_duration))
+                            silence_limit = max(1, int(effective_timeout / chunk_duration))
                             if silence_count >= silence_limit:
                                 speech_ended_at = time.perf_counter()
                                 break
@@ -445,10 +614,14 @@ class VoiceListenerThread(QThread):
                             break
 
                     if not speech_frames or not speech_started:
+                        if pipeline is not None:
+                            pipeline.finish_turn(manual_trigger=self._manual_trigger)
                         continue
 
-                    duration = len(speech_frames) * self._chunk_duration
+                    duration = len(speech_frames) * chunk_duration
                     if duration < self._min_speech_duration:
+                        if pipeline is not None:
+                            pipeline.finish_turn(manual_trigger=self._manual_trigger)
                         continue
 
                     if speech_ended_at <= 0:
@@ -457,10 +630,11 @@ class VoiceListenerThread(QThread):
                         "speech_ended",
                         speech_started_at or speech_ended_at,
                         duration_ms=round(duration * 1000.0, 2),
-                        trailing_silence_ms=round(silence_count * self._chunk_duration * 1000.0, 2),
+                        trailing_silence_ms=round(silence_count * chunk_duration * 1000.0, 2),
                         endpoint_timeout_ms=round(self._last_endpoint_timeout * 1000.0, 2),
                         adaptive_endpointing=bool(self._adaptive_endpointing),
                         semantic_pacing=bool(self._semantic_pacing),
+                        vad_enabled=bool(use_vad),
                         semantic_bias_ms=round(self._semantic_endpoint_bias_s * 1000.0, 2),
                         semantic_rhythm_bias_ms=round(self._semantic_rhythm_bias_s * 1000.0, 2),
                         semantic_rhythm_style=self._semantic_rhythm_profile.get("style", "balanced"),
@@ -483,27 +657,72 @@ class VoiceListenerThread(QThread):
                     with sr.AudioFile(wav_buffer) as source:
                         audio = recognizer.record(source)
 
+                    recognition_started = time.perf_counter()
+                    text = ""
                     try:
-                        recognition_started = time.perf_counter()
-                        text = recognizer.recognize_google(audio, language="en-US")
-                        self._emit_latency("recognition_done", recognition_started)
-                        self._emit_latency("speech_end_to_text", speech_ended_at)
-                        if text and text.strip():
-                            semantic = self._remember_semantic_turn(text.strip(), duration_s=duration)
-                            self._emit_latency(
-                                "semantic_turn_analyzed",
-                                speech_ended_at,
-                                completion=semantic.get("completion", "unknown"),
-                                confidence=semantic.get("confidence", 0.0),
-                                bias_ms=semantic.get("bias_ms", 0.0),
-                                reason=semantic.get("reason", ""),
-                                rhythm_bias_ms=semantic.get("rhythm_bias_ms", 0.0),
-                                rhythm_style=semantic.get("rhythm_style", "balanced"),
-                                turns=semantic.get("turns", 0),
-                                tokens=semantic.get("tokens", 0),
-                            )
-                            self.text_recognized.emit(text.strip())
+                        if self._local_stt_enabled and self._local_stt_primary:
+                            try:
+                                text = self._recognize_with_local_stt(
+                                    audio_data,
+                                    recognition_started,
+                                    reason="primary",
+                                )
+                            except Exception as local_exc:
+                                self._emit_latency(
+                                    "local_stt_primary_fallback",
+                                    recognition_started,
+                                    error=str(local_exc),
+                                    fallback="google",
+                                )
+                                text = recognizer.recognize_google(audio, language="en-US")
+                                self._emit_latency("recognition_done", recognition_started, source="google_after_local_error")
+                        else:
+                            text = recognizer.recognize_google(audio, language="en-US")
+                            self._emit_latency("recognition_done", recognition_started, source="google")
                     except sr.UnknownValueError:
+                        if self._local_stt_enabled:
+                            try:
+                                text = self._recognize_with_local_stt(
+                                    audio_data,
+                                    recognition_started,
+                                    reason="unknown_value_fallback",
+                                )
+                            except Exception:
+                                text = ""
+                    except sr.RequestError as exc:
+                        if self._local_stt_enabled:
+                            try:
+                                text = self._recognize_with_local_stt(
+                                    audio_data,
+                                    recognition_started,
+                                    reason="api_error_fallback",
+                                )
+                            except Exception as local_exc:
+                                self._emit_latency("recognition_error", recognition_started)
+                                self.error_occurred.emit(
+                                    f"Speech API error: {exc}; local STT fallback unavailable: {local_exc}"
+                                )
+                        else:
+                            self._emit_latency("recognition_error", recognition_started)
+                            self.error_occurred.emit(f"Speech API error: {exc}")
+
+                    if text and text.strip():
+                        self._emit_latency("speech_end_to_text", speech_ended_at)
+                        semantic = self._remember_semantic_turn(text.strip(), duration_s=duration)
+                        self._emit_latency(
+                            "semantic_turn_analyzed",
+                            speech_ended_at,
+                            completion=semantic.get("completion", "unknown"),
+                            confidence=semantic.get("confidence", 0.0),
+                            bias_ms=semantic.get("bias_ms", 0.0),
+                            reason=semantic.get("reason", ""),
+                            rhythm_bias_ms=semantic.get("rhythm_bias_ms", 0.0),
+                            rhythm_style=semantic.get("rhythm_style", "balanced"),
+                            turns=semantic.get("turns", 0),
+                            tokens=semantic.get("tokens", 0),
+                        )
+                        self.text_recognized.emit(text.strip())
+                    else:
                         semantic = self._remember_semantic_turn("", duration_s=duration)
                         self._emit_latency("recognition_empty", recognition_started)
                         self._emit_latency(
@@ -518,10 +737,8 @@ class VoiceListenerThread(QThread):
                             turns=semantic.get("turns", 0),
                             tokens=0,
                         )
-                        pass
-                    except sr.RequestError as exc:
-                        self._emit_latency("recognition_error", recognition_started)
-                        self.error_occurred.emit(f"Speech API error: {exc}")
+                    if pipeline is not None:
+                        pipeline.finish_turn(manual_trigger=self._manual_trigger)
 
                 except Exception as exc:
                     logging.warning("VoiceListener error: %s", exc)
