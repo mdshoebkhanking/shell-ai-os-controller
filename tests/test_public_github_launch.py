@@ -2,6 +2,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -9,6 +11,16 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_public_launch_audit_module():
     path = ROOT / "tools" / "public_github_launch_audit.py"
     spec = importlib.util.spec_from_file_location("public_github_launch_audit", path)
+    module = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def load_public_package_module():
+    path = ROOT / "tools" / "package_public_release.py"
+    spec = importlib.util.spec_from_file_location("package_public_release", path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
     sys.modules[spec.name] = module
@@ -81,3 +93,40 @@ def test_public_launch_docs_and_ci_gate_are_linked():
     assert "PUBLIC_GITHUB_RELEASE_PLAYBOOK.md" in readme
     assert "tools/public_github_launch_audit.py" in ci
     assert "tools/public_github_launch_audit.py" in release
+
+
+def test_public_release_package_includes_web_ui_source_and_windows_launchers():
+    module = load_public_package_module()
+
+    rel_paths = {path.relative_to(ROOT).as_posix() for path in module.iter_release_files()}
+
+    assert module.REQUIRED_PACKAGE_FILES <= rel_paths
+    assert "shell_web_ui/package.json" in rel_paths
+    assert "shell_web_ui/src/App.tsx" in rel_paths
+    assert "ONE_CLICK_INSTALL.bat" in rel_paths
+    assert "Run_Windows_Acceptance_Test.bat" in rel_paths
+    assert "AGENT_FIX.md" not in rel_paths
+    assert "SESSION_LOG.md" not in rel_paths
+    assert not any(path.startswith("shell_web_ui/dist/") for path in rel_paths)
+    assert not any(path.startswith("shell_web_ui/node_modules/") for path in rel_paths)
+
+
+def test_public_release_validation_fails_when_web_ui_package_is_missing():
+    module = load_public_package_module()
+    files = [
+        ROOT / rel
+        for rel in module.REQUIRED_PACKAGE_FILES
+        if rel != "shell_web_ui/package.json"
+    ]
+
+    with pytest.raises(RuntimeError, match="shell_web_ui/package.json"):
+        module.validate_release_file_set(files)
+
+
+def test_public_release_validation_rejects_generated_web_ui_outputs():
+    module = load_public_package_module()
+    files = [ROOT / rel for rel in module.REQUIRED_PACKAGE_FILES]
+    files.append(ROOT / "shell_web_ui" / "dist" / "index.html")
+
+    with pytest.raises(RuntimeError, match="shell_web_ui/dist/index.html"):
+        module.validate_release_file_set(files)

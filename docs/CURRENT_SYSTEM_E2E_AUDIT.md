@@ -40,8 +40,9 @@ The repository is in a green CI state:
 | CSS enter/fade/zoom animation utilities | Pass |
 | Voice button click paths | Pass |
 
-Latest real UI probe coverage is documented in `.shell_runtime/` locally and
-summarized in `SESSION_LOG.md`.
+Latest real UI probe coverage is documented in `.shell_runtime/` locally during
+validation runs; generated runtime reports are intentionally excluded from the
+public repository.
 
 ## Backend And Tool Validation
 

@@ -40,6 +40,8 @@ desktop.ini
 node_modules/
 
 # Sessions & Data
+SESSION_LOG.md
+AGENT_FIX.md
 brain/data/instagram_session.json
 brain/data/*.json
 brain/data/*.json.bak

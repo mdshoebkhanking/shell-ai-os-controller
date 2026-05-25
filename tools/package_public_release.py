@@ -34,6 +34,45 @@ SECRET_PATTERNS = [
     re.compile(r"\b\d{5,20}:[A-Za-z0-9_-]{20,}\b"),  # Telegram bot token shape
 ]
 
+REQUIRED_PACKAGE_FILES = {
+    ".env.example",
+    "INSTALLATION.md",
+    "ONE_CLICK_INSTALL.bat",
+    "ONE_CLICK_INSTALL.command",
+    "Repair_ShellAI.bat",
+    "Run_Windows_Acceptance_Test.bat",
+    "Start_ShellAI.bat",
+    "installer/bootstrap.py",
+    "installer/windows_audio_preflight.ps1",
+    "launch.py",
+    "requirements.txt",
+    "shell_hub.py",
+    "shell_ui/requirements_ui.txt",
+    "shell_web_ui/host.py",
+    "shell_web_ui/index.html",
+    "shell_web_ui/package-lock.json",
+    "shell_web_ui/package.json",
+    "shell_web_ui/src/App.tsx",
+    "shell_web_ui/src/IndexRoot.tsx",
+    "shell_web_ui/src/main.tsx",
+    "shell_web_ui/src/shellBridge.ts",
+    "shell_web_ui/tsconfig.json",
+    "shell_web_ui/vite.config.ts",
+}
+
+FORBIDDEN_PACKAGE_PATH_PREFIXES = {
+    "node_modules/",
+    "shell_web_ui/dist/",
+    "shell_web_ui/node_modules/",
+}
+
+FORBIDDEN_PACKAGE_FILES = {
+    ".env",
+    "AGENT_FIX.md",
+    "SESSION_LOG.md",
+    "dist/public_release_package.json",
+}
+
 EXCLUDED_DIRS = {
     ".git",
     ".gstack",
@@ -71,6 +110,7 @@ EXCLUDED_PATH_PREFIXES = {
 EXCLUDED_NAMES = {
     ".DS_Store",
     ".env",
+    "AGENT_FIX.md",
     ".phoenix_analytics.json",
     ".shell_full_smoke_report.json",
     ".shell_hub_port",
@@ -110,6 +150,7 @@ EXCLUDED_NAMES = {
     "test_results_g3.txt",
     "_agent_test.err",
     "ui_run.log",
+    "SESSION_LOG.md",
 }
 
 EXCLUDED_SUFFIXES = {
@@ -202,6 +243,23 @@ def iter_release_files() -> list[Path]:
     return sorted(files, key=lambda p: str(p.relative_to(ROOT)))
 
 
+def validate_release_file_set(files: list[Path]) -> None:
+    rel_paths = {path.relative_to(ROOT).as_posix() for path in files}
+    missing = sorted(REQUIRED_PACKAGE_FILES - rel_paths)
+    if missing:
+        raise RuntimeError("Release package missing required files: " + ", ".join(missing))
+
+    forbidden = sorted(
+        rel
+        for rel in rel_paths
+        if rel in FORBIDDEN_PACKAGE_FILES or any(rel.startswith(prefix) for prefix in FORBIDDEN_PACKAGE_PATH_PREFIXES)
+    )
+    if forbidden:
+        preview = ", ".join(forbidden[:10])
+        extra = "" if len(forbidden) <= 10 else f", and {len(forbidden) - 10} more"
+        raise RuntimeError("Release package includes generated/runtime files: " + preview + extra)
+
+
 def build_package(*, strict: bool = True) -> dict[str, object]:
     report = build_report(include_health=True, strict=strict)
     if report["status"] != "pass":
@@ -211,6 +269,7 @@ def build_package(*, strict: bool = True) -> dict[str, object]:
     name = f"shell-ai-os-controller-{version()}.zip"
     output = DIST_DIR / name
     files = iter_release_files()
+    validate_release_file_set(files)
     package_file_count = len(files) + 1  # release_manifest.json is written into the zip.
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for path in files:
@@ -225,6 +284,7 @@ def build_package(*, strict: bool = True) -> dict[str, object]:
                 "status": report["status"],
                 "warnings": report["warnings"],
             },
+            "required_package_files": sorted(REQUIRED_PACKAGE_FILES),
         }
         zf.writestr("release_manifest.json", json.dumps(manifest, indent=2, sort_keys=True))
 
