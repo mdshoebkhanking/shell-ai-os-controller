@@ -161,7 +161,8 @@ def _project_slug_from_text(raw: str, fallback: str = "shell_site") -> str:
     text = raw.lower()
     text = re.sub(
         r"\b(?:please|pls|make|create|build|generate|design|scaffold|website|webpage|web\s+page|"
-        r"landing\s+page|site|banao|bana|banado|banaao|kar\s+do|for|ke\s+liye|ka|ki|ek|a|an)\b",
+        r"landing\s+page|site|app|application|software|dashboard|tool|banao|bana|banado|banaao|"
+        r"bana\s+do|kar\s+do|for|ke\s+liye|ka|ki|ek|a|an)\b",
         " ",
         text,
         flags=re.I,
@@ -169,6 +170,36 @@ def _project_slug_from_text(raw: str, fallback: str = "shell_site") -> str:
     slug = re.sub(r"[^a-z0-9]+", "_", text).strip("_")
     slug = re.sub(r"_+", "_", slug)[:48].strip("_")
     return slug or fallback
+
+
+def _game_name_from_text(raw: str) -> str:
+    lower = str(raw or "").lower()
+    known_games = (
+        ("space invaders", r"\b(space\s+invaders?|invaders?|alien|spaceship|shoot(?:er|ing)?)\b"),
+        ("flappy bird", r"\b(flappy|flappy\s+bird)\b"),
+        ("tic tac toe", r"\b(tic\s*tac\s*toe|noughts?|crosses|xo|x\s+and\s+o)\b"),
+        ("breakout", r"\b(breakout|brick\s*breaker|arkanoid)\b"),
+        ("tetris", r"\b(tetris|block\s*puzzle)\b"),
+        ("snake", r"\b(snake|saanp)\b"),
+        ("2048", r"\b2048\b"),
+        ("pong", r"\bpong\b"),
+        ("runner", r"\b(runner|dino|dinosaur|endless\s+runner|chrome\s+dino)\b"),
+        ("reaction", r"\b(reaction|click\s+game|tap\s+game)\b"),
+    )
+    for name, pattern in known_games:
+        if re.search(pattern, lower, flags=re.I):
+            return name
+
+    text = re.sub(_CREATION_VERB_RE, " ", str(raw or ""), flags=re.I)
+    text = re.sub(
+        r"\b(?:please|pls|game|khel|playable|html5|browser|web|with|controls?|keyboard|mouse|"
+        r"for|ke\s+liye|ka|ki|ek|a|an)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    text = _clean(text)
+    return text or "snake"
 
 
 def _looks_like_math(expr: str) -> bool:
@@ -222,6 +253,14 @@ def _number(value: str) -> float:
 _WORKSPACE_PATH_TOKEN = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,180}\.[A-Za-z0-9]{1,16}"
 _EMAIL_TOKEN = r"[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}"
 _EMAIL_ATTACHMENT_EXTS = "pdf|docx?|xlsx?|csv|txt|md|png|jpe?g|zip"
+_CREATION_VERB_RE = (
+    r"\b(make|create|build|generate|design|scaffold|develop|code|"
+    r"banao|bana|banado|banaao|bana\s+do|kar\s+do)\b"
+)
+_GAME_INTENT_RE = (
+    r"\b(game|khel|snake|tetris|pong|flappy|flappy\s+bird|2048|breakout|"
+    r"space\s+invaders?|runner|dino|tic\s*tac\s*toe|reaction)\b"
+)
 
 
 def _workspace_file_path_match(raw: str) -> tuple[str, tuple[int, int]] | None:
@@ -443,6 +482,14 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
         return _route("shell_agent_tools:list_all_tools", confidence=0.95)
     if re.search(r"\b(tool|tools)\s+(health|status|readiness)\b", lower):
         return _route("shell_agent_tools:system_health_dashboard", confidence=0.9)
+    if re.search(
+        r"\b(voice|speech|tts|audio|microphone|mic|speaker)\s+(status|health|readiness|check|working|ready)\b",
+        lower,
+    ) or re.search(
+        r"\b(status|health|readiness|check)\s+(of\s+)?(voice|speech|tts|audio|microphone|mic|speaker)\b",
+        lower,
+    ) or re.search(r"\b(voice|audio|sound|speaker)\b.*\b(aa\s+rahi|aarahi|aarahe|sunai|sunaai|working|chal|chalu)\b", lower):
+        return _route("shell_neural_voice:shell_streaming_voice_status_tool", confidence=0.91)
 
     telegram = _telegram_route(raw, lower)
     if telegram:
@@ -465,10 +512,7 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             tool_id, param = _AGENTS[label]
             return _route(tool_id, {param: task}, kind="agent", confidence=0.9)
 
-    if re.search(
-        r"\b(make|create|build|generate|design|scaffold|banao|bana|banado|banaao)\b",
-        lower,
-    ) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
+    if re.search(_CREATION_VERB_RE, lower) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
         return _route(
             "shell_code_engine:create_fullstack_app_tool",
             {
@@ -476,6 +520,26 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
                 "app_type": _strip_quotes(raw),
             },
             confidence=0.91,
+        )
+
+    if re.search(_CREATION_VERB_RE, lower) and re.search(_GAME_INTENT_RE, lower):
+        return _route(
+            "shell_game_builder:build_game_tool",
+            {"game": _game_name_from_text(raw), "custom_features": ""},
+            confidence=0.93,
+        )
+
+    if re.search(_CREATION_VERB_RE, lower) and re.search(
+        r"\b(app|application|software|dashboard|tool|todo|to\s*do|crm|tracker|manager)\b",
+        lower,
+    ):
+        return _route(
+            "shell_code_engine:create_fullstack_app_tool",
+            {
+                "project_name": _project_slug_from_text(raw, "shell_app"),
+                "app_type": _strip_quotes(raw),
+            },
+            confidence=0.9,
         )
 
     workspace_read = _workspace_file_read_route(raw, lower)

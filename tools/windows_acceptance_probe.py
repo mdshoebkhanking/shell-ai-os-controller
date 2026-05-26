@@ -89,6 +89,22 @@ def managed_python() -> Path:
     return py if py.exists() else Path(sys.executable)
 
 
+def find_executable(exe: str, py: Path | None = None) -> str | None:
+    found = shutil.which(exe)
+    if found:
+        return found
+
+    if platform.system().lower().startswith("win") and py:
+        scripts_dir = Path(py).parent
+        base = Path(exe).name
+        suffixes = ("",) if Path(base).suffix else ("", ".exe", ".cmd", ".bat")
+        for suffix in suffixes:
+            candidate = scripts_dir / f"{base}{suffix}"
+            if candidate.exists():
+                return str(candidate)
+    return None
+
+
 def check_health(py: Path) -> Check:
     return run_cmd([py, "installer/bootstrap.py", "health"], name="install health", timeout=180)
 
@@ -187,6 +203,54 @@ def check_voice_runtime(py: Path) -> Check:
     return result
 
 
+def check_local_tts_command(py: Path) -> Check:
+    code = (
+        "import json; "
+        "from PyQt6.QtCore import QCoreApplication; "
+        "from shell_web_ui.host import ShellBackendBridge; "
+        "QCoreApplication.instance() or QCoreApplication([]); "
+        "cmd=ShellBackendBridge()._tts_command('Shell voice test'); "
+        "print(json.dumps({'available': bool(cmd), 'command': cmd[0] if cmd else ''}, sort_keys=True)); "
+        "raise SystemExit(0 if cmd else 1)"
+    )
+    result = run_cmd([py, "-c", code], name="local TTS command probe", timeout=30)
+    if result.ok:
+        return result
+    return Check(
+        "local TTS command probe",
+        True,
+        "WARN",
+        result.message or "No local TTS command detected; audible voice remains a manual UI check.",
+        result.details,
+    )
+
+
+def check_hard_task_routes(py: Path) -> Check:
+    code = r"""
+import json
+from shell_nl_router import route_natural_command
+
+cases = {
+    "website banao landing page for bakery": "shell_code_engine:create_fullstack_app_tool",
+    "todo app banao with login": "shell_code_engine:create_fullstack_app_tool",
+    "snake game banao": "shell_game_builder:build_game_tool",
+    "open calculator": "shell_window_CTRL:open_app",
+    "close calculator": "shell_window_CTRL:close_app",
+    "voice status check": "shell_neural_voice:shell_streaming_voice_status_tool",
+}
+
+observed = {}
+for prompt, expected in cases.items():
+    route = route_natural_command(prompt) or {}
+    observed[prompt] = route.get("tool")
+    if route.get("tool") != expected:
+        raise SystemExit(json.dumps({"expected": expected, "observed": observed, "prompt": prompt}, sort_keys=True))
+
+print(json.dumps(observed, sort_keys=True))
+"""
+    return run_cmd([py, "-c", code], name="hard task routing probe", timeout=30)
+
+
 def check_windows_runtime(py: Path) -> list[Check]:
     checks: list[Check] = []
     checks.append(
@@ -198,7 +262,7 @@ def check_windows_runtime(py: Path) -> list[Check]:
         )
     )
     for exe, label in (("ffmpeg", "audio/video tools"), ("tesseract", "OCR"), ("uvx", "Windows-MCP")):
-        found = shutil.which(exe)
+        found = find_executable(exe, py)
         checks.append(
             Check(
                 f"{exe} executable",
@@ -257,6 +321,8 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(check_hub(py))
         checks.append(check_ui_probe(py, visible=args.visible_ui_probe))
         checks.append(check_voice_runtime(py))
+        checks.append(check_local_tts_command(py))
+        checks.append(check_hard_task_routes(py))
         if args.include_agents:
             checks.append(check_agent_probe(py))
     else:

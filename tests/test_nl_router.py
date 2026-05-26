@@ -80,6 +80,37 @@ def test_direct_website_build_route_uses_code_engine_not_chat_fallback():
     assert route["args"]["app_type"] == "website banao landing page for bakery"
 
 
+def test_direct_app_build_route_uses_code_engine_not_agent_chat():
+    route = route_natural_command("todo app banao with login")
+
+    assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["project_name"] == "todo_with_login"
+    assert route["args"]["app_type"] == "todo app banao with login"
+
+
+def test_direct_game_build_route_uses_playable_game_builder():
+    route = route_natural_command("snake game banao")
+
+    assert route["tool"] == "shell_game_builder:build_game_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"game": "snake", "custom_features": ""}
+
+
+def test_direct_tetris_game_build_route_keeps_known_template_fast_path():
+    route = route_natural_command("make a playable tetris game with keyboard controls")
+
+    assert route["tool"] == "shell_game_builder:build_game_tool"
+    assert route["args"] == {"game": "tetris", "custom_features": ""}
+
+
+def test_voice_status_route_uses_real_voice_runtime_status_tool():
+    route = route_natural_command("voice status check")
+
+    assert route["tool"] == "shell_neural_voice:shell_streaming_voice_status_tool"
+    assert route["kind"] == "tool"
+
+
 def test_hinglish_photo_generation_routes_to_image_tool():
     route = route_natural_command("neon shell city ki photo banao")
 

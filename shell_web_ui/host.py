@@ -588,7 +588,8 @@ class ShellBackendBridge(QObject):
                 ):
                     reason = rendered_text.replace("[BLOCKED]", "", 1).strip()
                     return (
-                        "Website/code creation safety settings se blocked hai. "
+                        "Website/app code creation safety settings se blocked hai. "
+                        "Trusted session mein Settings/.env se SHELL_ALLOW_CODE_WRITE=1 enable karke restart karo. "
                         f"{reason[:620]}"
                     ).strip()
                 if "calculator" in str(tool).lower():
