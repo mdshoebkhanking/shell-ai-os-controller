@@ -91,6 +91,8 @@ export class GeminiLiveService {
   private appWatcherInterval: NodeJS.Timeout | null = null
   private lastAppList: string[] = []
   private openPromise: Promise<void> | null = null
+  private lastInputLevelStatusAt: number = 0
+  private outgoingAudioChunks: number = 0
   private forceSpeakHandler = (event: Event) => {
     const systemPrompt = (event as CustomEvent<string>).detail
     if (systemPrompt && this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -1759,16 +1761,99 @@ ${JSON.stringify(history)}
     return `Microphone access denied or failed to initialize. (${detail})`
   }
 
+  private microphoneDeviceScore(device: MediaDeviceInfo): number {
+    const label = String(device.label || '').toLowerCase()
+    let score = 0
+    if (!label) return score
+    if (label.includes('droidcam')) score += 100
+    if (label.includes('microphone')) score += 30
+    if (label.includes('mic')) score += 15
+    if (label.includes('virtual audio')) score += 10
+    if (label.includes('communications')) score += 5
+    if (label.includes('stereo mix')) score -= 60
+    if (label.includes('midi')) score -= 60
+    if (label.includes('output')) score -= 60
+    return score
+  }
+
+  private async choosePreferredMicrophone(initialStream: MediaStream): Promise<MediaStream> {
+    if (!navigator.mediaDevices?.enumerateDevices) return initialStream
+
+    try {
+      const devices = (await navigator.mediaDevices.enumerateDevices()).filter(
+        (device) => device.kind === 'audioinput'
+      )
+      if (!devices.length) return initialStream
+
+      const currentDeviceId = initialStream.getAudioTracks()[0]?.getSettings?.().deviceId || ''
+      const savedDeviceId = localStorage.getItem('shell_preferred_mic_device_id') || ''
+      const savedLabel = (localStorage.getItem('shell_preferred_mic_label') || '').toLowerCase()
+      const savedDevice = devices.find(
+        (device) =>
+          (savedDeviceId && device.deviceId === savedDeviceId) ||
+          (savedLabel && device.label.toLowerCase().includes(savedLabel))
+      )
+      const scoredDevice = devices
+        .map((device) => ({ device, score: this.microphoneDeviceScore(device) }))
+        .sort((a, b) => b.score - a.score)[0]
+      const preferredDevice = savedDevice || (scoredDevice?.score > 0 ? scoredDevice.device : null)
+
+      if (!preferredDevice || preferredDevice.deviceId === currentDeviceId) {
+        const label = initialStream.getAudioTracks()[0]?.label || preferredDevice?.label || 'default microphone'
+        this.emitVoiceStatus('MIC READY', `Using ${label}`)
+        return initialStream
+      }
+
+      try {
+        const preferredStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: { exact: preferredDevice.deviceId },
+            channelCount: { ideal: 1 },
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          }
+        })
+        initialStream.getTracks().forEach((track) => track.stop())
+        this.emitVoiceStatus('MIC READY', `Using ${preferredDevice.label || 'preferred microphone'}`)
+        return preferredStream
+      } catch (err) {
+        console.warn('Preferred microphone failed; keeping default microphone.', err)
+        this.emitVoiceStatus(
+          'MIC READY',
+          `Preferred mic failed; using ${initialStream.getAudioTracks()[0]?.label || 'default microphone'}`
+        )
+        return initialStream
+      }
+    } catch (err) {
+      console.warn('Microphone device selection failed; using default microphone.', err)
+      return initialStream
+    }
+  }
+
+  private audioLevel(samples: Float32Array): number {
+    if (!samples.length) return 0
+    let peak = 0
+    const step = Math.max(1, Math.floor(samples.length / 512))
+    for (let index = 0; index < samples.length; index += step) {
+      const value = Math.abs(samples[index] || 0)
+      if (value > peak) peak = value
+    }
+    return peak
+  }
+
   async startMicrophone(): Promise<void> {
     if (!this.audioContext || this.audioContext.state === 'closed') return
     try {
-      const stream = await this.openMicrophoneStream()
+      const stream = await this.choosePreferredMicrophone(await this.openMicrophoneStream())
       const audioContext = this.audioContext
       if (!audioContext || audioContext.state === 'closed') {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
       this.mediaStream = stream
+      this.outgoingAudioChunks = 0
+      this.lastInputLevelStatusAt = 0
 
       const source = audioContext.createMediaStreamSource(stream)
       const inputSampleRate = audioContext.sampleRate
@@ -1797,6 +1882,8 @@ ${JSON.stringify(history)}
 
           const downsampledData = downsampleTo16000(combined, inputSampleRate)
           const base64Audio = float32ToBase64PCM(downsampledData)
+          const level = this.audioLevel(combined)
+          this.outgoingAudioChunks += 1
 
           this.socket.send(
             JSON.stringify({
@@ -1805,6 +1892,20 @@ ${JSON.stringify(history)}
               }
             })
           )
+
+          const now = Date.now()
+          if (level > 0.01 && now - this.lastInputLevelStatusAt > 700) {
+            this.lastInputLevelStatusAt = now
+            this.emitVoiceStatus(
+              'HEARING YOU',
+              `mic level ${level.toFixed(3)}; sent ${this.outgoingAudioChunks} audio chunks`
+            )
+          } else if (this.outgoingAudioChunks === 12 && level <= 0.003) {
+            this.emitVoiceStatus(
+              'MIC SILENT',
+              'No voice level detected yet. Windows input device/permission check karo.'
+            )
+          }
         }
       }
 

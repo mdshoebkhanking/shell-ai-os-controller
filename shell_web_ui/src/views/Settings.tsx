@@ -40,6 +40,11 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [voiceRuntime, setVoiceRuntime] = useState<'gemini' | 'backend'>(
     (localStorage.getItem('shell_voice_runtime') as 'gemini' | 'backend') || 'gemini'
   )
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedMicId, setSelectedMicId] = useState(
+    localStorage.getItem('shell_preferred_mic_device_id') || ''
+  )
+  const [micStatus, setMicStatus] = useState('Microphone list not loaded.')
   const [personality, setPersonality] = useState('')
   const [userName, setUserName] = useState(localStorage.getItem('shell_user_name') || '')
 
@@ -176,6 +181,47 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     setVoiceRuntime(runtime)
     localStorage.setItem('shell_voice_runtime', runtime)
     window.dispatchEvent(new CustomEvent('shell-voice-runtime-changed'))
+  }
+
+  const refreshMicrophones = async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) {
+      setMicStatus('Microphone device list unavailable.')
+      return
+    }
+
+    try {
+      let devices = await navigator.mediaDevices.enumerateDevices()
+      let inputs = devices.filter((device) => device.kind === 'audioinput')
+
+      if (navigator.mediaDevices.getUserMedia && inputs.every((device) => !device.label)) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+          stream.getTracks().forEach((track) => track.stop())
+          devices = await navigator.mediaDevices.enumerateDevices()
+          inputs = devices.filter((device) => device.kind === 'audioinput')
+        } catch {}
+      }
+
+      setMicDevices(inputs)
+      setMicStatus(inputs.length ? `${inputs.length} microphones available.` : 'No microphone found.')
+    } catch (err: any) {
+      setMicStatus(`Microphone list failed: ${err?.message || err}`)
+    }
+  }
+
+  const handleMicrophoneChange = (deviceId: string) => {
+    if (isSystemActive) return
+    setSelectedMicId(deviceId)
+    const device = micDevices.find((item) => item.deviceId === deviceId)
+    if (!deviceId) {
+      localStorage.removeItem('shell_preferred_mic_device_id')
+      localStorage.removeItem('shell_preferred_mic_label')
+      setMicStatus('Default microphone selected.')
+      return
+    }
+    localStorage.setItem('shell_preferred_mic_device_id', deviceId)
+    if (device?.label) localStorage.setItem('shell_preferred_mic_label', device.label)
+    setMicStatus(`Selected ${device?.label || 'microphone'}.`)
   }
 
   const handlePersonalityChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -642,6 +688,36 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                         </span>
                       </button>
                     ))}
+                  </div>
+                  <div
+                    className={`mt-3 rounded-lg border border-white/10 bg-[#050505] p-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-black tracking-widest text-zinc-500">
+                        INPUT MICROPHONE
+                      </span>
+                      <button
+                        onClick={refreshMicrophones}
+                        disabled={isSystemActive}
+                        className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-not-allowed"
+                      >
+                        REFRESH
+                      </button>
+                    </div>
+                    <select
+                      value={selectedMicId}
+                      onChange={(event) => handleMicrophoneChange(event.target.value)}
+                      disabled={isSystemActive}
+                      className="w-full rounded-md border border-white/10 bg-black px-3 py-2 text-[11px] font-mono text-zinc-200 outline-none focus:border-emerald-500/50 disabled:cursor-not-allowed"
+                    >
+                      <option value="">Default / Auto DroidCam</option>
+                      {micDevices.map((device, index) => (
+                        <option key={device.deviceId || index} value={device.deviceId}>
+                          {device.label || `Microphone ${index + 1}`}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="mt-2 text-[9px] font-mono text-zinc-500">{micStatus}</div>
                   </div>
                   {isSystemActive && (
                     <div
