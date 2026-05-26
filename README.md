@@ -407,6 +407,11 @@ If something breaks:
 Double-click Repair_ShellAI.bat
 ```
 
+The React Shell Web UI build requires Node.js/npm 20.19+ or 22.12+. On Windows,
+the installer and repair flow refresh PATH after winget, resolve `npm.cmd`
+directly, upgrade old Node LTS installs, and only then run the Web UI
+install/build steps.
+
 ### macOS
 
 ```bash

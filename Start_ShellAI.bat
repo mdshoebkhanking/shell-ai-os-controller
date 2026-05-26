@@ -8,6 +8,7 @@ set "SHELL_TTS_ENGINE=fast"
 set "SHELL_V2_STREAM=1"
 set "SHELL_LEGACY_UI=0"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
+call :refresh_path
 
 set "LOG_DIR=%CD%\.shell_runtime\logs"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1
@@ -18,9 +19,10 @@ call :choose_python
 if not defined PY_CMD (
   echo Compatible Python is missing. Trying winget install...
   winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
+  call :refresh_path
   call :choose_python
   if not defined PY_CMD (
-    echo Python install failed or PATH has not refreshed. Reopen this launcher after installing Python 3.10+.
+    echo Python install failed or compatible Python is still unavailable. Install Python 3.10+ and tick "Add Python to PATH".
     pause
     exit /b 1
   )
@@ -72,4 +74,9 @@ for %%V in (3.13 3.12 3.11 3.10) do (
 )
 python --version >nul 2>&1
 if not errorlevel 1 set "PY_CMD=python"
+goto :eof
+
+:refresh_path
+set "PATH=%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%LOCALAPPDATA%\Microsoft\WinGet\Links;%USERPROFILE%\.local\bin;%APPDATA%\Python\Scripts;%PATH%"
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$machine=[Environment]::GetEnvironmentVariable('Path','Machine'); $user=[Environment]::GetEnvironmentVariable('Path','User'); Write-Output ($machine + ';' + $user)" 2^>nul`) do set "PATH=%%P;%PATH%"
 goto :eof

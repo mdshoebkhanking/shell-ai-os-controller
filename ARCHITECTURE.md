@@ -195,7 +195,7 @@ functions into `agent.py`'s `tools_list`.
 | `ShellAICoreWorker` in `shell_ui/shell_cinematic_full.py` | Optional legacy worker that routes chat text through ShellAI Core when `SHELLAI_BACKEND_MODE=shellai_core`. Web UI routes through the bridge/host path. |
 | `shell_ui/shell_orb_*.py` | Orb renderer variants (OpenGL, particle, pygame). |
 | `launch.py` / `launch_ui.pyw` | UI entry points. |
-| `start_shell.bat` | One-batch launcher (hub → MCP → agent → UI, each in its own terminal). |
+| `Start_ShellAI.bat` | Canonical Windows launcher that runs installer health/repair checks, starts Shell Hub, and opens the UI. |
 | `ONE_CLICK_INSTALL.bat` | Windows venv + pip + registry setup. |
 
 ---

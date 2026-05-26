@@ -54,6 +54,16 @@ def test_bootstrap_python_support_policy():
     assert "too old" in bootstrap.python_support_message((3, 9, 18))
 
 
+def test_bootstrap_node_support_policy():
+    assert bootstrap.node_supported((20, 19, 0))
+    assert bootstrap.node_supported((22, 12, 0))
+    assert bootstrap.node_supported((24, 0, 0))
+    assert not bootstrap.node_supported((20, 18, 1))
+    assert not bootstrap.node_supported((22, 11, 0))
+    assert not bootstrap.node_supported((21, 7, 0))
+    assert "too old" in bootstrap.node_support_message((20, 11, 0))
+
+
 def test_bootstrap_refuses_unexpected_venv_rebuild(tmp_path):
     result = bootstrap.safe_rebuild_venv(tmp_path / "not-shell-venv")
 
@@ -71,9 +81,8 @@ def test_bootstrap_tail_file_reads_last_lines(tmp_path):
 
 def test_windows_launchers_use_modern_diagnostic_path():
     start = open("Start_ShellAI.bat", encoding="utf-8").read()
-    legacy = open("start_shell.bat", encoding="utf-8").read()
-    run = open("run.bat", encoding="utf-8").read()
     one_click = open("ONE_CLICK_INSTALL.bat", encoding="utf-8").read()
+    repair = open("Repair_ShellAI.bat", encoding="utf-8").read()
     acceptance = open("Run_Windows_Acceptance_Test.bat", encoding="utf-8").read()
     installer = open("installer/install_windows.bat", encoding="utf-8").read()
 
@@ -89,9 +98,13 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
     assert "SHELL_LEGACY_UI=0" in start
-    assert "Start_ShellAI.bat" in legacy
-    assert "Start_ShellAI.bat" in run
-    assert "C:\\Users\\Administrator" not in run
+    for script in (start, one_click, repair, acceptance):
+        assert "call :refresh_path" in script
+        assert ":refresh_path" in script
+        assert "Microsoft\\WinGet\\Links" in script
+        assert "ProgramFiles%\\nodejs" in script
+    assert not (bootstrap.ROOT / "start_shell.bat").exists()
+    assert not (bootstrap.ROOT / "run.bat").exists()
     assert "ONE_CLICK_INSTALL.bat" in installer
     assert "tools\\windows_acceptance_probe.py --visible-ui-probe" in acceptance
     assert "installer\\bootstrap.py install --yes" in acceptance
@@ -133,12 +146,94 @@ def test_bootstrap_installs_and_builds_shell_web_ui(monkeypatch):
 
     monkeypatch.setattr(bootstrap, "run_cmd", fake_run_cmd)
     monkeypatch.setattr(bootstrap.shutil, "which", lambda name: "/usr/bin/npm" if name == "npm" else None)
+    monkeypatch.setattr(bootstrap, "command_version_tuple", lambda _command, version_arg="--version": (22, 12, 0))
 
     results = bootstrap.install_node_deps()
 
     assert all(result.ok for result in results)
     assert any(cwd == bootstrap.WEB_UI_ROOT and "install Shell Web UI" in name for cwd, _argv, name in calls)
     assert any(cwd == bootstrap.WEB_UI_ROOT and argv == ["npm", "run", "build"] for cwd, argv, _name in calls)
+
+
+def test_windows_npm_commands_use_resolved_cmd_path(monkeypatch, tmp_path):
+    project = tmp_path / "web"
+    project.mkdir()
+    (project / "package.json").write_text("{}", encoding="utf-8")
+    (project / "package-lock.json").write_text("{}", encoding="utf-8")
+    npm_cmd = r"C:\Program Files\nodejs\npm.cmd"
+    calls = []
+
+    class FakeCompletedProcess:
+        returncode = 0
+        stdout = "ok"
+
+    def fake_which(name):
+        return npm_cmd if name == "npm" else None
+
+    def fake_subprocess_run(cmd, **_kwargs):
+        calls.append(cmd)
+        return FakeCompletedProcess()
+
+    monkeypatch.setattr(bootstrap, "detect_os", lambda: "windows")
+    monkeypatch.setattr(bootstrap.shutil, "which", fake_which)
+    monkeypatch.setattr(bootstrap.subprocess, "run", fake_subprocess_run)
+    monkeypatch.setattr(bootstrap, "command_version_tuple", lambda _command, version_arg="--version": (22, 12, 0))
+
+    results = bootstrap._npm_project_install(project, "Shell Web UI", build=True)
+
+    assert all(result.ok for result in results)
+    assert calls == [
+        [npm_cmd, "ci"],
+        [npm_cmd, "run", "build"],
+    ]
+
+
+def test_web_ui_toolchain_blocks_missing_build_with_old_node(monkeypatch, tmp_path):
+    monkeypatch.delenv("SHELL_WEB_UI_URL", raising=False)
+    monkeypatch.setattr(bootstrap, "WEB_UI_DIST_INDEX", tmp_path / "missing" / "index.html")
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda name: f"/usr/bin/{name}" if name in {"node", "npm"} else None)
+    monkeypatch.setattr(bootstrap, "command_version_tuple", lambda _command, version_arg="--version": (20, 11, 0))
+
+    result = bootstrap.web_ui_toolchain_readiness()
+
+    assert result.ok is False
+    assert result.status == "ERROR"
+    assert "Node.js 20.11.0 is too old" in result.message
+
+
+def test_windows_system_dependency_upgrades_old_node(monkeypatch):
+    def fake_which(name):
+        if name in {"winget", "node", "npm", "ffmpeg", "tesseract", "uvx"}:
+            return f"C:/{name}.exe"
+        return None
+
+    monkeypatch.setattr(bootstrap, "detect_os", lambda: "windows")
+    monkeypatch.setattr(bootstrap, "refresh_windows_process_path", lambda: bootstrap.StepResult("windows PATH", True, "OK", ""))
+    monkeypatch.setattr(bootstrap, "preferred_python_executable", lambda: "python")
+    monkeypatch.setattr(bootstrap.shutil, "which", fake_which)
+    monkeypatch.setattr(bootstrap, "command_version_tuple", lambda _command, version_arg="--version": (20, 11, 0))
+
+    commands = bootstrap.system_dependency_commands("windows")
+
+    assert ["winget", "upgrade", "-e", "--accept-source-agreements", "--accept-package-agreements", "--id", "OpenJS.NodeJS.LTS"] in commands
+
+
+def test_install_runs_system_dependencies_before_node_build(monkeypatch, tmp_path):
+    order = []
+    py = tmp_path / "python"
+    py.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(bootstrap, "venv_dir", lambda: tmp_path)
+    monkeypatch.setattr(bootstrap, "python_in_venv", lambda _path: py)
+    monkeypatch.setattr(bootstrap, "ensure_venv", lambda _path, rebuild_unsupported=False: bootstrap.StepResult("venv", True, "OK", ""))
+    monkeypatch.setattr(bootstrap, "install_system_deps", lambda yes=False: order.append("system") or [])
+    monkeypatch.setattr(bootstrap, "install_python_deps", lambda _path, repair=False: order.append("python") or [])
+    monkeypatch.setattr(bootstrap, "install_node_deps", lambda: order.append("node") or [])
+    monkeypatch.setattr(bootstrap, "health_report", lambda _path=None: {"ok": True, "results": [], "state": "READY"})
+    monkeypatch.setattr(bootstrap, "print_health", lambda _report: None)
+
+    assert bootstrap.install(yes=True) == 0
+    assert order == ["system", "python", "node"]
 
 
 def test_web_ui_build_readiness_reports_missing_dist(monkeypatch):

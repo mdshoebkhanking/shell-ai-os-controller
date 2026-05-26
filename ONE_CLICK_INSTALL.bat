@@ -8,6 +8,7 @@ set "PYTHONIOENCODING=utf-8"
 set "SHELL_TTS_ENGINE=fast"
 set "SHELL_LEGACY_UI=0"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
+call :refresh_path
 
 echo.
 echo ============================================================
@@ -20,7 +21,7 @@ echo   - install Python requirements
 echo   - install all UI requirements from shell_ui\requirements_ui.txt
 echo   - install and build the React Shell Web UI in shell_web_ui
 echo   - install Playwright Chromium
-echo   - install ffmpeg, OCR, uv/uvx, and Node.js where winget supports it
+echo   - install ffmpeg, OCR, uv/uvx, and Node.js 20.19+/22.12+ where winget supports it
 echo   - create .env and runtime folders
 echo   - run health checks
 echo.
@@ -31,12 +32,13 @@ call :choose_python
 if not defined PY_CMD (
   echo Compatible Python was not found. Trying winget Python 3.13 install...
   winget install --id Python.Python.3.13 -e --accept-source-agreements --accept-package-agreements
+  call :refresh_path
   call :choose_python
 )
 
 if not defined PY_CMD (
   echo.
-  echo Python install failed or PATH has not refreshed.
+  echo Python install failed or compatible Python is still unavailable.
   echo Install Python 3.10+ from https://www.python.org/downloads/ and tick "Add Python to PATH".
   echo Then run ONE_CLICK_INSTALL.bat again.
   pause
@@ -75,4 +77,9 @@ for %%V in (3.13 3.12 3.11 3.10) do (
 )
 python --version >nul 2>&1
 if not errorlevel 1 set "PY_CMD=python"
+goto :eof
+
+:refresh_path
+set "PATH=%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%LOCALAPPDATA%\Microsoft\WinGet\Links;%USERPROFILE%\.local\bin;%APPDATA%\Python\Scripts;%PATH%"
+for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$machine=[Environment]::GetEnvironmentVariable('Path','Machine'); $user=[Environment]::GetEnvironmentVariable('Path','User'); Write-Output ($machine + ';' + $user)" 2^>nul`) do set "PATH=%%P;%PATH%"
 goto :eof

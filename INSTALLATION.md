@@ -41,11 +41,11 @@ Ye sabse zaruri hai. Agar ye galat hua toh kuch nahi chalega.
     - Agar tick nahi kiya toh error aayega!
 4.  Ab **"Install Now"** par click karein aur wait karein.
 
-### 2️⃣ Node.js (Optional — WhatsApp Web ke liye) ⚡
-Ye sirf tabhi chahiye agar aap WhatsApp Web ka Node-based backend
-(`shell_whatsapp_web.py`) use karna chahte hain. Default setup ke liye
-optional hai — Selenium backend pehle se kaam karta hai.
-1.  **Download Link**: 👉 [Yahan Click Karein](https://nodejs.org/dist/v20.11.0/node-v20.11.0-x64.msi)
+### 2️⃣ Node.js (Shell Web UI ke liye zaruri) ⚡
+Ye React Shell Web UI ko build karne ke liye chahiye. Node.js `20.19+` ya
+`22.12+` use karein. Agar npm missing ya old hoga toh setup
+`shell_web_ui/dist/index.html is missing` dikha sakta hai.
+1.  **Download Link**: 👉 [Yahan Click Karein](https://nodejs.org/en/download)
 2.  File open karein.
 3.  **Next -> Next -> Next -> Install**.
 
@@ -230,13 +230,11 @@ Har write `.shell_safety_audit.log` mein log hoti hai.
 Sab kuch set hai! Ab magic dekhein.
 
 ## Option A: One-command launch (Recommended)
-1. Main folder mein **`start_shell.bat`** par double click karein.
-2. 4 terminals khulenge:
-   - **Shell Hub** (Socket.IO server)
-   - **MCP Server** (HTTP dispatcher)
-   - **Shell Agent** (LiveKit + Gemini voice)
-   - **Shell UI** (PyQt6 glass interface)
-3. Jab agent window mein ye line dikhe:
+1. Main folder mein **`Start_ShellAI.bat`** par double click karein.
+2. Ek launcher window khulegi. Shell Hub background mein start hoga aur Shell
+   Web UI open hogi.
+3. Agar start fail ho, launcher khud last `hub.log` aur `ui.log` lines dikhayega.
+4. Jab voice ready ho, logs mein is type ki line dikhegi:
    ```
    🎤 Voice selected: Aoede (persona=Hinglish)
    ✅ Realtime TTS used for voice announcement

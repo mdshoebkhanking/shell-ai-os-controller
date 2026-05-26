@@ -35,6 +35,8 @@ Installer behavior:
 - Installs `requirements.txt`.
 - Installs `shell_ui/requirements_ui.txt`.
 - Installs `shell_web_ui/package.json` dependencies and builds `shell_web_ui/dist/index.html`.
+- Requires Node.js/npm 20.19+ or 22.12+ for Web UI builds.
+- Refreshes Windows PATH after winget installs and resolves `npm.cmd` directly so npm health checks and Web UI build commands use the same executable.
 - Installs Playwright Chromium.
 - Installs ffmpeg, Tesseract OCR, uv/uvx, Python, and Node.js when the OS package manager supports it.
 - Creates `.env` automatically if missing.

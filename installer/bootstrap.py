@@ -24,6 +24,8 @@ WEB_UI_ROOT = ROOT / "shell_web_ui"
 WEB_UI_DIST_INDEX = WEB_UI_ROOT / "dist" / "index.html"
 SUPPORTED_PYTHON_MIN = (3, 10)
 STABLE_PYTHON_LINES = ("3.13", "3.12", "3.11", "3.10")
+SUPPORTED_NODE_MIN_20 = (20, 19, 0)
+SUPPORTED_NODE_MIN_22 = (22, 12, 0)
 
 CORE_IMPORTS = {
     "PyQt6": "desktop UI",
@@ -183,7 +185,18 @@ def python_version_tuple(py: Path | str) -> tuple[int, int, int] | None:
         return None
 
 
+def command_version_tuple(command: str, version_arg: str = "--version") -> tuple[int, int, int] | None:
+    result = run_cmd([command, version_arg], name=f"{command} version", timeout=20)
+    if not result.ok:
+        return None
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.message or "")
+    if not match:
+        return None
+    return int(match.group(1)), int(match.group(2)), int(match.group(3))
+
+
 def preferred_python_executable() -> str | None:
+    refresh_windows_process_path()
     configured = os.environ.get("SHELLAI_PYTHON", "").strip()
     candidates = [configured] if configured else []
     # When a Windows launcher starts this file with `py -3.13`, the actual
@@ -212,6 +225,17 @@ def python_supported(version: tuple[int, int, int] | None) -> bool:
     return version[:2] >= SUPPORTED_PYTHON_MIN
 
 
+def node_supported(version: tuple[int, int, int] | None) -> bool:
+    if version is None:
+        return False
+    major, minor, patch = version
+    if major == 20:
+        return (minor, patch) >= SUPPORTED_NODE_MIN_20[1:]
+    if major == 22:
+        return (minor, patch) >= SUPPORTED_NODE_MIN_22[1:]
+    return major > 22
+
+
 def python_support_message(version: tuple[int, int, int] | None) -> str:
     supported = ".".join(str(part) for part in SUPPORTED_PYTHON_MIN)
     if version is None:
@@ -222,9 +246,98 @@ def python_support_message(version: tuple[int, int, int] | None) -> str:
     return f"Python {current} is too old. Shell AI needs Python {supported}+."
 
 
+def node_support_message(version: tuple[int, int, int] | None) -> str:
+    required = "20.19+ or 22.12+"
+    if version is None:
+        return f"Could not detect Node.js version. Shell Web UI builds need Node.js {required}."
+    current = ".".join(str(part) for part in version)
+    if node_supported(version):
+        return f"Node.js {current} is supported for Shell Web UI builds."
+    return f"Node.js {current} is too old. Shell Web UI builds need Node.js {required}."
+
+
 def ensure_runtime_dirs() -> None:
     for path in (RUNTIME_DIR, LOG_DIR, ROOT / ".shell_chat_history"):
         path.mkdir(parents=True, exist_ok=True)
+
+
+def _split_path(value: str) -> list[str]:
+    return [part for part in value.split(os.pathsep) if part]
+
+
+def _path_key(value: str) -> str:
+    return value.casefold() if detect_os() == "windows" else value
+
+
+def _prepend_path_entries(entries: Iterable[str | Path]) -> int:
+    current = _split_path(os.environ.get("PATH", ""))
+    seen = {_path_key(item) for item in current}
+    added: list[str] = []
+    for entry in entries:
+        raw = str(entry).strip()
+        if not raw:
+            continue
+        key = _path_key(raw)
+        if key in seen:
+            continue
+        if Path(raw).exists():
+            added.append(raw)
+            seen.add(key)
+    if added:
+        os.environ["PATH"] = os.pathsep.join([*added, *current])
+    return len(added)
+
+
+def refresh_windows_process_path() -> StepResult:
+    if detect_os() != "windows":
+        return StepResult("windows PATH", True, "OK", "Not required on this OS")
+
+    entries: list[str | Path] = []
+    try:
+        import winreg  # type: ignore
+
+        for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+            with winreg.OpenKey(hive, r"Environment") as key:
+                raw, _kind = winreg.QueryValueEx(key, "Path")
+                entries.extend(_split_path(str(raw)))
+    except Exception:
+        pass
+
+    program_files = os.environ.get("ProgramFiles", "")
+    program_files_x86 = os.environ.get("ProgramFiles(x86)", "")
+    local_app_data = os.environ.get("LOCALAPPDATA", "")
+    app_data = os.environ.get("APPDATA", "")
+    user_profile = os.environ.get("USERPROFILE", "")
+    entries.extend(
+        [
+            Path(program_files) / "nodejs" if program_files else "",
+            Path(program_files_x86) / "nodejs" if program_files_x86 else "",
+            Path(program_files) / "Tesseract-OCR" if program_files else "",
+            Path(local_app_data) / "Microsoft" / "WinGet" / "Links" if local_app_data else "",
+            Path(user_profile) / ".local" / "bin" if user_profile else "",
+            Path(app_data) / "Python" / "Scripts" if app_data else "",
+        ]
+    )
+    added = _prepend_path_entries(entries)
+    return StepResult("windows PATH", True, "OK", f"Refreshed process PATH; added {added} tool location(s)")
+
+
+def _is_bare_command(value: str) -> bool:
+    return (
+        bool(value)
+        and "/" not in value
+        and "\\" not in value
+        and not any(part.isspace() for part in value)
+    )
+
+
+def _subprocess_command(argv: Iterable[str | Path]) -> list[str]:
+    cmd = [str(part) for part in argv]
+    if detect_os() == "windows" and cmd and _is_bare_command(cmd[0]):
+        resolved = shutil.which(cmd[0])
+        if resolved:
+            cmd[0] = resolved
+    return cmd
 
 
 def run_cmd(
@@ -235,7 +348,7 @@ def run_cmd(
     env: dict[str, str] | None = None,
     cwd: Path = ROOT,
 ) -> StepResult:
-    cmd = [str(part) for part in argv]
+    cmd = _subprocess_command(argv)
     started = time.perf_counter()
     try:
         proc = subprocess.run(
@@ -425,11 +538,19 @@ def _npm_project_install(project: Path, label: str, *, build: bool = False) -> l
     package_json = project / "package.json"
     if not package_json.exists():
         return [StepResult(label, True, "OK", f"No package.json found in {project.relative_to(ROOT)}")]
+    refresh_windows_process_path()
     if shutil.which("npm") is None:
         if build and WEB_UI_DIST_INDEX.exists():
             return [StepResult(label, True, "WARN", "npm not found; using existing Shell Web UI build")]
         status = "ERROR" if build else "WARN"
         return [StepResult(label, not build, status, "npm not found; install Node.js LTS and run Repair Shell AI")]
+    node_version = command_version_tuple("node")
+    if not node_supported(node_version):
+        message = node_support_message(node_version) + " Install or upgrade Node.js, then run Repair Shell AI."
+        if build and WEB_UI_DIST_INDEX.exists():
+            return [StepResult(label, True, "WARN", message, {"node_version": node_version})]
+        status = "ERROR" if build else "WARN"
+        return [StepResult(label, not build, status, message, {"node_version": node_version})]
 
     cmd = ["npm", "ci"] if (project / "package-lock.json").exists() else ["npm", "install"]
     results = [run_cmd(cmd, name=f"install {label}", timeout=1200, cwd=project)]
@@ -458,6 +579,28 @@ def web_ui_build_readiness() -> StepResult:
         False,
         "ERROR",
         "shell_web_ui/dist/index.html is missing. Run ONE_CLICK_INSTALL or Repair Shell AI to install npm dependencies and build the renderer.",
+    )
+
+
+def web_ui_toolchain_readiness() -> StepResult:
+    if os.environ.get("SHELL_WEB_UI_URL", "").strip():
+        return StepResult("Shell Web UI toolchain", True, "OK", "Using SHELL_WEB_UI_URL dev renderer")
+    if not (WEB_UI_ROOT / "package.json").exists():
+        return StepResult("Shell Web UI toolchain", False, "ERROR", "shell_web_ui/package.json is missing")
+    refresh_windows_process_path()
+    npm_found = shutil.which("npm") is not None
+    node_version = command_version_tuple("node") if shutil.which("node") else None
+    if npm_found and node_supported(node_version):
+        return StepResult("Shell Web UI toolchain", True, "OK", node_support_message(node_version))
+    issue = "npm not found" if not npm_found else node_support_message(node_version)
+    if WEB_UI_DIST_INDEX.exists():
+        return StepResult("Shell Web UI toolchain", True, "WARN", f"{issue}; existing Web UI build will be used")
+    return StepResult(
+        "Shell Web UI toolchain",
+        False,
+        "ERROR",
+        f"{issue}. Install Node.js 20.19+ or 22.12+, then run Repair Shell AI.",
+        {"node_version": node_version, "npm_found": npm_found},
     )
 
 
@@ -565,12 +708,13 @@ def mac_audio_preflight() -> StepResult:
 
 
 def system_dependency_commands(os_name: str) -> list[list[str]]:
+    refresh_windows_process_path()
     if os_name == "mac" and shutil.which("brew"):
         missing = []
         if preferred_python_executable() is None:
             missing.append("python@3.13")
         missing.extend([pkg for pkg, exe in (("ffmpeg", "ffmpeg"), ("tesseract", "tesseract")) if shutil.which(exe) is None])
-        if (ROOT / "package.json").exists() and shutil.which("node") is None:
+        if (WEB_UI_ROOT / "package.json").exists() and shutil.which("node") is None:
             missing.append("node")
         return [["brew", "install", *missing]] if missing else []
     if os_name == "linux":
@@ -591,8 +735,12 @@ def system_dependency_commands(os_name: str) -> list[list[str]]:
             commands.append([*winget_base, "--id", "UB-Mannheim.TesseractOCR"])
         if shutil.which("uvx") is None:
             commands.append([*winget_base, "--id", "astral-sh.uv"])
-        if (ROOT / "package.json").exists() and shutil.which("node") is None:
-            commands.append([*winget_base, "--id", "OpenJS.NodeJS.LTS"])
+        node_version = command_version_tuple("node") if shutil.which("node") else None
+        if (WEB_UI_ROOT / "package.json").exists() and (
+            shutil.which("node") is None or shutil.which("npm") is None or not node_supported(node_version)
+        ):
+            action = "upgrade" if shutil.which("node") else "install"
+            commands.append(["winget", action, "-e", "--accept-source-agreements", "--accept-package-agreements", "--id", "OpenJS.NodeJS.LTS"])
         return commands
     return []
 
@@ -604,7 +752,9 @@ def install_system_deps(*, yes: bool = False) -> list[StepResult]:
         return [StepResult("system dependencies", True, "WARN", "No supported package manager found or nothing missing")]
     if not yes:
         return [StepResult("system dependencies", True, "WARN", "Skipped system packages; rerun install with --yes to auto-install ffmpeg/OCR")]
-    return [run_cmd(cmd, name=f"system dependency: {cmd[0]}", timeout=1200) for cmd in commands]
+    results = [run_cmd(cmd, name=f"system dependency: {cmd[0]}", timeout=1200) for cmd in commands]
+    results.append(refresh_windows_process_path())
+    return results
 
 
 def check_import(py: Path, module: str, purpose: str, required: bool) -> StepResult:
@@ -621,6 +771,7 @@ def human_dependency_message(name: str, purpose: str) -> str:
 
 def health_report(path: Path | None = None) -> dict[str, object]:
     ensure_runtime_dirs()
+    refresh_windows_process_path()
     path = path or venv_dir()
     py = python_in_venv(path)
     results: list[StepResult] = []
@@ -654,6 +805,7 @@ def health_report(path: Path | None = None) -> dict[str, object]:
                 {"executable": sys.executable, "supported_min": ".".join(map(str, SUPPORTED_PYTHON_MIN))},
             )
         )
+    results.append(web_ui_toolchain_readiness())
     results.append(web_ui_build_readiness())
     for exe, purpose in OPTIONAL_EXECUTABLES.items():
         found = shutil.which(exe) is not None
@@ -713,21 +865,24 @@ def print_health(report: dict[str, object]) -> None:
 
 def install(*, repair: bool = False, yes: bool = False, skip_system: bool = False) -> int:
     ensure_runtime_dirs()
+    refresh_windows_process_path()
     path = venv_dir()
     _print("Shell AI one-click setup")
     _print(f"Root: {ROOT}")
     _print(f"Venv: {path}")
     venv_result = ensure_venv(path, rebuild_unsupported=repair)
     results = [create_env_if_missing(), venv_result]
+    system_deps_checked = False
     if not venv_result.ok and not skip_system:
         results.extend(install_system_deps(yes=yes))
+        system_deps_checked = True
         venv_result = ensure_venv(path, rebuild_unsupported=repair)
         results.append(venv_result)
+    if not skip_system and not system_deps_checked:
+        results.extend(install_system_deps(yes=yes))
     if venv_result.ok and python_in_venv(path).exists():
         results.extend(install_python_deps(path, repair=repair))
         results.extend(install_node_deps())
-    if not skip_system:
-        results.extend(install_system_deps(yes=yes))
     report = health_report(path)
     for result in results:
         _print(f"[{result.status}] {result.name}: {result.message.splitlines()[-1] if result.message else ''}")
@@ -769,6 +924,7 @@ def tail_file(path: Path, lines: int = 80) -> str:
 
 def launch(*, repair_if_needed: bool = False) -> int:
     ensure_runtime_dirs()
+    refresh_windows_process_path()
     path = venv_dir()
     report = health_report(path)
     if not report["ok"]:
