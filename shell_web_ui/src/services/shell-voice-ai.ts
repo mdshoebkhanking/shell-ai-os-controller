@@ -69,9 +69,14 @@ export class GeminiLiveService {
   public analyser: AnalyserNode | null = null
   public apiKey: string
   public isConnected: boolean = false
+  public setupComplete: boolean = false
   public lastError: string = ''
   private isMicMuted: boolean = false
   private failureNotified: boolean = false
+  private intentionalClose: boolean = false
+  private setupReadyPromise: Promise<void> | null = null
+  private resolveSetupReady: (() => void) | null = null
+  private rejectSetupReady: ((error: Error) => void) | null = null
 
   private nextStartTime: number = 0
   public model: string = 'models/gemini-2.5-flash-native-audio-preview-12-2025'
@@ -135,6 +140,9 @@ export class GeminiLiveService {
 
   private notifyVoiceFailure(message: string) {
     this.lastError = message
+    this.rejectSetupReady?.(new Error(message))
+    this.rejectSetupReady = null
+    this.resolveSetupReady = null
     this.emitVoiceStatus('ERROR', message)
     if (!this.failureNotified) {
       this.failureNotified = true
@@ -143,8 +151,15 @@ export class GeminiLiveService {
   }
 
   async connect(): Promise<void> {
+    this.isConnected = false
+    this.setupComplete = false
     this.lastError = ''
     this.failureNotified = false
+    this.intentionalClose = false
+    this.setupReadyPromise = new Promise((resolve, reject) => {
+      this.resolveSetupReady = resolve
+      this.rejectSetupReady = reject
+    })
     this.emitVoiceStatus('CONNECTING')
 
     if (window.electron?.ipcRenderer) {
@@ -314,8 +329,7 @@ ${JSON.stringify(history)}
         await this.audioContext.resume()
       }
 
-      this.isConnected = true
-      this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
+      this.emitVoiceStatus('SETTING UP', 'Gemini Live socket opened; waiting for setupComplete.')
       this.nextStartTime = 0
 
       this.aiResponseBuffer = ''
@@ -1288,9 +1302,6 @@ ${JSON.stringify(history)}
       }
 
       this.socket?.send(JSON.stringify(setupMsg))
-
-      this.startMicrophone()
-      this.startAppWatcher()
     }
 
     this.socket.onmessage = async (event) => {
@@ -1301,6 +1312,17 @@ ${JSON.stringify(history)}
           this.notifyVoiceFailure(this.describeGeminiError(data))
           this.disconnect()
           return
+        }
+
+        if (data.setupComplete) {
+          this.setupComplete = true
+          this.isConnected = true
+          this.resolveSetupReady?.()
+          this.resolveSetupReady = null
+          this.rejectSetupReady = null
+          this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
+          await this.startMicrophone()
+          this.startAppWatcher()
         }
 
         const serverContent = data.serverContent
@@ -1575,8 +1597,9 @@ ${JSON.stringify(history)}
         if (serverContent) {
           if (serverContent.modelTurn?.parts) {
             serverContent.modelTurn.parts.forEach((part: any) => {
-              if (part.inlineData) {
-                this.scheduleAudioChunk(part.inlineData.data)
+              const audioData = part.inlineData?.data || part.audio?.data
+              if (audioData) {
+                this.scheduleAudioChunk(audioData)
               }
             })
           }
@@ -1605,9 +1628,16 @@ ${JSON.stringify(history)}
     }
 
     this.socket.onclose = (event) => {
+      if (this.intentionalClose) {
+        this.emitVoiceStatus('CLOSED', this.lastError)
+        this.disconnect()
+        return
+      }
       const wasConnected = this.isConnected
-      if (wasConnected && !this.failureNotified) {
-        const detail = event.reason || `socket closed with code ${event.code}`
+      const detail = event.reason || `socket closed with code ${event.code}`
+      if (!this.setupComplete && !this.failureNotified) {
+        this.notifyVoiceFailure(`Gemini Live closed before setup completed: ${detail}`)
+      } else if (wasConnected && !this.failureNotified) {
         this.notifyVoiceFailure(`Gemini Live voice stopped unexpectedly: ${detail}`)
       } else if (!this.failureNotified) {
         this.emitVoiceStatus('CLOSED', this.lastError)
@@ -1617,8 +1647,9 @@ ${JSON.stringify(history)}
   }
 
   async waitUntilReady(): Promise<void> {
-    if (this.socket?.readyState === WebSocket.OPEN) return
-    if (this.openPromise) return this.openPromise
+    if (this.setupComplete && this.socket?.readyState === WebSocket.OPEN) return
+    if (this.setupReadyPromise) return this.setupReadyPromise
+    if (this.openPromise) await this.openPromise
     throw new Error('Gemini Live is not connected.')
   }
 
@@ -1645,6 +1676,10 @@ ${JSON.stringify(history)}
   }
 
   startAppWatcher() {
+    if (this.appWatcherInterval) {
+      clearInterval(this.appWatcherInterval)
+      this.appWatcherInterval = null
+    }
     this.appWatcherInterval = setInterval(async () => {
       if (!this.isConnected || !this.socket) return
 
@@ -1740,7 +1775,7 @@ ${JSON.stringify(history)}
       this.workletNode = workletNode
 
       workletNode.port.onmessage = (event) => {
-        if (!this.socket || this.socket.readyState !== WebSocket.OPEN || this.isMicMuted) return
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN || this.isMicMuted || !this.setupComplete) return
 
         const inputData = event.data
         this.rawAudioBuffer.push(inputData)
@@ -1764,7 +1799,7 @@ ${JSON.stringify(history)}
           this.socket.send(
             JSON.stringify({
               realtimeInput: {
-                mediaChunks: [{ mimeType: 'audio/pcm;rate=16000', data: base64Audio }]
+                audio: { mimeType: 'audio/pcm;rate=16000', data: base64Audio }
               }
             })
           )
@@ -1781,6 +1816,9 @@ ${JSON.stringify(history)}
 
   scheduleAudioChunk(base64Audio: string): void {
     if (!this.audioContext || !this.analyser) return
+    if (this.audioContext.state === 'suspended') {
+      void this.audioContext.resume().catch(() => {})
+    }
 
     const float32Data = base64ToFloat32(base64Audio)
     const buffer = this.audioContext.createBuffer(1, float32Data.length, 24000)
@@ -1822,6 +1860,11 @@ ${JSON.stringify(history)}
     }
 
     this.isConnected = false
+    this.setupComplete = false
+    this.intentionalClose = true
+    this.setupReadyPromise = null
+    this.resolveSetupReady = null
+    this.rejectSetupReady = null
     this.stopAllAudio()
 
     if (this.socket) {
