@@ -18,12 +18,16 @@ SHELL_ALLOW_CODE_WRITE=1   Permit creating/overwriting `shell_*.py` files
 SHELL_ALLOW_AGENT_PATCH=1  Additionally permit mutating `agent.py` or other
                            core files (sentinel auto-heal, hotpatch).
                            Implies SHELL_ALLOW_CODE_WRITE.
+SHELL_BLOCK_PROJECT_SCAFFOLD=1
+                           Optional opt-out for managed website/app scaffolds
+                           under `shell_projects/`.
 
 Helpers
 -------
-check_code_write(origin)   -> (ok: bool, reason: str)
-check_agent_patch(origin)  -> (ok: bool, reason: str)
-audit_write(origin, path)  -> appends an entry to the audit log
+check_code_write(origin)       -> (ok: bool, reason: str)
+check_project_scaffold(origin) -> (ok: bool, reason: str)
+check_agent_patch(origin)      -> (ok: bool, reason: str)
+audit_write(origin, path)      -> appends an entry to the audit log
 """
 
 from __future__ import annotations
@@ -53,6 +57,11 @@ _DENY_MESSAGE_AGENT_PATCH = (
     "working tree so rollback is easy."
 )
 
+_DENY_MESSAGE_PROJECT_SCAFFOLD = (
+    "BLOCKED: Managed website/app scaffolding is disabled by SHELL_BLOCK_PROJECT_SCAFFOLD=1.\n"
+    "Remove that setting or set it to 0 to allow Shell to create projects under shell_projects/."
+)
+
 
 def _truthy(value: str | None) -> bool:
     return bool(value) and str(value).strip().lower() in ("1", "true", "yes", "on")
@@ -66,6 +75,10 @@ def agent_patch_allowed() -> bool:
     return _truthy(os.environ.get("SHELL_ALLOW_AGENT_PATCH"))
 
 
+def project_scaffold_allowed() -> bool:
+    return not _truthy(os.environ.get("SHELL_BLOCK_PROJECT_SCAFFOLD"))
+
+
 def check_code_write(origin: str = "unknown") -> tuple[bool, str]:
     """Gate for creating or overwriting `shell_*.py` files from LLM output."""
     if code_write_allowed():
@@ -73,6 +86,15 @@ def check_code_write(origin: str = "unknown") -> tuple[bool, str]:
         return True, "permitted"
     logger.warning("Code-write blocked for %s (SHELL_ALLOW_CODE_WRITE not set).", origin)
     return False, _DENY_MESSAGE_CODE_WRITE
+
+
+def check_project_scaffold(origin: str = "unknown") -> tuple[bool, str]:
+    """Gate for managed website/app projects created under ``shell_projects/``."""
+    if project_scaffold_allowed():
+        logger.info("Project scaffolding permitted for %s.", origin)
+        return True, "permitted"
+    logger.warning("Project scaffolding blocked for %s (SHELL_BLOCK_PROJECT_SCAFFOLD set).", origin)
+    return False, _DENY_MESSAGE_PROJECT_SCAFFOLD
 
 
 def check_agent_patch(origin: str = "unknown") -> tuple[bool, str]:
@@ -98,7 +120,9 @@ def audit_write(origin: str, path: str, note: str = "") -> None:
 __all__ = [
     "code_write_allowed",
     "agent_patch_allowed",
+    "project_scaffold_allowed",
     "check_code_write",
+    "check_project_scaffold",
     "check_agent_patch",
     "audit_write",
 ]

@@ -372,15 +372,16 @@ async def create_fullstack_app_tool(project_name: str, app_type: str = "modern_w
     """
     Scaffolds a PRODUCTION-GRADE Full-Stack Web App using "Shell Neural Architecture".
 
-    SAFETY: Gated by shell_safety_gate.check_code_write — requires
-    SHELL_ALLOW_CODE_WRITE=1 because it writes Python/HTML/JS to disk.
+    SAFETY: Managed project scaffolds are allowed by default under
+    ``shell_projects/``. Core code writes and agent patching remain gated by
+    SHELL_ALLOW_CODE_WRITE / SHELL_ALLOW_AGENT_PATCH.
     """
     try:
         try:
-            from shell_safety_gate import check_code_write, audit_write
+            from shell_safety_gate import check_project_scaffold, code_write_allowed, audit_write
         except Exception:
             return "[ERROR] shell_safety_gate module unavailable; refusing to scaffold."
-        ok, reason = check_code_write(origin="create_fullstack_app_tool")
+        ok, reason = check_project_scaffold(origin="create_fullstack_app_tool")
         if not ok:
             return f"[BLOCKED] {reason}"
 
@@ -417,7 +418,7 @@ async def create_fullstack_app_tool(project_name: str, app_type: str = "modern_w
 
         # 🧠 HYPER-CORTEX ACTIVATION
         blueprint: Dict[str, Any] = {}
-        if NEURAL_ENGINE_ACTIVE and hyper_cortex is not None:
+        if NEURAL_ENGINE_ACTIVE and hyper_cortex is not None and code_write_allowed():
             logger.info("Shell Neuro-Link: Consulting HyperCortex for '%s'...", app_type)
             try:
                 # Run blocking provider calls in a worker thread.
@@ -582,6 +583,7 @@ python app.py
 pause"""
         with open(os.path.join(project_path, "run_app.bat"), "w") as f:
             f.write(launch_bat)
+        audit_write("create_fullstack_app_tool", project_path, f"app_type={app_type[:120]}")
 
         # 🚀 AUTO-LAUNCH IN BACKGROUND
         try:

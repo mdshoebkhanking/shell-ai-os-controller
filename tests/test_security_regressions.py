@@ -70,6 +70,32 @@ def test_workflow_creation_is_gated(monkeypatch):
     assert result.startswith("BLOCKED:")
 
 
+def test_project_scaffold_is_allowed_by_default_without_core_code_write(monkeypatch):
+    import shell_safety_gate
+
+    monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_PROJECT_SCAFFOLD", raising=False)
+
+    code_ok, code_reason = shell_safety_gate.check_code_write("test")
+    scaffold_ok, scaffold_reason = shell_safety_gate.check_project_scaffold("test")
+
+    assert code_ok is False
+    assert "SHELL_ALLOW_CODE_WRITE" in code_reason
+    assert scaffold_ok is True
+    assert scaffold_reason == "permitted"
+
+
+def test_project_scaffold_can_be_disabled(monkeypatch):
+    import shell_safety_gate
+
+    monkeypatch.setenv("SHELL_BLOCK_PROJECT_SCAFFOLD", "1")
+
+    ok, reason = shell_safety_gate.check_project_scaffold("test")
+
+    assert ok is False
+    assert "SHELL_BLOCK_PROJECT_SCAFFOLD" in reason
+
+
 def test_secret_env_values_are_redacted(monkeypatch):
     _install_tool_wrapper_stub(monkeypatch)
     import shell_terminal

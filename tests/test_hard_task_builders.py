@@ -43,9 +43,15 @@ async def test_fullstack_app_builder_writes_project_when_safety_enabled(monkeypa
     class NoopProcess:
         pass
 
+    class FailingHyperCortex:
+        def synergize_project(self, *_args, **_kwargs):
+            raise AssertionError("provider blueprint should stay off unless core code write is enabled")
+
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("SHELL_ALLOW_CODE_WRITE", "1")
-    monkeypatch.setattr(shell_code_engine, "NEURAL_ENGINE_ACTIVE", False)
+    monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_PROJECT_SCAFFOLD", raising=False)
+    monkeypatch.setattr(shell_code_engine, "NEURAL_ENGINE_ACTIVE", True)
+    monkeypatch.setattr(shell_code_engine, "hyper_cortex", FailingHyperCortex())
     monkeypatch.setattr(subprocess, "Popen", lambda argv, **_kwargs: launched.append(list(argv)) or NoopProcess())
     monkeypatch.setattr(threading, "Thread", NoopThread)
     monkeypatch.setattr(webbrowser, "open", lambda _url: True)
@@ -59,3 +65,18 @@ async def test_fullstack_app_builder_writes_project_when_safety_enabled(monkeypa
     assert (project / "static" / "css" / "style.css").exists()
     assert (project / "run_app.bat").exists()
     assert launched
+
+
+@pytest.mark.asyncio
+async def test_fullstack_app_builder_respects_project_scaffold_opt_out(monkeypatch, tmp_path):
+    import shell_code_engine
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    monkeypatch.setenv("SHELL_BLOCK_PROJECT_SCAFFOLD", "1")
+    monkeypatch.setattr(shell_code_engine, "NEURAL_ENGINE_ACTIVE", False)
+
+    result = await shell_code_engine.create_fullstack_app_tool("blocked_app", "todo app")
+
+    assert result.startswith("[BLOCKED]")
+    assert not (tmp_path / "shell_projects" / "blocked_app").exists()

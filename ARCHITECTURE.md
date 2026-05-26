@@ -128,7 +128,7 @@ Shell. Shell's job is only:
 | `shellai/` | New opt-in ShellAI Core package: CLI, agent loop, fabric runtime, models, memory, skills, tools, monitor, cron, daemon. |
 | `core/shellai_bridge.py` | Feature-flagged desktop bridge from UI/agent callers into ShellAI Core. Defaults to classic behavior. |
 | `shell_voice.py` | Single source of truth for voice + persona. Exposes resolver, catalog of 30 Gemini voices, 6 personas, runtime switcher, session registration. |
-| `shell_safety_gate.py` | Gates the dangerous "write LLM code to disk" operations. Refuses by default unless `SHELL_ALLOW_CODE_WRITE` / `SHELL_ALLOW_AGENT_PATCH` is set. Appends audit log. |
+| `shell_safety_gate.py` | Gates dangerous "write LLM code to disk" operations. Core code writes refuse by default unless `SHELL_ALLOW_CODE_WRITE` / `SHELL_ALLOW_AGENT_PATCH` is set. Managed website/app scaffolds under `shell_projects/` are allowed by default and can be disabled with `SHELL_BLOCK_PROJECT_SCAFFOLD=1`. Appends audit log. |
 | `shell_config.py` | `.env` loader + typed getters. Grouped properties (`config.voice`, `config.email`, `config.vad`). |
 | `shell_prompts.py` | `behavior_prompts` (full) and `realtime_prompts` (concise, default for voice sessions). |
 | `shell_logger.py` | `get_logger(name)` helper — tagged console + file output to `shell_ai.log`. |

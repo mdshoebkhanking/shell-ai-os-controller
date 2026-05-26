@@ -218,6 +218,15 @@ SHELL_ALLOW_CODE_WRITE=0        # 1 kar do to create_capability_tool run karega
 SHELL_ALLOW_AGENT_PATCH=0       # 1 kar do to agent.py bhi patch ho sakti hai
 ```
 
+Website/app builder alag managed path use karta hai: `shell_projects/` ke
+andar project scaffold default allowed hai, taaki "website banao" / "app banao"
+fresh install par kaam kare. Agar aap lab machine par ise disable karna chahte
+ho:
+
+```env
+SHELL_BLOCK_PROJECT_SCAFFOLD=1
+```
+
 ⚠️ **Warning:** Enable karne se pehle apna code `git commit` kar do.
 Agar Gemini galat code generate kare to rollback easy rahe.
 
@@ -276,6 +285,10 @@ A: OCR Gemini Vision pe fallback ho jata hai (slower but works). Ya `winget inst
 
 **Q: "EVOLUTION BLOCKED" ya "HOTPATCH BLOCKED" messages?**
 A: Ye safety feature hai — by design OFF. Enable karna ho to `SHELL_ALLOW_CODE_WRITE=1` kar do `.env` mein. Par pehle padho upar ka PART 4.6.
+
+**Q: "website/app scaffold blocked" message aa raha hai?**
+A: Normal install mein website/app scaffold default allowed hota hai. Agar `.env`
+mein `SHELL_BLOCK_PROJECT_SCAFFOLD=1` set hai to usse remove karo ya `0` kar do.
 
 **Q: WhatsApp send nahi ho raha?**
 A: Desktop WhatsApp app use kar rahe ho to ensure `send_whatsapp_message` ke time WhatsApp window khuli ho. Ya Selenium backend try karo: `link_whatsapp_device()` se QR scan karke web session activate karo.

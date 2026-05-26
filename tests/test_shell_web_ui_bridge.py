@@ -76,7 +76,7 @@ def test_image_generation_chat_result_surfaces_gallery_path(monkeypatch, tmp_pat
     assert image_path.name in reply
 
 
-def test_code_write_blocked_reply_names_enable_setting():
+def test_code_write_blocked_reply_names_relevant_safety_settings():
     import shell_web_ui.host as host
 
     QCoreApplication.instance() or QCoreApplication([])
@@ -87,5 +87,6 @@ def test_code_write_blocked_reply_names_enable_setting():
         {"status": "success", "result": "[BLOCKED] Writing LLM-generated Python to disk is disabled by default."},
     )
 
-    assert "Website/app code creation safety settings se blocked hai" in reply
+    assert "Code creation safety settings se blocked hai" in reply
+    assert "SHELL_BLOCK_PROJECT_SCAFFOLD=1" in reply
     assert "SHELL_ALLOW_CODE_WRITE=1" in reply
