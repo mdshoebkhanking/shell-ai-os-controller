@@ -138,13 +138,14 @@ export class GeminiLiveService {
     return `Gemini Live failed: ${message}`
   }
 
-  private notifyVoiceFailure(message: string) {
+  private notifyVoiceFailure(message: string, options: { alertUser?: boolean } = {}) {
+    const shouldAlert = options.alertUser !== false
     this.lastError = message
     this.rejectSetupReady?.(new Error(message))
     this.rejectSetupReady = null
     this.resolveSetupReady = null
     this.emitVoiceStatus('ERROR', message)
-    if (!this.failureNotified) {
+    if (shouldAlert && !this.failureNotified) {
       this.failureNotified = true
       alert(message)
     }
@@ -1314,14 +1315,15 @@ ${JSON.stringify(history)}
           return
         }
 
-        if (data.setupComplete) {
+        if (Object.prototype.hasOwnProperty.call(data, 'setupComplete') && !this.setupComplete) {
           this.setupComplete = true
           this.isConnected = true
+          this.emitVoiceStatus('MIC SETUP', 'Gemini Live ready; opening microphone.')
+          await this.startMicrophone()
           this.resolveSetupReady?.()
           this.resolveSetupReady = null
           this.rejectSetupReady = null
           this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
-          await this.startMicrophone()
           this.startAppWatcher()
         }
 
@@ -1810,7 +1812,10 @@ ${JSON.stringify(history)}
       workletNode.connect(audioContext.destination)
     } catch (err) {
       console.error('Shell microphone initialization failed', err)
-      alert(this.microphoneErrorMessage(err))
+      const message = this.microphoneErrorMessage(err)
+      this.notifyVoiceFailure(message, { alertUser: false })
+      this.disconnect()
+      throw new Error(message)
     }
   }
 
