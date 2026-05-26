@@ -1675,16 +1675,23 @@ ${JSON.stringify(history)}
   }
 
   async startMicrophone(): Promise<void> {
-    if (!this.audioContext) return
+    if (!this.audioContext || this.audioContext.state === 'closed') return
     try {
-      this.mediaStream = await this.openMicrophoneStream()
+      const stream = await this.openMicrophoneStream()
+      const audioContext = this.audioContext
+      if (!audioContext || audioContext.state === 'closed') {
+        stream.getTracks().forEach((track) => track.stop())
+        return
+      }
+      this.mediaStream = stream
 
-      const source = this.audioContext.createMediaStreamSource(this.mediaStream)
-      const inputSampleRate = this.audioContext.sampleRate
+      const source = audioContext.createMediaStreamSource(stream)
+      const inputSampleRate = audioContext.sampleRate
 
-      this.workletNode = new AudioWorkletNode(this.audioContext, 'pcm-processor')
+      const workletNode = new AudioWorkletNode(audioContext, 'pcm-processor')
+      this.workletNode = workletNode
 
-      this.workletNode.port.onmessage = (event) => {
+      workletNode.port.onmessage = (event) => {
         if (!this.socket || this.socket.readyState !== WebSocket.OPEN || this.isMicMuted) return
 
         const inputData = event.data
@@ -1716,8 +1723,8 @@ ${JSON.stringify(history)}
         }
       }
 
-      source.connect(this.workletNode)
-      this.workletNode.connect(this.audioContext.destination)
+      source.connect(workletNode)
+      workletNode.connect(audioContext.destination)
     } catch (err) {
       console.error('Shell microphone initialization failed', err)
       alert(this.microphoneErrorMessage(err))
