@@ -69,7 +69,9 @@ export class GeminiLiveService {
   public analyser: AnalyserNode | null = null
   public apiKey: string
   public isConnected: boolean = false
+  public lastError: string = ''
   private isMicMuted: boolean = false
+  private failureNotified: boolean = false
 
   private nextStartTime: number = 0
   public model: string = 'models/gemini-2.5-flash-native-audio-preview-12-2025'
@@ -121,7 +123,30 @@ export class GeminiLiveService {
     this.nextStartTime = 0
   }
 
+  private emitVoiceStatus(state: string, message = '') {
+    window.dispatchEvent(new CustomEvent('shell-gemini-voice-status', { detail: { state, message } }))
+  }
+
+  private describeGeminiError(data: any): string {
+    const error = data?.error || data
+    const message = error?.message || error?.status || error?.code || JSON.stringify(error)
+    return `Gemini Live failed: ${message}`
+  }
+
+  private notifyVoiceFailure(message: string) {
+    this.lastError = message
+    this.emitVoiceStatus('ERROR', message)
+    if (!this.failureNotified) {
+      this.failureNotified = true
+      alert(message)
+    }
+  }
+
   async connect(): Promise<void> {
+    this.lastError = ''
+    this.failureNotified = false
+    this.emitVoiceStatus('CONNECTING')
+
     if (window.electron?.ipcRenderer) {
       const secureKeys = await window.electron.ipcRenderer.invoke('secure-get-keys')
       this.apiKey = secureKeys?.geminiKey || localStorage?.getItem('shell_custom_api_key') || ''
@@ -262,7 +287,20 @@ ${JSON.stringify(history)}
         'error',
         () => {
           window.clearTimeout(timeout)
-          reject(new Error('Gemini Live connection failed.'))
+          const message = 'Gemini Live connection failed before the voice session opened.'
+          this.lastError = message
+          reject(new Error(message))
+        },
+        { once: true }
+      )
+      this.socket.addEventListener(
+        'close',
+        (event) => {
+          window.clearTimeout(timeout)
+          const detail = event.reason || `socket closed with code ${event.code}`
+          const message = `Gemini Live closed before startup completed: ${detail}`
+          this.lastError = message
+          reject(new Error(message))
         },
         { once: true }
       )
@@ -277,6 +315,7 @@ ${JSON.stringify(history)}
       }
 
       this.isConnected = true
+      this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
       this.nextStartTime = 0
 
       this.aiResponseBuffer = ''
@@ -1259,6 +1298,8 @@ ${JSON.stringify(history)}
         const data = JSON.parse(event.data instanceof Blob ? await event.data.text() : event.data)
 
         if (data.error) {
+          this.notifyVoiceFailure(this.describeGeminiError(data))
+          this.disconnect()
           return
         }
 
@@ -1563,7 +1604,14 @@ ${JSON.stringify(history)}
       } catch (err) {}
     }
 
-    this.socket.onclose = () => {
+    this.socket.onclose = (event) => {
+      const wasConnected = this.isConnected
+      if (wasConnected && !this.failureNotified) {
+        const detail = event.reason || `socket closed with code ${event.code}`
+        this.notifyVoiceFailure(`Gemini Live voice stopped unexpectedly: ${detail}`)
+      } else if (!this.failureNotified) {
+        this.emitVoiceStatus('CLOSED', this.lastError)
+      }
       this.disconnect()
     }
   }

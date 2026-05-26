@@ -76,9 +76,30 @@ const IndexRoot = () => {
   }, [])
 
   useEffect(() => {
+    const onGeminiVoiceStatus = (event: Event) => {
+      const payload = (event as CustomEvent<{ state?: string; message?: string }>).detail || {}
+      const state = String(payload.state || '').toUpperCase()
+      if (!state) return
+      setBackendVoiceState(payload.message ? `${state}: ${payload.message}` : state)
+      if (state === 'ERROR' || state === 'CLOSED') {
+        setIsSystemActive(false)
+        setIsMicMuted(true)
+        stopVision()
+      }
+      if (state === 'LISTENING' || state === 'CONNECTING') {
+        setIsSystemActive(true)
+        setIsMicMuted(false)
+      }
+    }
+    window.addEventListener('shell-gemini-voice-status', onGeminiVoiceStatus)
+    return () => window.removeEventListener('shell-gemini-voice-status', onGeminiVoiceStatus)
+  }, [])
+
+  useEffect(() => {
     const watchdog = setInterval(() => {
       if (usesShellBackend) return
       if (isSystemActive && !shellService.isConnected) {
+        if (shellService.lastError) setBackendVoiceState(`ERROR: ${shellService.lastError}`)
         setIsSystemActive(false)
         setIsMicMuted(true)
         stopVision()
