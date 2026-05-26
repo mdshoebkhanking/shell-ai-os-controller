@@ -23,16 +23,17 @@ SHELL_CONFIG_PROFILE=beginner
 
 ## Important Defaults
 
-Risky flags remain disabled unless explicitly set:
+Only true high-risk mutation/remote flags remain disabled unless explicitly set:
 
 - `SHELL_ALLOW_CODE_WRITE`
 - `SHELL_ALLOW_AGENT_PATCH`
-- `SHELL_ALLOW_TERMINAL_EXEC`
-- `SHELL_ALLOW_WORKFLOW_COMMANDS`
-- `SHELL_ALLOW_WORKFLOW_FILE_WRITE`
 - `SHELL_ALLOW_AGENT_BROWSER_EXEC`
 - `SHELL_ALLOW_OPENCLAW_SKILL_INSTALL`
 - `SHELL_TELEGRAM_ALLOW_TERMINAL`
+
+Normal terminal commands, managed workflow file actions, and app scaffolds are
+available by default; destructive command patterns and path escapes are still
+blocked at runtime.
 
 ## Diagnostics
 

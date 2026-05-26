@@ -19,12 +19,8 @@ TRUTHY = {"1", "true", "yes", "on", "enabled"}
 LOCAL_HOSTS = {"", "127.0.0.1", "localhost", "::1"}
 
 DANGEROUS_FLAGS: dict[str, str] = {
-    "SHELL_ALLOW_CODE_WRITE": "allows LLM-generated code writes",
+    "SHELL_ALLOW_CODE_WRITE": "allows core/runtime code mutation",
     "SHELL_ALLOW_AGENT_PATCH": "allows runtime patching of core agent files",
-    "SHELL_ALLOW_TERMINAL_EXEC": "allows tool-triggered terminal execution",
-    "SHELL_ALLOW_WORKFLOW_COMMANDS": "allows workflow shell commands",
-    "SHELL_ALLOW_WORKFLOW_FILE_WRITE": "allows workflow file writes",
-    "SHELL_ALLOW_AGENT_BROWSER_EXEC": "allows real browser automation",
     "SHELL_ALLOW_OPENCLAW_SKILL_INSTALL": "allows unaudited skill installation",
     "SHELL_ALLOW_ARBITRARY_DOWNLOAD_PATH": "allows downloads outside the managed folder",
     "SHELL_HUB_ALLOW_UNAUTH_REMOTE": "allows unauthenticated remote hub access",

@@ -12,12 +12,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 
 SAFETY_FLAGS: dict[str, str] = {
-    "SHELL_ALLOW_TERMINAL_EXEC": "terminal or PowerShell execution",
-    "SHELL_ALLOW_CODE_WRITE": "LLM-generated code and file writes",
+    "SHELL_ALLOW_CODE_WRITE": "core/runtime code mutation",
     "SHELL_ALLOW_AGENT_PATCH": "runtime agent/core patching",
-    "SHELL_ALLOW_WORKFLOW_COMMANDS": "workflow shell commands",
-    "SHELL_ALLOW_WORKFLOW_FILE_WRITE": "workflow file writes",
-    "SHELL_ALLOW_AGENT_BROWSER_EXEC": "real browser automation",
     "SHELL_TELEGRAM_ALLOW_TERMINAL": "Telegram-triggered terminal execution",
     "SHELL_HUB_ALLOW_UNAUTH_REMOTE": "unauthenticated remote hub access",
     "SHELL_MCP_ALLOW_UNAUTH_REMOTE": "unauthenticated remote MCP access",

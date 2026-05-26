@@ -6,7 +6,7 @@ import json
 def test_computer_control_snapshot_is_redacted_and_policy_gated(monkeypatch):
     from core.computer_control import build_computer_control_snapshot
 
-    monkeypatch.setenv("SHELL_ALLOW_TERMINAL_EXEC", "1")
+    monkeypatch.setenv("SHELL_ALLOW_AGENT_PATCH", "1")
     monkeypatch.setenv("SHELL_HUB_TOKEN", "secret-value-that-must-not-leak")
 
     snapshot = build_computer_control_snapshot(include_catalog=False)
@@ -21,7 +21,7 @@ def test_computer_control_snapshot_is_redacted_and_policy_gated(monkeypatch):
     assert {"app_control", "input_control", "screen_understanding", "clipboard", "desktop_agent_loop", "safety"}.issubset(groups)
     assert groups["desktop_agent_loop"]["status"] == "ready"
     assert groups["safety"]["metadata"]["flags"]
-    assert any(row["key"] == "SHELL_ALLOW_TERMINAL_EXEC" and row["enabled"] is True for row in groups["safety"]["metadata"]["flags"])
+    assert any(row["key"] == "SHELL_ALLOW_AGENT_PATCH" and row["enabled"] is True for row in groups["safety"]["metadata"]["flags"])
     assert "secret-value-that-must-not-leak" not in payload
 
 

@@ -60,6 +60,10 @@ DANGEROUS_PATTERNS = [
     r"\bRemove-Item\s+.*-Recurse.*[cC]:\\",    # PowerShell nuke
     r"\bStop-Computer\b",                       # PowerShell shutdown
     r"\bRestart-Computer\b",                    # PowerShell restart
+    r"\bshutil\.rmtree\s*\(\s*['\"](?:/|~|[a-zA-Z]:\\)",  # Python nuke
+    r"\bos\.remove\s*\(\s*['\"](?:/|~|[a-zA-Z]:\\)",      # Python root removal
+    r"\bos\.system\s*\([^)]*(rm\s+-rf|format\s+[a-zA-Z]:|shutdown|reboot)",
+    r"\bsubprocess\.(?:run|Popen|call)\s*\([^)]*(rm\s+-rf|format\s+[a-zA-Z]:|shutdown|reboot)",
 ]
 
 
@@ -77,12 +81,11 @@ def _truthy(value) -> bool:
 
 
 def _terminal_exec_allowed() -> tuple[bool, str]:
-    if _truthy(os.environ.get("SHELL_ALLOW_TERMINAL_EXEC")):
+    if not _truthy(os.environ.get("SHELL_BLOCK_TERMINAL_EXEC")):
         return True, ""
     return (
         False,
-        "Terminal execution is disabled. Set SHELL_ALLOW_TERMINAL_EXEC=1 "
-        "only for trusted local sessions.",
+        "Terminal execution is disabled by SHELL_BLOCK_TERMINAL_EXEC=1.",
     )
 
 
@@ -230,6 +233,8 @@ async def run_python_tool(code: str) -> str:
 
         import sys
         python_exe = sys.executable
+        if _is_dangerous(code):
+            return "BLOCKED: This Python code is flagged as dangerous and was not executed."
 
         proc = await asyncio.create_subprocess_exec(
             python_exe, "-c", code,

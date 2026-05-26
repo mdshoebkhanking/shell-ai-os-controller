@@ -94,7 +94,8 @@ def test_secure_sandbox_tools_and_existing_python_tool(monkeypatch, tmp_path):
     assert direct["ok"] is True
     assert "4" in direct["stdout"]
 
-    routed = asyncio.run(shell_terminal.run_python_tool.__wrapped__("print('routed')"))
+    run_python = getattr(shell_terminal.run_python_tool, "__wrapped__", shell_terminal.run_python_tool)
+    routed = asyncio.run(run_python("print('routed')"))
     assert "Sandbox OK" in routed
     assert "routed" in routed
 
@@ -103,13 +104,14 @@ def test_execute_code_tool_uses_sandbox_when_enabled(monkeypatch, tmp_path):
     monkeypatch.setenv("SHELL_SECURE_SANDBOX_ENABLED", "1")
     monkeypatch.setenv("SHELL_SECURE_SANDBOX_ROOT", str(tmp_path))
     monkeypatch.setenv("SHELL_SECURE_SANDBOX_AUDIT", str(tmp_path / "audit.jsonl"))
-    workspace = tmp_path / "workspace"
+    monkeypatch.chdir(tmp_path)
+    workspace = tmp_path / "shell_workspace"
     workspace.mkdir()
     (workspace / "script.py").write_text("print('file sandbox')\n", encoding="utf-8")
 
     import shell_code_engine
 
-    result = asyncio.run(shell_code_engine.execute_code_tool.__wrapped__("script.py", str(workspace)))
+    result = asyncio.run(shell_code_engine.execute_code_tool.__wrapped__("script.py"))
 
     assert "Sandbox OK" in result
     assert "file sandbox" in result

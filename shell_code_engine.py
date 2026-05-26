@@ -29,6 +29,21 @@ def _sanitize_workspace_filename(filename: str) -> tuple[bool, str]:
     return True, filename
 
 
+def _workspace_code_path(filename: str, path: str | None = None) -> tuple[str | None, str | None, str]:
+    workspace_root = os.path.realpath(os.path.join(os.getcwd(), "shell_workspace"))
+    subdir = str(path or "").strip()
+    if subdir:
+        candidate_dir = os.path.realpath(subdir if os.path.isabs(subdir) else os.path.join(workspace_root, subdir))
+    else:
+        candidate_dir = workspace_root
+    if not (candidate_dir == workspace_root or candidate_dir.startswith(workspace_root + os.sep)):
+        return None, None, f"resolved directory escapes shell_workspace: {candidate_dir}"
+    full_path = os.path.realpath(os.path.join(candidate_dir, filename))
+    if not (full_path == candidate_dir or full_path.startswith(candidate_dir + os.sep)):
+        return None, None, f"resolved path escapes target directory: {full_path}"
+    return candidate_dir, full_path, ""
+
+
 def _safe_dict(value: Any) -> Dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
@@ -212,8 +227,8 @@ async def write_code_tool(filename: str, content: str, path: str = None) -> str:
     Creates or overwrites a code file with provided content.
     Includes pre-save syntax validation.
 
-    SAFETY: Gated by shell_safety_gate.check_code_write — requires
-    SHELL_ALLOW_CODE_WRITE=1 in .env. Path traversal is rejected.
+    SAFETY: Allowed by default for managed writes under ``shell_workspace``.
+    Path traversal is rejected. Core/runtime code mutation remains gated.
 
     Args:
         filename: Name of the file (e.g., 'hello.py', 'index.html').
@@ -241,14 +256,11 @@ async def write_code_tool(filename: str, content: str, path: str = None) -> str:
             except SyntaxError as e:
                 return f"❌ CODE WRITE BLOCKED: Prevented saving broken code. SyntaxError in {filename} line {e.lineno}: {e.msg}\nFix this before saving."
 
-        # Default workspace if no path
-        workspace_dir = path if path else os.path.join(os.getcwd(), "shell_workspace")
+        workspace_dir, full_path, path_error = _workspace_code_path(filename, path)
+        if path_error:
+            return f"❌ Save refused: {path_error}"
+        assert workspace_dir is not None and full_path is not None
         os.makedirs(workspace_dir, exist_ok=True)
-
-        full_path = os.path.realpath(os.path.join(workspace_dir, filename))
-        # Double-check the realpath didn't escape the workspace via symlinks.
-        if not full_path.startswith(os.path.realpath(workspace_dir)):
-            return f"❌ Save refused: resolved path escapes workspace: {full_path}"
 
         with open(full_path, "w", encoding="utf-8") as f:
             f.write(content)
@@ -268,11 +280,25 @@ async def execute_code_tool(filename: str, path: str = None) -> str:
         filename: File to run (e.g., 'script.py').
         path: Directory where file exists.
     """
-    workspace_dir = path if path else os.path.join(os.getcwd(), "shell_workspace")
-    full_path = os.path.join(workspace_dir, filename)
+    ok, reason = _sanitize_workspace_filename(filename)
+    if not ok:
+        return f"❌ Invalid filename: {reason}"
+    workspace_dir, full_path, path_error = _workspace_code_path(filename, path)
+    if path_error:
+        return f"❌ Execution refused: {path_error}"
+    assert workspace_dir is not None and full_path is not None
     
     if not os.path.exists(full_path):
         return f"❌ File not found: {full_path}"
+    try:
+        from shell_terminal import _is_dangerous
+
+        with open(full_path, "r", encoding="utf-8", errors="replace") as handle:
+            content_preview = handle.read(20000)
+        if _is_dangerous(content_preview):
+            return "❌ Execution refused: file content is flagged as dangerous."
+    except Exception:
+        pass
 
     try:
         from core.secure_sandbox import secure_sandbox_enabled

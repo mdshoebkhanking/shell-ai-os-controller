@@ -7,14 +7,14 @@ Python source to disk and even mutate agent.py. When the Gemini response
 is wrong or adversarially manipulated, this becomes a full arbitrary-code-
 execution path into the running Shell instance.
 
-These operations are now disabled by default and require an explicit
-opt-in through environment variables. Every write is logged to
-`.shell_safety_audit.log` next to agent.py.
+Core/runtime mutation is disabled by default and requires an explicit opt-in
+through environment variables. Workspace-local writes are allowed by default
+and still audited.
 
 Env flags
 ---------
-SHELL_ALLOW_CODE_WRITE=1   Permit creating/overwriting `shell_*.py` files
-                           from tools like `create_capability_tool`.
+SHELL_ALLOW_CODE_WRITE=1   Permit core/runtime code mutation from tools like
+                           `create_capability_tool`.
 SHELL_ALLOW_AGENT_PATCH=1  Additionally permit mutating `agent.py` or other
                            core files (sentinel auto-heal, hotpatch).
                            Implies SHELL_ALLOW_CODE_WRITE.
@@ -42,11 +42,11 @@ logger = logging.getLogger("shell_safety_gate")
 AUDIT_LOG = Path(__file__).parent / ".shell_safety_audit.log"
 
 _DENY_MESSAGE_CODE_WRITE = (
-    "BLOCKED: Writing LLM-generated Python to disk is disabled by default.\n"
-    "Reason: Gemini output is not guaranteed safe; accidental or adversarial\n"
-    "prompts could install a backdoor. To enable this for a trusted session,\n"
-    "set SHELL_ALLOW_CODE_WRITE=1 in .env and restart. Review the generated\n"
-    "code manually before opting in."
+    "BLOCKED: Core/runtime code mutation is disabled by default.\n"
+    "Reason: changing Shell modules or generated capabilities can damage the\n"
+    "running system. Normal workspace code saves and managed app scaffolds are\n"
+    "allowed. To enable core mutation for a trusted session, set\n"
+    "SHELL_ALLOW_CODE_WRITE=1 in .env and restart."
 )
 
 _DENY_MESSAGE_AGENT_PATCH = (
@@ -61,6 +61,10 @@ _DENY_MESSAGE_PROJECT_SCAFFOLD = (
     "BLOCKED: Managed website/app scaffolding is disabled by SHELL_BLOCK_PROJECT_SCAFFOLD=1.\n"
     "Remove that setting or set it to 0 to allow Shell to create projects under shell_projects/."
 )
+
+_WORKSPACE_CODE_WRITE_ORIGINS = {
+    "write_code_tool",
+}
 
 
 def _truthy(value: str | None) -> bool:
@@ -80,7 +84,10 @@ def project_scaffold_allowed() -> bool:
 
 
 def check_code_write(origin: str = "unknown") -> tuple[bool, str]:
-    """Gate for creating or overwriting `shell_*.py` files from LLM output."""
+    """Gate for code writes, blocking only runtime/core mutation by default."""
+    if str(origin or "").strip() in _WORKSPACE_CODE_WRITE_ORIGINS:
+        logger.info("Workspace code-write permitted for %s.", origin)
+        return True, "permitted"
     if code_write_allowed():
         logger.info("Code-write permitted for %s.", origin)
         return True, "permitted"

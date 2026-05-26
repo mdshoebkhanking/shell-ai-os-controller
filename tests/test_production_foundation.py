@@ -34,7 +34,7 @@ def test_gateway_blocks_unready_dangerous_tool(monkeypatch):
     from shell_tool_gateway import execute_tool_sync
 
     monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
-    result = execute_tool_sync("shell_code_engine:write_code_tool", {"filename": "x.py", "content": "print(1)"})
+    result = execute_tool_sync("shell_evolution:create_capability_tool", {"name": "x", "description": "test"})
 
     assert result["status"] == "error"
     assert result["state"] == "BLOCKED_BY_SAFETY"
@@ -92,15 +92,14 @@ def test_production_guard_blocks_dangerous_flags():
     report = audit_production_environment(
         {
             "SHELL_PRODUCTION_MODE": "1",
-            "SHELL_ALLOW_TERMINAL_EXEC": "1",
-            "SHELL_ALLOW_CODE_WRITE": "0",
+            "SHELL_ALLOW_AGENT_PATCH": "1",
         },
         root=Path.cwd(),
         check_assets=False,
     )
 
     assert report["status"] == "fail"
-    assert any("SHELL_ALLOW_TERMINAL_EXEC" in item for item in report["blockers"])
+    assert any("SHELL_ALLOW_AGENT_PATCH" in item for item in report["blockers"])
 
 
 def test_production_guard_redacts_secret_values():

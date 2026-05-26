@@ -221,11 +221,19 @@ SHELL_ALLOW_AGENT_PATCH=0       # 1 kar do to agent.py bhi patch ho sakti hai
 Website/app builder alag managed path use karta hai: `shell_projects/` ke
 andar project scaffold default allowed hai, taaki "website banao" / "app banao"
 fresh install par kaam kare. Agar aap lab machine par ise disable karna chahte
-ho:
+ho, ya terminal/workflow ko locked-down mode mein rakhna chahte ho:
 
 ```env
 SHELL_BLOCK_PROJECT_SCAFFOLD=1
+SHELL_BLOCK_TERMINAL_EXEC=1
+SHELL_BLOCK_WORKFLOW_COMMANDS=1
+SHELL_BLOCK_WORKFLOW_FILE_WRITE=1
+SHELL_BLOCK_WORKFLOW_FILE_READ=1
 ```
+
+Normal terminal/workflow commands default allowed hain; Shell destructive
+patterns jaise disk format, shutdown, `rm -rf /`, path escape, aur core patching
+ko phir bhi block karta hai.
 
 ⚠️ **Warning:** Enable karne se pehle apna code `git commit` kar do.
 Agar Gemini galat code generate kare to rollback easy rahe.

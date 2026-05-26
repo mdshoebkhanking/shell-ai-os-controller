@@ -175,19 +175,12 @@ def _requirements_for(item: dict[str, Any]) -> tuple[list[str], list[str], list[
     if "instagram" in blob:
         apis.append("INSTAGRAM_USERNAME|INSTAGRAM_PASSWORD")
         online_state = "online"
-    if any(word in blob for word in ("terminal", "powershell", "execute_code", "run_command", "shell command")):
-        permissions.append("SHELL_ALLOW_TERMINAL_EXEC")
-    if any(word in blob for word in ("write_code", "create_capability", "clone_module")):
+    # Terminal and workspace code tools are ready by default; their runtime
+    # implementations block destructive commands and path escapes directly.
+    if any(word in blob for word in ("create_capability", "clone_module")):
         permissions.append("SHELL_ALLOW_CODE_WRITE")
     if any(word in blob for word in ("hotpatch", "rollback_evolution", "agent_patch")):
         permissions.append("SHELL_ALLOW_AGENT_PATCH")
-    if "workflow" in blob and "command" in blob:
-        permissions.append("SHELL_ALLOW_WORKFLOW_COMMANDS")
-    if "workflow" in blob and "write" in blob:
-        permissions.append("SHELL_ALLOW_WORKFLOW_FILE_WRITE")
-    if "workflow" in blob and "read" in blob:
-        permissions.append("SHELL_ALLOW_WORKFLOW_FILE_READ")
-
     return platforms, sorted(set(dependencies)), sorted(set(apis)), sorted(set(permissions)), fallback_available, online_state
 
 

@@ -31,43 +31,51 @@ def test_downloader_blocks_loopback_and_path_escape(monkeypatch, tmp_path):
     assert Path(safe_path).is_relative_to(tmp_path)
 
 
-def test_workflow_dangerous_actions_are_gated(monkeypatch, tmp_path):
+def test_workflow_only_blocks_dangerous_or_escaping_actions(monkeypatch, tmp_path):
     _install_tool_wrapper_stub(monkeypatch)
-    monkeypatch.delenv("SHELL_ALLOW_WORKFLOW_COMMANDS", raising=False)
-    monkeypatch.delenv("SHELL_ALLOW_WORKFLOW_FILE_WRITE", raising=False)
-    monkeypatch.delenv("SHELL_ALLOW_WORKFLOW_FILE_READ", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_WORKFLOW_COMMANDS", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_WORKFLOW_FILE_WRITE", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_WORKFLOW_FILE_READ", raising=False)
 
+    import brain.automation.engine as workflow_mod
     from brain.automation.engine import WorkflowEngine
 
-    out_file = tmp_path / "blocked.txt"
+    monkeypatch.setattr(workflow_mod, "WORKFLOW_DIR", str(tmp_path / "workflows"))
+    monkeypatch.setattr(workflow_mod, "WORKFLOW_FILES_DIR", str(tmp_path / "workflow_files"))
     engine = WorkflowEngine()
     engine.workflows = {
         "x": {
             "name": "x",
             "steps": [
-                {"id": "cmd", "action": "run_command", "params": {"command": "echo hi"}},
-                {"id": "read", "action": "read_file", "params": {"filename": ".env"}},
-                {"id": "write", "action": "write_file", "params": {"filename": str(out_file), "content": "x"}},
+                {"id": "cmd", "action": "run_command", "params": {"command": "rm -rf /"}},
+                {"id": "write", "action": "write_file", "params": {"filename": "../blocked.txt", "content": "x"}},
+                {"id": "safe_write", "action": "write_file", "params": {"filename": "ok.txt", "content": "safe"}},
+                {"id": "safe_read", "action": "read_file", "params": {"filename": "ok.txt"}},
             ],
         }
     }
 
     report = asyncio.run(engine.execute_workflow("x"))
-    assert "workflow shell commands are disabled" in report
-    assert "workflow file reads are disabled" in report
-    assert "workflow file writes are disabled" in report
-    assert not out_file.exists()
+    assert "flagged as dangerous" in report
+    assert "path escapes managed workflow files directory" in report
+    assert "File written:" in report
+    assert "safe" in report
+    assert (tmp_path / "workflow_files" / "ok.txt").exists()
 
 
-def test_workflow_creation_is_gated(monkeypatch):
+def test_workflow_creation_writes_managed_definition_by_default(monkeypatch, tmp_path):
     _install_tool_wrapper_stub(monkeypatch)
-    monkeypatch.delenv("SHELL_ALLOW_WORKFLOW_FILE_WRITE", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_WORKFLOW_FILE_WRITE", raising=False)
 
+    import brain.automation.engine as workflow_mod
     from brain.automation.engine import WorkflowEngine
 
+    monkeypatch.setattr(workflow_mod, "WORKFLOW_DIR", str(tmp_path / "workflows"))
+    monkeypatch.setattr(workflow_mod, "WORKFLOW_FILES_DIR", str(tmp_path / "workflow_files"))
     engine = WorkflowEngine()
     result = engine.create_workflow("../escape", "bad", [])
-    assert result.startswith("BLOCKED:")
+    assert "created" in result
+    assert (tmp_path / "workflows" / "escape.json").exists()
 
 
 def test_project_scaffold_is_allowed_by_default_without_core_code_write(monkeypatch):
@@ -80,7 +88,7 @@ def test_project_scaffold_is_allowed_by_default_without_core_code_write(monkeypa
     scaffold_ok, scaffold_reason = shell_safety_gate.check_project_scaffold("test")
 
     assert code_ok is False
-    assert "SHELL_ALLOW_CODE_WRITE" in code_reason
+    assert "Core/runtime code mutation" in code_reason
     assert scaffold_ok is True
     assert scaffold_reason == "permitted"
 
@@ -94,6 +102,49 @@ def test_project_scaffold_can_be_disabled(monkeypatch):
 
     assert ok is False
     assert "SHELL_BLOCK_PROJECT_SCAFFOLD" in reason
+
+
+def test_terminal_allows_safe_commands_by_default_and_blocks_damage(monkeypatch):
+    import shell_terminal
+
+    monkeypatch.delenv("SHELL_ALLOW_TERMINAL_EXEC", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_TERMINAL_EXEC", raising=False)
+    run_command = getattr(shell_terminal.run_command_tool, "__wrapped__", shell_terminal.run_command_tool)
+
+    safe = asyncio.run(run_command("echo shell-ok"))
+    dangerous = asyncio.run(run_command("rm -rf /"))
+
+    assert "shell-ok" in safe
+    assert dangerous.startswith("BLOCKED:")
+
+
+def test_workspace_code_write_allowed_by_default_but_path_escape_blocked(monkeypatch, tmp_path):
+    import shell_code_engine
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    write_code = getattr(shell_code_engine.write_code_tool, "__wrapped__", shell_code_engine.write_code_tool)
+
+    saved = asyncio.run(write_code("hello.py", "print('hi')"))
+    escaped = asyncio.run(write_code("escape.py", "print('bad')", path=str(tmp_path.parent)))
+
+    assert "Code Saved" in saved
+    assert (tmp_path / "shell_workspace" / "hello.py").exists()
+    assert "Save refused" in escaped
+
+
+def test_execute_code_blocks_dangerous_workspace_content(monkeypatch, tmp_path):
+    import shell_code_engine
+
+    monkeypatch.chdir(tmp_path)
+    workspace = tmp_path / "shell_workspace"
+    workspace.mkdir()
+    (workspace / "bad.py").write_text("import os\nos.system('rm -rf /')\n", encoding="utf-8")
+    execute_code = getattr(shell_code_engine.execute_code_tool, "__wrapped__", shell_code_engine.execute_code_tool)
+
+    result = asyncio.run(execute_code("bad.py"))
+
+    assert "Execution refused" in result
 
 
 def test_secret_env_values_are_redacted(monkeypatch):

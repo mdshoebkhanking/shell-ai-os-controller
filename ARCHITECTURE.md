@@ -238,8 +238,9 @@ version does not expose any of those, the new voice is queued into
 
 ## Safety gates (post Phase 2)
 
-Any code-writing tool **must** call `shell_safety_gate.check_code_write`
-(or the stricter `check_agent_patch`) before touching disk:
+Workspace-local code writes and managed app scaffolds are allowed by default,
+but runtime/core mutation must call `shell_safety_gate.check_code_write`
+(or the stricter `check_agent_patch`) before touching Shell modules:
 
 ```
 create_capability_tool  ──┐

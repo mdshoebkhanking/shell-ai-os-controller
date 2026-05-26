@@ -375,7 +375,7 @@
     </tr>
     <tr>
       <td>Self-writing/evolution tools by default</td>
-      <td>Dangerous writes are intentionally blocked by safety flags.</td>
+      <td>Core/runtime mutation is intentionally blocked by safety flags.</td>
       <td>Use only after enabling <code>SHELL_ALLOW_CODE_WRITE</code> or <code>SHELL_ALLOW_AGENT_PATCH</code>.</td>
     </tr>
   </table>
@@ -497,19 +497,19 @@
     </tr>
     <tr>
       <td><code>SHELL_ALLOW_CODE_WRITE</code></td>
-      <td>New code/tool files write karne ki permission.</td>
+      <td>Shell runtime/core modules mutate karne ki permission.</td>
     </tr>
     <tr>
       <td><code>SHELL_ALLOW_AGENT_PATCH</code></td>
       <td><code>agent.py</code> patch/hotpatch karne ki permission.</td>
     </tr>
     <tr>
-      <td><code>SHELL_ALLOW_TERMINAL_EXEC</code></td>
-      <td>Terminal/PowerShell/Python execution tools ko allow karta hai.</td>
+      <td><code>SHELL_BLOCK_TERMINAL_EXEC</code></td>
+      <td>Terminal/PowerShell/Python execution tools ko locked-down machines par disable karta hai.</td>
     </tr>
     <tr>
-      <td><code>SHELL_ALLOW_WORKFLOW_COMMANDS</code></td>
-      <td>Workflow se shell commands allow karta hai.</td>
+      <td><code>SHELL_BLOCK_WORKFLOW_COMMANDS</code></td>
+      <td>Workflow shell commands ko locked-down machines par disable karta hai.</td>
     </tr>
   </table>
   <div class="warn">Simple rule for kid demo: dangerous toggles off rakho. Demo me calculator, chat, catalog, settings, and safe local tools dikhana best hai.</div>

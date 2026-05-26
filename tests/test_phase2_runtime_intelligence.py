@@ -143,7 +143,7 @@ def test_safety_policy_classifies_shell_execution_as_dangerous(monkeypatch, tmp_
     policy.audit("run shell command", decision)
 
     assert decision.action_class == ActionClass.DANGEROUS
-    assert decision.allowed is False
+    assert decision.allowed is True
     assert (tmp_path / "audit.log").exists()
 
 
@@ -173,18 +173,18 @@ def test_runtime_policy_reduces_concurrency_under_pressure():
     assert policy.allow_heavy_tasks is False
 
 
-def test_gateway_records_reputation_for_blocked_tool(monkeypatch, tmp_path):
+def test_gateway_records_reputation_for_workspace_code_write(monkeypatch, tmp_path):
     from core.tools.reputation import ToolReputationStore
     from shell_tool_gateway import execute_tool_sync
 
     reputation_path = tmp_path / "reputation.json"
     monkeypatch.setenv("SHELL_TOOL_REPUTATION_PATH", str(reputation_path))
     monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    monkeypatch.chdir(tmp_path)
 
     result = execute_tool_sync("shell_code_engine:write_code_tool", {"filename": "x.py", "content": "print(1)"})
     rep = ToolReputationStore(reputation_path).get("shell_code_engine:write_code_tool")
 
-    assert result["status"] == "error"
-    assert result["state"] == "BLOCKED_BY_SAFETY"
-    assert rep.failures == 1
-
+    assert result["status"] == "success"
+    assert (tmp_path / "shell_workspace" / "x.py").exists()
+    assert rep.successes == 1

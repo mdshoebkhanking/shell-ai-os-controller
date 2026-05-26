@@ -49,18 +49,20 @@ class SafetyPolicy:
             reasons.append("critical system mutation")
         elif any(word in text for word in ("terminal", "powershell", "shell", "execute", "command")):
             action_class = ActionClass.DANGEROUS
-            flags.append("SHELL_ALLOW_TERMINAL_EXEC")
-            reasons.append("command execution")
-        elif any(word in text for word in ("write_code", "hotpatch", "self_patch", "agent_patch", "workflow")):
+            reasons.append("command execution; destructive patterns remain blocked at runtime")
+        elif any(word in text for word in ("hotpatch", "self_patch", "agent_patch")):
             action_class = ActionClass.DANGEROUS
             flags.append("SHELL_ALLOW_CODE_WRITE")
-            reasons.append("code or workflow mutation")
+            reasons.append("core/runtime mutation")
+        elif any(word in text for word in ("write_code", "workflow")):
+            action_class = ActionClass.CAUTION
+            reasons.append("managed workspace mutation")
         elif any(word in text for word in ("send_email", "whatsapp", "telegram", "post", "upload")):
             action_class = ActionClass.CAUTION
             reasons.append("external communication")
 
         missing = [flag for flag in flags if str(os.environ.get(flag, "")).lower() not in {"1", "true", "yes", "on"}]
-        allowed = action_class in {ActionClass.SAFE, ActionClass.CAUTION} and not missing
+        allowed = action_class in {ActionClass.SAFE, ActionClass.CAUTION, ActionClass.DANGEROUS} and not missing
         requires_confirmation = action_class in {ActionClass.CAUTION, ActionClass.DANGEROUS, ActionClass.CRITICAL}
         if missing:
             reasons.append(f"missing safety flag(s): {', '.join(missing)}")
@@ -78,4 +80,3 @@ class SafetyPolicy:
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)
         with self.audit_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
-

@@ -10,6 +10,7 @@ from datetime import datetime
 
 logger = logging.getLogger("shell_workflow")
 WORKFLOW_DIR = "brain/automation/workflows"
+WORKFLOW_FILES_DIR = "shell_workspace/workflow_files"
 
 
 def _truthy(value) -> bool:
@@ -17,15 +18,15 @@ def _truthy(value) -> bool:
 
 
 def _workflow_command_allowed() -> bool:
-    return _truthy(os.environ.get("SHELL_ALLOW_WORKFLOW_COMMANDS"))
+    return not _truthy(os.environ.get("SHELL_BLOCK_WORKFLOW_COMMANDS"))
 
 
 def _workflow_file_write_allowed() -> bool:
-    return _truthy(os.environ.get("SHELL_ALLOW_WORKFLOW_FILE_WRITE"))
+    return not _truthy(os.environ.get("SHELL_BLOCK_WORKFLOW_FILE_WRITE"))
 
 
 def _workflow_file_read_allowed() -> bool:
-    return _truthy(os.environ.get("SHELL_ALLOW_WORKFLOW_FILE_READ"))
+    return not _truthy(os.environ.get("SHELL_BLOCK_WORKFLOW_FILE_READ"))
 
 
 def _blocked(message: str, state: Dict, report: List[str], step_id: str) -> None:
@@ -49,6 +50,24 @@ def _workflow_filename(name: str) -> str:
         raise ValueError("workflow name must contain at least one letter or number")
     return f"{slug.lower()}.json"
 
+
+def _workflow_file_path(filename: str) -> tuple[str | None, str]:
+    root = os.path.realpath(WORKFLOW_FILES_DIR)
+    raw = str(filename or "").strip() or "output.txt"
+    candidate = os.path.realpath(raw if os.path.isabs(raw) else os.path.join(root, raw))
+    if not (candidate == root or candidate.startswith(root + os.sep)):
+        return None, f"path escapes managed workflow files directory: {candidate}"
+    return candidate, ""
+
+
+def _dangerous_command(command: str) -> bool:
+    try:
+        from shell_terminal import _is_dangerous
+
+        return _is_dangerous(command)
+    except Exception:
+        return bool(re.search(r"\b(rm\s+-rf|format\s+[a-z]:|shutdown|reboot|mkfs|clear-disk)\b", command, re.I))
+
 class WorkflowEngine:
     """
     No-Code Automation Engine V2 — 15+ action types.
@@ -63,6 +82,7 @@ class WorkflowEngine:
 
     def _ensure_dir(self):
         os.makedirs(WORKFLOW_DIR, exist_ok=True)
+        os.makedirs(WORKFLOW_FILES_DIR, exist_ok=True)
 
     def load_workflows(self):
         if not os.path.exists(WORKFLOW_DIR): return
@@ -82,8 +102,7 @@ class WorkflowEngine:
         """Create a new workflow definition."""
         if not _workflow_file_write_allowed():
             return (
-                "BLOCKED: workflow creation writes files. "
-                "Set SHELL_ALLOW_WORKFLOW_FILE_WRITE=1 only for trusted workflows."
+                "BLOCKED: workflow file writes are disabled by SHELL_BLOCK_WORKFLOW_FILE_WRITE=1."
             )
         wf = {
             "name": name,
@@ -132,15 +151,21 @@ class WorkflowEngine:
                 if action_type == "run_command":
                     if not _workflow_command_allowed():
                         _blocked(
-                            "BLOCKED: workflow shell commands are disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_COMMANDS=1 only for trusted workflows.",
+                            "BLOCKED: workflow shell commands are disabled by SHELL_BLOCK_WORKFLOW_COMMANDS=1.",
+                            state, report, step_id,
+                        )
+                        continue
+                    command = params.get("command", "echo hello")
+                    if _dangerous_command(command):
+                        _blocked(
+                            f"BLOCKED: workflow command is flagged as dangerous: {command}",
                             state, report, step_id,
                         )
                         continue
 
                     # Run shell command
                     proc = await asyncio.create_subprocess_shell(
-                        params.get("command", "echo hello"),
+                        command,
                         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
                     )
                     stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
@@ -149,33 +174,42 @@ class WorkflowEngine:
                 elif action_type == "write_file":
                     if not _workflow_file_write_allowed():
                         _blocked(
-                            "BLOCKED: workflow file writes are disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_FILE_WRITE=1 only for trusted workflows.",
+                            "BLOCKED: workflow file writes are disabled by SHELL_BLOCK_WORKFLOW_FILE_WRITE=1.",
                             state, report, step_id,
                         )
                         continue
 
                     content = params.get("content", "")
                     filename = params.get("filename", "output.txt")
-                    with open(filename, 'w', encoding='utf-8') as f:
+                    safe_path, path_error = _workflow_file_path(filename)
+                    if path_error:
+                        _blocked(f"BLOCKED: workflow file write {path_error}", state, report, step_id)
+                        continue
+                    assert safe_path is not None
+                    os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+                    with open(safe_path, 'w', encoding='utf-8') as f:
                         f.write(content)
-                    result = f"File written: {filename} ({len(content)} chars)"
+                    result = f"File written: {safe_path} ({len(content)} chars)"
 
                 elif action_type == "read_file":
                     if not _workflow_file_read_allowed():
                         _blocked(
-                            "BLOCKED: workflow file reads are disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_FILE_READ=1 only for trusted workflows.",
+                            "BLOCKED: workflow file reads are disabled by SHELL_BLOCK_WORKFLOW_FILE_READ=1.",
                             state, report, step_id,
                         )
                         continue
 
                     filename = params.get("filename", "")
-                    if os.path.exists(filename):
-                        with open(filename, 'r', encoding='utf-8', errors='ignore') as f:
+                    safe_path, path_error = _workflow_file_path(filename)
+                    if path_error:
+                        _blocked(f"BLOCKED: workflow file read {path_error}", state, report, step_id)
+                        continue
+                    assert safe_path is not None
+                    if os.path.exists(safe_path):
+                        with open(safe_path, 'r', encoding='utf-8', errors='ignore') as f:
                             result = f.read()[:2000]
                     else:
-                        result = f"File not found: {filename}"
+                        result = f"File not found: {safe_path}"
 
                 elif action_type == "wait":
                     seconds = int(params.get("seconds", 1))
@@ -185,8 +219,7 @@ class WorkflowEngine:
                 elif action_type == "speak":
                     if not _workflow_command_allowed():
                         _blocked(
-                            "BLOCKED: workflow TTS shell command is disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_COMMANDS=1 only for trusted workflows.",
+                            "BLOCKED: workflow TTS shell command is disabled by SHELL_BLOCK_WORKFLOW_COMMANDS=1.",
                             state, report, step_id,
                         )
                         continue
@@ -271,8 +304,7 @@ class WorkflowEngine:
                 elif action_type == "notification":
                     if not _workflow_command_allowed():
                         _blocked(
-                            "BLOCKED: workflow notification shell command is disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_COMMANDS=1 only for trusted workflows.",
+                            "BLOCKED: workflow notification shell command is disabled by SHELL_BLOCK_WORKFLOW_COMMANDS=1.",
                             state, report, step_id,
                         )
                         continue
@@ -292,8 +324,7 @@ class WorkflowEngine:
                 elif action_type == "clipboard_copy":
                     if not _workflow_command_allowed():
                         _blocked(
-                            "BLOCKED: workflow clipboard shell command is disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_COMMANDS=1 only for trusted workflows.",
+                            "BLOCKED: workflow clipboard shell command is disabled by SHELL_BLOCK_WORKFLOW_COMMANDS=1.",
                             state, report, step_id,
                         )
                         continue
@@ -312,17 +343,22 @@ class WorkflowEngine:
                 elif action_type == "append_file":
                     if not _workflow_file_write_allowed():
                         _blocked(
-                            "BLOCKED: workflow file writes are disabled. "
-                            "Set SHELL_ALLOW_WORKFLOW_FILE_WRITE=1 only for trusted workflows.",
+                            "BLOCKED: workflow file writes are disabled by SHELL_BLOCK_WORKFLOW_FILE_WRITE=1.",
                             state, report, step_id,
                         )
                         continue
 
                     filename = params.get("filename", "output.txt")
                     content = params.get("content", "")
-                    with open(filename, 'a', encoding='utf-8') as f:
+                    safe_path, path_error = _workflow_file_path(filename)
+                    if path_error:
+                        _blocked(f"BLOCKED: workflow file append {path_error}", state, report, step_id)
+                        continue
+                    assert safe_path is not None
+                    os.makedirs(os.path.dirname(safe_path), exist_ok=True)
+                    with open(safe_path, 'a', encoding='utf-8') as f:
                         f.write(content + "\n")
-                    result = f"Appended to {filename}"
+                    result = f"Appended to {safe_path}"
 
                 else:
                     result = f"Unknown action: {action_type}"

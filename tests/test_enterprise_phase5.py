@@ -26,11 +26,11 @@ def test_enterprise_config_profiles_are_safe_and_redacted():
 def test_config_validation_blocks_beginner_risky_flags():
     report = validate_environment({
         "SHELL_CONFIG_PROFILE": "beginner",
-        "SHELL_ALLOW_TERMINAL_EXEC": "1",
+        "SHELL_ALLOW_AGENT_PATCH": "1",
     })
     data = report.to_dict()
     assert data["status"] == "fail"
-    assert any(issue["key"] == "SHELL_ALLOW_TERMINAL_EXEC" for issue in data["issues"])
+    assert any(issue["key"] == "SHELL_ALLOW_AGENT_PATCH" for issue in data["issues"])
 
 
 def test_config_validation_requires_telegram_allowlist_for_remote_control():
