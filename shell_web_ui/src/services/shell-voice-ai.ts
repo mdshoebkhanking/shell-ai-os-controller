@@ -1627,12 +1627,57 @@ ${JSON.stringify(history)}
     }, 3000)
   }
 
+  private async openMicrophoneStream(): Promise<MediaStream> {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Browser microphone API is unavailable in this Shell host.')
+    }
+
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: {
+          channelCount: { ideal: 1 },
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      })
+    } catch (preferredError) {
+      console.warn('Preferred microphone constraints failed; retrying with default audio.', preferredError)
+      try {
+        return await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (fallbackError) {
+        throw fallbackError || preferredError
+      }
+    }
+  }
+
+  private microphoneErrorMessage(err: unknown): string {
+    const error = err as Error & { constraint?: string }
+    const name = error?.name || 'MicrophoneError'
+    const detailParts = [name]
+    if (error?.constraint) detailParts.push(`constraint=${error.constraint}`)
+    if (error?.message) detailParts.push(error.message)
+    const detail = detailParts.join(': ')
+
+    if (name === 'NotAllowedError' || name === 'SecurityError') {
+      return `Microphone permission denied. Windows Settings > Privacy > Microphone me desktop apps access ON karo, phir Shell restart karo. (${detail})`
+    }
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+      return `No microphone device found by Shell's embedded browser. DroidCam ko Windows default recording device banao, phir Shell restart karo. (${detail})`
+    }
+    if (name === 'NotReadableError' || name === 'TrackStartError') {
+      return `Microphone is visible but busy/unreadable. DroidCam/Zoom/Chrome/Discord close karke DroidCam reconnect karo, phir Shell restart karo. (${detail})`
+    }
+    if (name === 'OverconstrainedError') {
+      return `Microphone rejected the requested audio format. Shell retried with default audio, but Windows still rejected it. (${detail})`
+    }
+    return `Microphone access denied or failed to initialize. (${detail})`
+  }
+
   async startMicrophone(): Promise<void> {
     if (!this.audioContext) return
     try {
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, sampleRate: 16000 }
-      })
+      this.mediaStream = await this.openMicrophoneStream()
 
       const source = this.audioContext.createMediaStreamSource(this.mediaStream)
       const inputSampleRate = this.audioContext.sampleRate
@@ -1674,7 +1719,8 @@ ${JSON.stringify(history)}
       source.connect(this.workletNode)
       this.workletNode.connect(this.audioContext.destination)
     } catch (err) {
-      alert('Microphone access denied or failed to initialize.')
+      console.error('Shell microphone initialization failed', err)
+      alert(this.microphoneErrorMessage(err))
     }
   }
 
