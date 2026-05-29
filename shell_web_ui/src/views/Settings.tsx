@@ -24,6 +24,7 @@ import {
   RiRocketLine,
   RiTelegramLine
 } from 'react-icons/ri'
+import { normalizeGeminiApiKey } from '../services/api-key-utils'
 
 interface SettingsProps {
   isSystemActive: boolean
@@ -115,7 +116,13 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       window.electron.ipcRenderer.invoke('get-app-version').then((v) => setAppVersion(v))
       window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
         if (!keys || typeof keys !== 'object') return
-        if (keys.geminiKey) setGeminiKey(keys.geminiKey)
+        if (keys.geminiKey) {
+          const normalizedGeminiKey = normalizeGeminiApiKey(keys.geminiKey)
+          if (normalizedGeminiKey) {
+            setGeminiKey(normalizedGeminiKey)
+            localStorage.setItem('shell_custom_api_key', normalizedGeminiKey)
+          }
+        }
         if (keys.groqKey) setGroqKey(keys.groqKey)
         if (keys.hfKey) setHfKey(keys.hfKey)
         if (keys.tavilyKey) setTavilyKey(keys.tavilyKey)
@@ -246,7 +253,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   }
 
   const saveApiKeys = async () => {
-    localStorage.setItem('shell_custom_api_key', geminiKey)
+    const normalizedGeminiKey = normalizeGeminiApiKey(geminiKey)
+    setGeminiKey(normalizedGeminiKey)
+    localStorage.setItem('shell_custom_api_key', normalizedGeminiKey)
     localStorage.setItem('shell_groq_api_key', groqKey)
     localStorage.setItem('shell_hf_api_key', hfKey)
     localStorage.setItem('shell_tavily_api_key', tavilyKey)
@@ -267,7 +276,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     if (window.electron?.ipcRenderer) {
       try {
         const result = await window.electron.ipcRenderer.invoke('secure-save-keys', {
-          geminiKey,
+          geminiKey: normalizedGeminiKey,
           groqKey,
           hfKey,
           tavilyKey,

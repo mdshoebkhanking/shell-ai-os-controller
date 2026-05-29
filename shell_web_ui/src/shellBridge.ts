@@ -1,3 +1,5 @@
+import { normalizeGeminiApiKey } from './services/api-key-utils'
+
 type Listener = (event: unknown, payload?: unknown) => void
 
 interface ShellCallResult {
@@ -216,18 +218,45 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
       return '1.0.0'
     case 'save-core-memory':
     case 'secure-save-keys': {
+      const saved: string[] = []
       if (args[0] && typeof args[0] === 'object') {
         const payload = args[0] as Record<string, unknown>
-        if ('telegramToken' in payload) localStorage.setItem('shell_telegram_bot_token', String(payload.telegramToken || ''))
-        if ('telegramAllowedChatIds' in payload) localStorage.setItem('shell_telegram_allowed_chat_ids', String(payload.telegramAllowedChatIds || ''))
+        const storageMap: Record<string, string> = {
+          groqKey: 'shell_groq_api_key',
+          hfKey: 'shell_hf_api_key',
+          tavilyKey: 'shell_tavily_api_key',
+          livekitKey: 'shell_livekit_api_key',
+          livekitSecret: 'shell_livekit_api_secret',
+          livekitUrl: 'shell_livekit_url',
+          openaiKey: 'shell_openai_api_key',
+          openrouterKey: 'shell_openrouter_api_key',
+          mistralKey: 'shell_mistral_api_key',
+          googleSearchKey: 'shell_google_search_api_key',
+          searchEngineId: 'shell_search_engine_id',
+          weatherKey: 'shell_openweather_api_key',
+          telegramToken: 'shell_telegram_bot_token',
+          telegramAllowedChatIds: 'shell_telegram_allowed_chat_ids'
+        }
+        if ('geminiKey' in payload) {
+          localStorage.setItem('shell_custom_api_key', normalizeGeminiApiKey(payload.geminiKey))
+          saved.push('geminiKey')
+        }
+        Object.entries(storageMap).forEach(([payloadKey, storageKey]) => {
+          if (payloadKey in payload) {
+            localStorage.setItem(storageKey, String(payload[payloadKey] || '').trim())
+            saved.push(payloadKey)
+          }
+        })
         if ('telegramRemoteControlEnabled' in payload) {
           localStorage.setItem('shell_telegram_remote_control_enabled', String(payload.telegramRemoteControlEnabled || '0'))
+          saved.push('telegramRemoteControlEnabled')
         }
         if ('telegramAllowTerminal' in payload) {
           localStorage.setItem('shell_telegram_allow_terminal', String(payload.telegramAllowTerminal || '0'))
+          saved.push('telegramAllowTerminal')
         }
       }
-      return { success: true, source: 'web-fallback', saved: ['telegram-local-settings'] }
+      return { success: true, source: 'web-fallback', saved }
     }
     case 'execute-tool':
       if (String(args[0] || '').includes('shell_telegram:telegram_bot_status')) {

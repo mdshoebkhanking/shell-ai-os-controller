@@ -132,6 +132,10 @@ _ENV_PATH = Path(__file__).parent / ".env"
 _ENV_EXAMPLE_PATH = Path(__file__).parent / ".env.example"
 _write_lock = threading.Lock()
 _VALID_KEY_RE = re.compile(r"^[A-Z_][A-Z0-9_]{1,63}$")
+_ASSIGNMENT_VALUE_RE = re.compile(
+    r"^(?:export\s+|set\s+)?([A-Z_][A-Z0-9_]{1,63})\s*=\s*(.*)$",
+    re.IGNORECASE,
+)
 
 
 def _is_placeholder_secret(value: str) -> bool:
@@ -146,6 +150,43 @@ def _is_placeholder_secret(value: str) -> bool:
 
 def _is_secret_key_name(key: str) -> bool:
     return key.endswith(("_API_KEY", "_API_SECRET", "_TOKEN", "_PASSWORD")) or key in {"GOOGLE_API_KEY", "SHELL_SENDER_PASSWORD"}
+
+
+def _strip_wrapping_quotes(value: str) -> str:
+    out = str(value or "").strip()
+    while len(out) >= 2 and out[0] == out[-1] and out[0] in ('"', "'", "`"):
+        out = out[1:-1].strip()
+    return out
+
+
+def normalize_api_key_value(key: str, value: str) -> str:
+    """Normalize values pasted into the UI without exposing the secret.
+
+    Users often paste a full `.env` line such as `GOOGLE_API_KEY=...` instead
+    of only the key. Store and return only the credential value so runtime
+    clients do not send `GOOGLE_API_KEY=...` as the actual provider key.
+    """
+    key_name = str(key or "").strip().upper()
+    out = _strip_wrapping_quotes("" if value is None else str(value))
+    match = _ASSIGNMENT_VALUE_RE.match(out)
+    if match:
+        pasted_key = match.group(1).upper()
+        aliases = {key_name}
+        if key_name in {"GOOGLE_API_KEY", "GEMINI_API_KEY"}:
+            aliases.update({"GOOGLE_API_KEY", "GEMINI_API_KEY"})
+        if pasted_key in aliases:
+            out = _strip_wrapping_quotes(match.group(2))
+    return out
+
+
+def get_configured_secret_value(*keys: str) -> str:
+    """Return the first non-placeholder configured secret from process env."""
+    for key in keys:
+        key_name = str(key or "").strip().upper()
+        value = normalize_api_key_value(key_name, os.environ.get(key_name, ""))
+        if value and not (_is_secret_key_name(key_name) and _is_placeholder_secret(value)):
+            return value
+    return ""
 
 
 def _known_or_example_keys() -> set[str]:
@@ -275,7 +316,7 @@ def set_api_key(key: str, value: str) -> tuple[bool, str]:
     if key not in allowed:
         return False, f"Key {key!r} is not in the allowlist (.env.example + built-in catalog)."
 
-    value = "" if value is None else str(value)
+    value = normalize_api_key_value(key, value)
     # Reject control characters + newlines that could break the file.
     if any(ch in value for ch in ("\n", "\r", "\x00")):
         return False, "Value contains newline or null byte; rejected."
@@ -309,7 +350,9 @@ def delete_api_key(key: str) -> tuple[bool, str]:
 
 __all__ = [
     "KeyStatus",
+    "get_configured_secret_value",
     "list_api_keys",
+    "normalize_api_key_value",
     "set_api_key",
     "delete_api_key",
 ]

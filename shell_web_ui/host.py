@@ -228,8 +228,18 @@ class ShellBackendBridge(QObject):
         return True
 
     def _secure_keys(self, _args: list[Any]) -> dict[str, str]:
+        try:
+            from shell_api_manager import get_configured_secret_value
+        except Exception:
+            def get_configured_secret_value(*keys: str) -> str:
+                for key in keys:
+                    value = os.environ.get(key, "")
+                    if value:
+                        return value
+                return ""
+
         return {
-            "geminiKey": os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", ""),
+            "geminiKey": get_configured_secret_value("GOOGLE_API_KEY", "GEMINI_API_KEY"),
             "groqKey": os.environ.get("GROQ_API_KEY", ""),
             "hfKey": os.environ.get("HF_API_KEY", ""),
             "tavilyKey": os.environ.get("TAVILY_API_KEY", ""),

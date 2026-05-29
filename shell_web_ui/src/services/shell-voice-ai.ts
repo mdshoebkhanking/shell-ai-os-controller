@@ -60,6 +60,7 @@ import { playSpotifyMusic } from '@renderer/functions/Sporify-manager'
 import { executeSmartDropZones } from '@renderer/functions/DropZone-handler-api'
 import { executeLockSystem } from '@renderer/handlers/LockSystem-handler'
 import AxiosInstance from '@renderer/config/AxiosInstance'
+import { normalizeGeminiApiKey } from './api-key-utils'
 
 export class GeminiLiveService {
   public socket: WebSocket | null = null
@@ -167,16 +168,20 @@ export class GeminiLiveService {
 
     if (window.electron?.ipcRenderer) {
       const secureKeys = await window.electron.ipcRenderer.invoke('secure-get-keys')
-      this.apiKey = secureKeys?.geminiKey || localStorage?.getItem('shell_custom_api_key') || ''
+      this.apiKey =
+        normalizeGeminiApiKey(secureKeys?.geminiKey) ||
+        normalizeGeminiApiKey(localStorage?.getItem('shell_custom_api_key')) ||
+        ''
     } else {
-      this.apiKey = localStorage.getItem('shell_custom_api_key') || ''
+      this.apiKey = normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key')) || ''
     }
 
-    this.apiKey = this.apiKey.trim()
+    this.apiKey = normalizeGeminiApiKey(this.apiKey)
 
     if (!this.apiKey || this.apiKey === '') {
       throw new Error('NO_API_KEY')
     }
+    localStorage.setItem('shell_custom_api_key', this.apiKey)
 
     let cloudUser = {
       name: localStorage.getItem('shell_user_name') || 'Shell User',
@@ -285,7 +290,7 @@ ${JSON.stringify(history)}
     const workletUrl = URL.createObjectURL(blob)
     await this.audioContext.audioWorklet.addModule(workletUrl)
 
-    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${this.apiKey}`
+    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(this.apiKey)}`
     this.socket = new WebSocket(url)
     this.openPromise = new Promise((resolve, reject) => {
       if (!this.socket) {
