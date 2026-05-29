@@ -69,6 +69,11 @@ def main() -> int:
     parser.add_argument("--screens-dir", default="/private/tmp/shell_ui_probe")
     parser.add_argument("--json-out", default="/private/tmp/shell_ui_probe_report.json")
     parser.add_argument("--visible", action="store_true", help="Render using the real display instead of offscreen Qt.")
+    parser.add_argument(
+        "--skip-mcp-smoke",
+        action="store_true",
+        help="Skip the in-chat MCP screenshot command; Windows acceptance checks MCP readiness separately.",
+    )
     args = parser.parse_args()
 
     if not args.visible:
@@ -228,14 +233,20 @@ def main() -> int:
             "added_labels": after_labels - before_labels,
         }
 
-        _send_via_chat(window, app, '/mcp Screenshot {}')
-        _wait_for_workers(window, app)
-        _process_events(app, 0.3)
-        mcp_text = "\n".join(lbl.text() for lbl in window.chat_page.findChildren(QLabel))
-        report["commands"]["windows_mcp_screenshot"] = {
-            "unsupported_message_visible": "requires Windows" in mcp_text,
-            "error_visible": "failed" in mcp_text.lower() or "requires Windows" in mcp_text,
-        }
+        if args.skip_mcp_smoke:
+            report["commands"]["windows_mcp_screenshot"] = {
+                "skipped": True,
+                "reason": "Windows acceptance checks Windows-MCP readiness outside the PyQt UI smoke probe.",
+            }
+        else:
+            _send_via_chat(window, app, '/mcp Screenshot {}')
+            _wait_for_workers(window, app)
+            _process_events(app, 0.3)
+            mcp_text = "\n".join(lbl.text() for lbl in window.chat_page.findChildren(QLabel))
+            report["commands"]["windows_mcp_screenshot"] = {
+                "unsupported_message_visible": "requires Windows" in mcp_text,
+                "error_visible": "failed" in mcp_text.lower() or "requires Windows" in mcp_text,
+            }
 
         _send_via_chat(window, app, "hello")
         _process_events(app, 2.8)

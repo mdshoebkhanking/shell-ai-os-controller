@@ -70,3 +70,25 @@ def test_check_hub_accepts_fast_ready_endpoint(monkeypatch, tmp_path):
     assert result.status == "PASS"
     assert result.details["path"] == "/ready"
     assert calls[0][0].endswith(":5000/ready")
+
+
+def test_ui_probe_skips_mcp_and_reports_json_errors(monkeypatch, tmp_path):
+    captured = {}
+
+    def fake_run_cmd(argv, *, name, timeout=120, env=None):
+        captured["argv"] = [str(part) for part in argv]
+        report_path = Path(captured["argv"][captured["argv"].index("--json-out") + 1])
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text('{"ok": false, "errors": ["backend command worker did not finish"]}', encoding="utf-8")
+        return probe.Check(name, False, "FAIL", "}\n", {"returncode": 1, "command": captured["argv"]})
+
+    monkeypatch.setattr(probe, "ROOT", tmp_path)
+    monkeypatch.setattr(probe, "SCREENS_DIR", tmp_path / "screens")
+    monkeypatch.setattr(probe, "run_cmd", fake_run_cmd)
+
+    result = probe.check_ui_probe(tmp_path / "python.exe", visible=False)
+
+    assert "--skip-mcp-smoke" in captured["argv"]
+    assert result.status == "FAIL"
+    assert "backend command worker did not finish" in result.message
+    assert result.details["probe_errors"] == ["backend command worker did not finish"]

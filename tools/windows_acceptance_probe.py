@@ -182,10 +182,32 @@ def check_ui_probe(py: Path, *, visible: bool) -> Check:
         report_path,
         "--screens-dir",
         SCREENS_DIR,
+        "--skip-mcp-smoke",
     ]
     if visible:
         cmd.append("--visible")
-    return run_cmd(cmd, name="real UI probe", timeout=90)
+    result = run_cmd(cmd, name="real UI probe", timeout=90)
+    details = dict(result.details)
+    details["report"] = str(report_path)
+    if report_path.exists():
+        try:
+            probe_report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
+            details["probe_ok"] = bool(probe_report.get("ok"))
+            details["probe_errors"] = list(probe_report.get("errors") or [])
+            if result.ok:
+                return Check(
+                    "real UI probe",
+                    True,
+                    "PASS",
+                    f"UI smoke passed; report={report_path}",
+                    details,
+                )
+            errors = "; ".join(str(item) for item in (probe_report.get("errors") or []) if str(item).strip())
+            message = errors or f"UI smoke failed; report={report_path}"
+            return Check("real UI probe", False, "FAIL", message, details)
+        except Exception as exc:
+            details["report_parse_error"] = str(exc)
+    return Check("real UI probe", result.ok, result.status, result.message, details)
 
 
 def check_agent_probe(py: Path) -> Check:
