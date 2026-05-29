@@ -110,3 +110,35 @@ def test_production_readiness_rejects_bundled_external_clones(monkeypatch, tmp_p
 
     assert ok is False
     assert "integrations/external" in details
+
+
+def test_production_readiness_tests_use_isolated_shellai_config(monkeypatch):
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("production_readiness_under_test_env", root / "tools" / "production_readiness.py")
+    readiness = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = readiness
+    spec.loader.exec_module(readiness)
+
+    captured = {}
+
+    class Result:
+        returncode = 0
+        stdout = "ok\n"
+
+    def fake_run(*args, **kwargs):
+        captured["env"] = kwargs.get("env")
+        return Result()
+
+    monkeypatch.setenv("SHELLAI_CONFIG", "/Users/example/.shellai/config.json")
+    monkeypatch.setattr(readiness.subprocess, "run", fake_run)
+
+    ok, details = readiness._run_tests()
+
+    assert ok is True
+    assert details == "ok"
+    assert Path(captured["env"]["SHELLAI_CONFIG"]).parts[-3:] == (
+        ".shell_runtime",
+        "production_readiness_shellai",
+        "config.json",
+    )

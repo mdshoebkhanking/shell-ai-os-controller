@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import os
 import subprocess
 import sys
 import time
@@ -36,6 +37,7 @@ version = _package_release.version
 
 REPORT_PATH = ROOT / ".shell_runtime" / "production_readiness_report.json"
 PACKAGE_PATH = ROOT / "dist" / f"shell-ai-os-controller-{version()}.zip"
+TEST_CONFIG_PATH = ROOT / ".shell_runtime" / "production_readiness_shellai" / "config.json"
 
 TEST_COMMAND = [
     sys.executable,
@@ -155,9 +157,12 @@ def _verify_package() -> tuple[bool, str]:
 
 
 def _run_tests() -> tuple[bool, str]:
+    env = os.environ.copy()
+    env["SHELLAI_CONFIG"] = str(TEST_CONFIG_PATH)
     proc = subprocess.run(
         TEST_COMMAND,
         cwd=str(ROOT),
+        env=env,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,

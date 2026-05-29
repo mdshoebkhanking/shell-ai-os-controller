@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from tools.full_validation import build_steps
+import sys
+
+from tools.full_validation import ValidationStep, build_steps, run_step
 
 
 def test_full_validation_gate_covers_release_blockers() -> None:
@@ -32,3 +34,19 @@ def test_full_validation_gate_uses_selected_python() -> None:
 
     assert all(step.command[0] == "/tmp/shell-python" for step in steps)
     assert all(step.required for step in steps)
+
+
+def test_full_validation_steps_use_isolated_shellai_config(monkeypatch) -> None:
+    monkeypatch.setenv("SHELLAI_CONFIG", "/Users/example/.shellai/config.json")
+    probe = (
+        "import os; "
+        "from pathlib import Path; "
+        "path = os.environ.get('SHELLAI_CONFIG', ''); "
+        "print(path); "
+        "parts = Path(path).parts; "
+        "raise SystemExit(0 if parts[-3:] == ('.shell_runtime', 'full_validation_shellai', 'config.json') else 7)"
+    )
+    result = run_step(ValidationStep("env_probe", (sys.executable, "-c", probe), 10))
+
+    assert result["status"] == "pass"
+    assert "full_validation_shellai" in result["output_tail"]

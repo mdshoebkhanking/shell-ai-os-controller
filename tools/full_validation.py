@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -12,6 +13,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REPORT_PATH = ROOT / ".shell_runtime" / "full_validation_report.json"
+VALIDATION_CONFIG_PATH = ROOT / ".shell_runtime" / "full_validation_shellai" / "config.json"
 
 
 @dataclass(frozen=True)
@@ -89,12 +91,19 @@ def build_steps(python: str) -> list[ValidationStep]:
     ]
 
 
+def validation_env() -> dict[str, str]:
+    env = os.environ.copy()
+    env["SHELLAI_CONFIG"] = str(VALIDATION_CONFIG_PATH)
+    return env
+
+
 def run_step(step: ValidationStep) -> dict[str, Any]:
     started = time.perf_counter()
     try:
         proc = subprocess.run(
             step.command,
             cwd=str(ROOT),
+            env=validation_env(),
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
