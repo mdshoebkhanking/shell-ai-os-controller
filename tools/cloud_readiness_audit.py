@@ -48,6 +48,7 @@ REQUIRED_API_MARKERS = [
     "_request_authorized",
     "_socket_authorized",
     "ALLOWED_ORIGINS",
+    "/ready",
     "/health",
     "/capabilities",
     "non-loopback hub bind",

@@ -1,7 +1,49 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { shellService } from '@renderer/services/shell-voice-ai'
+
+const hasWebGLSupport = () => {
+  try {
+    const canvas = document.createElement('canvas')
+    const gl =
+      canvas.getContext('webgl2') ||
+      canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl')
+    return Boolean(gl)
+  } catch {
+    return false
+  }
+}
+
+const SphereFallback = () => (
+  <div className="relative h-full w-full grid place-items-center">
+    <div className="absolute h-[62%] w-[62%] rounded-full border border-emerald-400/40 shadow-[0_0_70px_rgba(16,185,129,0.28)]" />
+    <div className="absolute h-[46%] w-[46%] rounded-full border border-cyan-300/35 shadow-[0_0_45px_rgba(34,211,238,0.24)] animate-pulse" />
+    <div className="absolute h-[28%] w-[28%] rounded-full bg-emerald-300/20 blur-sm" />
+    <div className="relative h-5 w-5 rounded-full bg-emerald-300 shadow-[0_0_30px_rgba(110,231,183,0.9)]" />
+  </div>
+)
+
+class SphereCanvasBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error: unknown) {
+    console.warn('Shell sphere WebGL fallback activated', error)
+  }
+
+  render() {
+    if (this.state.failed) return <SphereFallback />
+    return this.props.children
+  }
+}
 
 const CustomParticleSphere = ({ count = 3000 }) => {
   const mesh = useRef<THREE.Points>(null)
@@ -95,16 +137,31 @@ const CustomParticleSphere = ({ count = 3000 }) => {
 }
 
 const Sphere = () => {
+  const [webglReady, setWebglReady] = useState(true)
+
+  useEffect(() => {
+    setWebglReady(hasWebGLSupport())
+  }, [])
+
+  if (!webglReady) return <SphereFallback />
+
   return (
-    <Canvas
-      camera={{ position: [0, 0, 4.5] }}
-      dpr={[1, 1.5]}
-      performance={{ min: 0.5 }}
-      gl={{ antialias: false, powerPreference: 'high-performance' }}
-    >
-      <ambientLight intensity={0.6} />
-      <CustomParticleSphere />
-    </Canvas>
+    <SphereCanvasBoundary>
+      <Canvas
+        camera={{ position: [0, 0, 4.5] }}
+        dpr={[1, 1.5]}
+        performance={{ min: 0.5 }}
+        gl={{ antialias: false, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => {
+          gl.domElement.addEventListener('webglcontextlost', () => setWebglReady(false), {
+            once: true
+          })
+        }}
+      >
+        <ambientLight intensity={0.6} />
+        <CustomParticleSphere />
+      </Canvas>
+    </SphereCanvasBoundary>
   )
 }
 

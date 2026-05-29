@@ -121,7 +121,7 @@ const ControlCenter = () => {
 
   return (
     <div className="h-full w-full p-4 bg-white/2 grid grid-cols-12 gap-4 overflow-hidden animate-in fade-in zoom-in duration-300">
-      <div className="col-span-12 lg:col-span-4 flex flex-col gap-4 min-h-0">
+      <div className="col-span-12 md:col-span-4 flex flex-col gap-4 min-h-0">
         <div className={`${glassPanel} p-4 shrink-0`}>
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <span className="text-[11px] font-bold tracking-widest text-zinc-300 flex items-center gap-2">
@@ -218,7 +218,7 @@ const ControlCenter = () => {
         </div>
       </div>
 
-      <div className="col-span-12 lg:col-span-8 min-h-0">
+      <div className="col-span-12 md:col-span-8 min-h-0">
         <div className={`${glassPanel} h-full p-5 flex flex-col gap-4 overflow-y-auto scrollbar-small`}>
           {selected ? (
             <>

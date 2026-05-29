@@ -36,6 +36,27 @@ def _wait_for_workers(window, app, timeout_s: float = 12.0) -> None:
     raise TimeoutError("backend command worker did not finish")
 
 
+def _wait_for_platform_status(window, app, timeout_s: float = 8.0) -> None:
+    page = getattr(window, "system_page", None)
+    if page is None:
+        return
+    try:
+        page.refresh_platform_status()
+    except Exception:
+        pass
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        app.processEvents()
+        status = ""
+        try:
+            status = str(page._platform_status.text() or "")
+        except Exception:
+            status = ""
+        if status and status != "Checking":
+            return
+        time.sleep(0.03)
+
+
 def _send_via_chat(window, app, text: str) -> None:
     window.chat_page._input.setPlainText(text)
     _process_events(app, 0.05)
@@ -101,7 +122,8 @@ def main() -> int:
             }
 
         window._on_page_change(2)
-        _process_events(app, 1.0)
+        _wait_for_platform_status(window, app)
+        _process_events(app, 0.2)
         system_text = "\n".join(lbl.text() for lbl in window.system_page.findChildren(QLabel))
         report["commands"]["system_platform_status"] = {
             "panel_visible": "AI OS Status" in system_text,

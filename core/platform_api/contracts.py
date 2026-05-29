@@ -202,6 +202,7 @@ class PlatformAPIContract:
     @staticmethod
     def default_routes() -> list[ApiRouteSpec]:
         return [
+            ApiRouteSpec("ready.read", "GET", "/ready", [ApiScope.STATUS_READ], description="Fast local process readiness for launchers and acceptance probes."),
             ApiRouteSpec("health.read", "GET", "/health", [ApiScope.STATUS_READ], description="Runtime health and dependency status."),
             ApiRouteSpec("capabilities.read", "GET", "/capabilities", [ApiScope.STATUS_READ], description="Visible tool and runtime capability state."),
             ApiRouteSpec("token.voice", "GET", "/token", [ApiScope.VOICE_TOKEN], description="Ephemeral realtime voice/session token."),

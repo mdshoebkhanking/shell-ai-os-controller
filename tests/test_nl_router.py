@@ -111,6 +111,38 @@ def test_voice_status_route_uses_real_voice_runtime_status_tool():
     assert route["kind"] == "tool"
 
 
+def test_autonomous_run_route_wraps_inner_goal():
+    route = route_natural_command("autonomous run open calculator")
+
+    assert route["tool"] == "shell_autonomous_agent:autonomous_goal_run_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"goal": "open calculator", "dry_run": False, "learn": True, "verify": True, "auto_repair": True}
+
+
+def test_autonomous_preview_route_uses_dry_run():
+    route = route_natural_command("agent preview snake game banao")
+
+    assert route["tool"] == "shell_autonomous_agent:autonomous_goal_run_tool"
+    assert route["args"] == {"goal": "snake game banao", "dry_run": True, "learn": False, "verify": False, "auto_repair": False}
+
+
+def test_autonomous_status_and_skill_routes():
+    status = route_natural_command("autonomy status")
+    skills = route_natural_command("show learned skills")
+
+    assert status["tool"] == "shell_autonomous_agent:autonomous_goal_status_tool"
+    assert status["args"] == {"task_id": "", "limit": 5}
+    assert skills["tool"] == "shell_autonomous_agent:autonomous_skill_list_tool"
+    assert skills["args"] == {"query": "", "limit": 10}
+
+
+def test_autonomous_resume_route():
+    route = route_natural_command("autonomy resume abc123def456")
+
+    assert route["tool"] == "shell_autonomous_agent:autonomous_goal_resume_tool"
+    assert route["args"] == {"task_id": "abc123def456", "dry_run": False, "learn": True, "verify": True, "auto_repair": True}
+
+
 def test_hinglish_photo_generation_routes_to_image_tool():
     route = route_natural_command("neon shell city ki photo banao")
 

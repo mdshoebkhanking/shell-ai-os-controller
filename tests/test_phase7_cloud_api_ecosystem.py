@@ -26,6 +26,7 @@ def test_platform_api_contract_declares_scopes_and_openapi_skeleton():
 
     assert findings == []
     assert openapi["openapi"] == "3.1.0"
+    assert "/ready" in openapi["paths"]
     assert "/health" in openapi["paths"]
     assert contract.authorize("health.read", auth).ok is True
     assert contract.authorize("settings.save", auth).ok is False

@@ -901,13 +901,14 @@ def wait_for_hub(proc: subprocess.Popen, timeout_s: float = 20.0) -> tuple[bool,
         for candidate in [port, "5000", "5001", "5002", "5003"]:
             if not candidate:
                 continue
-            url = f"http://127.0.0.1:{candidate}/health"
-            try:
-                with urllib.request.urlopen(url, timeout=0.5) as resp:
-                    if resp.status == 200:
-                        return True, candidate
-            except Exception:
-                pass
+            for path in ("/ready", "/health"):
+                url = f"http://127.0.0.1:{candidate}{path}"
+                try:
+                    with urllib.request.urlopen(url, timeout=0.5) as resp:
+                        if resp.status == 200:
+                            return True, candidate
+                except Exception:
+                    pass
         time.sleep(0.2)
     return False, "hub did not become healthy"
 

@@ -79,6 +79,38 @@ def test_bootstrap_tail_file_reads_last_lines(tmp_path):
     assert bootstrap.tail_file(path, lines=3) == "7\n8\n9"
 
 
+def test_wait_for_hub_uses_fast_ready_endpoint(monkeypatch, tmp_path):
+    class FakeProcess:
+        def poll(self):
+            return None
+
+    class FakeResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    calls = []
+
+    def fake_urlopen(url, timeout):
+        calls.append((url, timeout))
+        if url.endswith("/ready"):
+            return FakeResponse()
+        raise OSError("health diagnostics not ready yet")
+
+    monkeypatch.setattr(bootstrap, "PORT_HINT", tmp_path / ".shell_hub_port")
+    monkeypatch.setattr(bootstrap.urllib.request, "urlopen", fake_urlopen)
+
+    ok, port = bootstrap.wait_for_hub(FakeProcess(), timeout_s=0.1)
+
+    assert ok is True
+    assert port == "5000"
+    assert calls[0][0].endswith(":5000/ready")
+
+
 def test_windows_launchers_use_modern_diagnostic_path():
     start = open("Start_ShellAI.bat", encoding="utf-8").read()
     one_click = open("ONE_CLICK_INSTALL.bat", encoding="utf-8").read()

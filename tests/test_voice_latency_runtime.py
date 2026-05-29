@@ -30,6 +30,30 @@ def test_tts_speak_reports_no_audio_output(monkeypatch):
     assert speaker._do_speak("hello") is False
 
 
+def test_explicit_system_tts_does_not_use_cloud_voice(monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+
+    from shell_ui.shell_cinematic_full import TTSSpeaker
+
+    speaker = TTSSpeaker()
+    speaker._engine = "system"
+    monkeypatch.setattr(
+        speaker,
+        "_speak_gemini_live_tts",
+        lambda _text: (_ for _ in ()).throw(AssertionError("cloud voice used")),
+    )
+    monkeypatch.setattr(
+        speaker,
+        "_speak_gemini_tts",
+        lambda _text: (_ for _ in ()).throw(AssertionError("cloud voice used")),
+    )
+    monkeypatch.setattr(speaker, "_speak_system", lambda _text: False)
+
+    assert speaker._do_speak("hello") is False
+
+
 def test_tts_warmup_requests_are_deduped(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 

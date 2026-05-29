@@ -84,11 +84,22 @@ def _write_port_hint(port: int):
             f.write(str(port))
     except Exception as _e:
         logger.debug("ignored Exception: %s", _e)
-def _pick_available_port() -> int:
+
+
+def _bind_probe_host(host: str) -> str:
+    value = str(host or "").strip()
+    if not value or value.lower() == "localhost":
+        return "127.0.0.1"
+    return value
+
+
+def _pick_available_port(host: str = "127.0.0.1") -> int:
+    probe_host = _bind_probe_host(host)
+    family = socket.AF_INET6 if ":" in probe_host else socket.AF_INET
     for port in _candidate_ports():
-        test_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        test_sock = socket.socket(family, socket.SOCK_STREAM)
         try:
-            test_sock.bind(("0.0.0.0", port))
+            test_sock.bind((probe_host, port))
             return port
         except OSError:
             continue
@@ -182,6 +193,8 @@ cors.add(_api_keys_item.add_route("DELETE", lambda req: delete_api_key_endpoint(
 _settings_res = app.router.add_resource("/settings")
 cors.add(_settings_res.add_route("GET", lambda req: get_settings_endpoint(req)))
 cors.add(_settings_res.add_route("POST", lambda req: set_settings_endpoint(req)))
+_ready_res = app.router.add_resource("/ready")
+cors.add(_ready_res.add_route("GET", lambda req: ready_endpoint(req)))
 _health_res = app.router.add_resource("/health")
 cors.add(_health_res.add_route("GET", lambda req: health_endpoint(req)))
 _capabilities_res = app.router.add_resource("/capabilities")
@@ -371,6 +384,11 @@ async def health_endpoint(request):
         return web.json_response({"ok": False, "error": str(e)}, status=500)
 
 
+async def ready_endpoint(request):
+    """GET /ready -> cheap process-liveness check for launchers and probes."""
+    return web.json_response({"ok": True, "status": "ready", "ts": time.time()})
+
+
 async def capabilities_endpoint(request):
     """GET /capabilities -> enriched tool/agent/MCP catalog."""
     if not _request_authorized(request):
@@ -441,8 +459,6 @@ if __name__ == '__main__':
     try:
         app.on_startup.append(start_background_tasks)
         app.on_shutdown.append(cleanup_background_tasks)
-        port = _pick_available_port()
-        _write_port_hint(port)
         host = config.get_str("SHELL_HUB_HOST") or "127.0.0.1"
         if not _is_loopback_bind_host(host) and not _hub_token():
             if not _truthy(config.get_str("SHELL_HUB_ALLOW_UNAUTH_REMOTE")):
@@ -451,6 +467,8 @@ if __name__ == '__main__':
                     "Set SHELL_HUB_TOKEN or SHELL_HUB_ALLOW_UNAUTH_REMOTE=1 to override."
                 )
                 host = "127.0.0.1"
+        port = _pick_available_port(host)
+        _write_port_hint(port)
         auth_state = "token auth enabled" if _hub_token() else "no token configured"
         logger.info(f"Shell Hub starting on {host}:{port} ({auth_state}) ...")
         web.run_app(app, host=host, port=port)

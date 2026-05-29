@@ -556,8 +556,18 @@ export default function DashboardView({
     }
   ]
 
+  const visionDisplayLabel = isVideoOn
+    ? visionMode === 'screen'
+      ? 'SCREEN FEED'
+      : 'OPTICAL FEED'
+    : 'OPTICS OFFLINE'
+  const voiceDisplayState =
+    !isSystemActive && ['OFFLINE', 'STOPPED', 'UNKNOWN'].includes(String(voiceEventState || '').toUpperCase())
+      ? 'STANDBY'
+      : voiceEventState
+
   return (
-    <div className="flex-1 p-4 bg-white/2 grid grid-cols-12 gap-4 h-full overflow-y-auto lg:overflow-hidden relative animate-in fade-in zoom-in duration-300 w-full scrollbar-small">
+    <div className="flex-1 p-4 bg-white/2 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative animate-in fade-in zoom-in duration-300 w-full scrollbar-small">
       <div className="hidden lg:flex col-span-3 flex-col gap-4 h-full z-40 overflow-y-auto pr-1 scrollbar-small">
         <div
           className={`${glassPanel} h-32 shrink-0 flex flex-col p-1 overflow-hidden relative group`}
@@ -569,11 +579,7 @@ export default function DashboardView({
             <span
               className={`text-[9px] font-bold tracking-widest ${isVideoOn ? 'text-red-400/80' : 'text-zinc-600'}`}
             >
-              {isVideoOn
-                ? visionMode === 'screen'
-                  ? 'SCREEN FEED'
-                  : 'OPTICAL FEED'
-                : 'OPTICS OFFLINE'}
+              {visionDisplayLabel}
             </span>
           </div>
 
@@ -746,10 +752,13 @@ export default function DashboardView({
         </div>
       </div>
 
-      <div className="col-span-12 lg:col-span-6 relative flex flex-col items-center justify-center min-h-[56vh] lg:min-h-0">
+      <div className="col-span-12 md:col-span-7 lg:col-span-6 relative flex flex-col items-center justify-center min-h-[320px] md:min-h-0">
         <div
-          className={`lg:hidden absolute top-4 right-4 w-32 h-24 ${glassPanel} z-50 overflow-hidden ${isVideoOn ? 'block' : 'hidden'}`}
+          className={`lg:hidden absolute top-4 right-4 w-32 h-28 ${glassPanel} z-50 overflow-hidden ${isVideoOn ? 'block' : 'hidden'}`}
         >
+          <div className="absolute top-2 left-2 z-10 rounded bg-black/60 px-2 py-1 text-[8px] font-bold tracking-widest text-emerald-300">
+            {visionDisplayLabel}
+          </div>
           <video
             ref={setMobileVideoRef}
             className={`w-full h-full object-cover ${visionMode === 'camera' ? '-scale-x-100' : ''}`}
@@ -760,14 +769,14 @@ export default function DashboardView({
         </div>
 
         <div
-          className={`w-[60vh] h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
+          className={`w-[52vh] h-[52vh] md:w-[42vh] md:h-[42vh] lg:w-[60vh] lg:h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
         >
           <Sphere />
         </div>
 
-        <div className="absolute bottom-10 z-50">
+        <div className="absolute bottom-5 md:bottom-8 lg:bottom-10 z-50">
           <div
-            className={`${glassPanel} px-6 py-3 rounded-full flex items-center gap-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]`}
+            className={`${glassPanel} px-4 py-2.5 lg:px-6 lg:py-3 rounded-full flex items-center gap-4 lg:gap-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]`}
           >
             <button
               aria-label="Toggle vision source"
@@ -806,7 +815,7 @@ export default function DashboardView({
         </div>
       </div>
 
-      <div className="col-span-12 lg:col-span-3 flex flex-col overflow-hidden min-h-[360px] lg:min-h-0 lg:h-full z-40">
+      <div className="col-span-12 md:col-span-5 lg:col-span-3 flex flex-col overflow-hidden min-h-[360px] md:min-h-0 md:h-full z-40">
         <div className={`${glassPanel} h-full p-4 flex flex-col gap-3`}>
           <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-2">
             <span className="text-[10px] font-bold tracking-widest text-zinc-400">
@@ -824,7 +833,7 @@ export default function DashboardView({
               <span
                 className={`text-[8px] font-mono ${voiceEventState === 'ERROR' ? 'text-red-400' : isSystemActive ? 'text-emerald-400' : 'text-zinc-500'}`}
               >
-                {voiceEventState}
+                {voiceDisplayState}
               </span>
             </div>
           </div>

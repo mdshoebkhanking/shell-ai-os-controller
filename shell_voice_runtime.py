@@ -367,11 +367,16 @@ class TTSSpeaker(QThread):
         latency_mode = self._latency_mode()
         premium_first = self._premium_voice_first()
         live_requested = engine in {"gemini-live", "gemini-stream", "live", "live-pcm"}
+        cloud_mode_selected = (
+            engine in {"gemini", "cloud"}
+            or live_requested
+            or (voice_mode == "cloud" and engine in {"auto", "fast"})
+        )
 
         if engine in {"openai", "openai-stream", "openai-pcm", "pcm"}:
             return self._speak_openai_streaming_tts(text)
 
-        if engine in {"gemini", "cloud"} or voice_mode == "cloud" or live_requested:
+        if cloud_mode_selected:
             if (live_requested or self._gemini_live_tts_enabled()) and self._speak_gemini_live_tts(text):
                 return True
             if self._stop_requested.is_set():

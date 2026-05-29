@@ -138,19 +138,25 @@ def check_hub(py: Path) -> Check:
                 for port in ports:
                     if not port:
                         continue
-                    try:
-                        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=0.7) as response:
-                            if response.status == 200:
-                                elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
-                                return Check(
-                                    "hub startup",
-                                    True,
-                                    "PASS",
-                                    f"Shell Hub healthy on port {port}",
-                                    {"elapsed_ms": elapsed_ms, "port": port, "log": str(log_path)},
-                                )
-                    except Exception:
-                        pass
+                    for path in ("/ready", "/health"):
+                        try:
+                            with urllib.request.urlopen(f"http://127.0.0.1:{port}{path}", timeout=0.7) as response:
+                                if response.status == 200:
+                                    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
+                                    return Check(
+                                        "hub startup",
+                                        True,
+                                        "PASS",
+                                        f"Shell Hub ready on port {port}",
+                                        {
+                                            "elapsed_ms": elapsed_ms,
+                                            "port": port,
+                                            "path": path,
+                                            "log": str(log_path),
+                                        },
+                                    )
+                        except Exception:
+                            pass
                 time.sleep(0.25)
             tail = ""
             if log_path.exists():

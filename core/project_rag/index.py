@@ -544,16 +544,27 @@ class ProjectRAGIndex:
     def _lexical_scores(query_tokens: list[str], docs_tokens: list[list[str]]) -> list[float]:
         if not query_tokens or not docs_tokens:
             return [0.0 for _ in docs_tokens]
+        fallback_scores = ProjectRAGIndex._fallback_lexical_scores(query_tokens, docs_tokens)
         if importlib.util.find_spec("rank_bm25") is not None:
             try:
                 from rank_bm25 import BM25Okapi  # type: ignore
 
-                return [float(score) for score in BM25Okapi(docs_tokens).get_scores(query_tokens)]
+                bm25_scores = [max(0.0, float(score)) for score in BM25Okapi(docs_tokens).get_scores(query_tokens)]
+                if any(score > 0.0 for score in bm25_scores):
+                    return [
+                        max(bm25_score, fallback_score)
+                        for bm25_score, fallback_score in zip(bm25_scores, fallback_scores)
+                    ]
             except Exception:
                 pass
+        return fallback_scores
+
+    @staticmethod
+    def _fallback_lexical_scores(query_tokens: list[str], docs_tokens: list[list[str]]) -> list[float]:
         doc_count = len(docs_tokens)
         avgdl = sum(len(doc) for doc in docs_tokens) / max(1, doc_count)
-        df = {token: sum(1 for doc in docs_tokens if token in set(doc)) for token in set(query_tokens)}
+        doc_sets = [set(doc) for doc in docs_tokens]
+        df = {token: sum(1 for doc_set in doc_sets if token in doc_set) for token in set(query_tokens)}
         scores: list[float] = []
         k1 = 1.5
         b = 0.75

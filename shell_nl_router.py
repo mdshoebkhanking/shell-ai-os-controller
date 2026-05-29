@@ -434,6 +434,68 @@ def _telegram_route(raw: str, lower: str) -> dict[str, Any] | None:
     return None
 
 
+def _autonomous_route(raw: str, lower: str) -> dict[str, Any] | None:
+    resume_match = re.match(
+        r"^(?:autonomous|autonomy|auto|agentic)\s+resume\s+([a-zA-Z0-9_-]{6,})$|^resume\s+(?:autonomous|autonomy|agentic)\s+([a-zA-Z0-9_-]{6,})$",
+        raw,
+        flags=re.I,
+    )
+    if resume_match:
+        task_id = _strip_quotes(resume_match.group(1) or resume_match.group(2))
+        return _route(
+            "shell_autonomous_agent:autonomous_goal_resume_tool",
+            {"task_id": task_id, "dry_run": False, "learn": True, "verify": True, "auto_repair": True},
+            confidence=0.93,
+        )
+
+    if re.search(
+        r"\b(list|show|dikha|dikhao)\b.*\b(autonomous|autonomy|agentic|learned)\b.*\b(skills?|kaam|tasks?)\b",
+        lower,
+        flags=re.I,
+    ) or re.search(r"\b(learned|autonomous|autonomy|agentic)\s+skills?\b", lower, flags=re.I):
+        return _route("shell_autonomous_agent:autonomous_skill_list_tool", {"query": "", "limit": 10}, confidence=0.94)
+
+    if re.search(
+        r"\b(autonomous|autonomy|agentic)\s+(status|history|run\s+history|runs|report|latest)\b",
+        lower,
+        flags=re.I,
+    ) or re.search(r"\b(status|history|run\s+history|runs|report|latest)\s+(of\s+)?(autonomous|autonomy|agentic)\b", lower, flags=re.I):
+        return _route("shell_autonomous_agent:autonomous_goal_status_tool", {"task_id": "", "limit": 5}, confidence=0.93)
+
+    dry_patterns = (
+        r"^(?:autonomous|autonomy|auto|agentic)\s+(?:plan|preview|dry\s*run)\s+(.+)$",
+        r"^agent\s+(?:plan|preview|dry\s*run)\s+(.+)$",
+    )
+    for pattern in dry_patterns:
+        match = re.match(pattern, raw, flags=re.I | re.S)
+        if match:
+            goal = _strip_quotes(match.group(1))
+            if goal:
+                return _route(
+                    "shell_autonomous_agent:autonomous_goal_run_tool",
+                    {"goal": goal, "dry_run": True, "learn": False, "verify": False, "auto_repair": False},
+                    confidence=0.93,
+                )
+
+    run_patterns = (
+        r"^(?:autonomous|autonomy|auto|agentic)\s+(?:run|execute|do|handle|perform|task|goal)\s+(.+)$",
+        r"^agent\s+(?:run|execute|do|handle|perform)\s+(.+)$",
+        r"^(?:hard|complex)\s+task\s*[:=-]?\s*(.+)$",
+        r"^(?:shell\s+)?(?:khud|apne\s+aap|automatically)\s+(.+)$",
+    )
+    for pattern in run_patterns:
+        match = re.match(pattern, raw, flags=re.I | re.S)
+        if match:
+            goal = _strip_quotes(match.group(1))
+            if goal:
+                return _route(
+                    "shell_autonomous_agent:autonomous_goal_run_tool",
+                    {"goal": goal, "dry_run": False, "learn": True, "verify": True, "auto_repair": True},
+                    confidence=0.93,
+                )
+    return None
+
+
 def route_natural_command(text: str) -> dict[str, Any] | None:
     """Return a backend route for a common natural chat/voice command."""
     raw = _strip_shell_address(text)
@@ -498,6 +560,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     email = _email_route(raw, lower)
     if email:
         return email
+
+    autonomous = _autonomous_route(raw, lower)
+    if autonomous:
+        return autonomous
 
     agent_match = re.match(
         r"^(?:ask|use|run|call)?\s*([a-z ]+?)\s+agent\s*(?:to|for|se|:)?\s*(.*)$",
