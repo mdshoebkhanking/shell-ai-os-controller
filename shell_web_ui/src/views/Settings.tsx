@@ -273,6 +273,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     localStorage.setItem('shell_telegram_remote_control_enabled', telegramRemoteEnabled ? '1' : '0')
     localStorage.setItem('shell_telegram_allow_terminal', telegramAllowTerminal ? '1' : '0')
 
+    let saveMessage = 'Saved locally. Restart Shell AI to apply runtime modules.'
     if (window.electron?.ipcRenderer) {
       try {
         const result = await window.electron.ipcRenderer.invoke('secure-save-keys', {
@@ -295,15 +296,15 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
           telegramAllowTerminal: telegramAllowTerminal ? '1' : '0'
         })
         if (result?.rejected && Object.keys(result.rejected).length) {
-          setApiSaveResult(`Rejected: ${Object.keys(result.rejected).join(', ')}`)
+          saveMessage = `Saved with rejected fields: ${Object.keys(result.rejected).join(', ')}`
         } else {
-          setApiSaveResult(`Saved: ${(result?.saved || []).length} backend keys updated`)
+          saveMessage = `Saved: ${(result?.saved || []).length} backend keys updated. Restart Shell AI to apply.`
         }
-      } catch (e) {}
+      } catch (e: any) {
+        saveMessage = `Save failed: ${e?.message || e}`
+      }
     }
-    alert(
-      'All Neural Uplinks (API Keys) secured locally and in OS Vault. Restart AI modules to apply.'
-    )
+    setApiSaveResult(saveMessage)
   }
 
   const formatToolResponse = (response: any) => {

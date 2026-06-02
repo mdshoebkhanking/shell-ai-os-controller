@@ -141,17 +141,13 @@ export class GeminiLiveService {
     return `Gemini Live failed: ${message}`
   }
 
-  private notifyVoiceFailure(message: string, options: { alertUser?: boolean } = {}) {
-    const shouldAlert = options.alertUser !== false
+  private notifyVoiceFailure(message: string, _options: { alertUser?: boolean } = {}) {
     this.lastError = message
     this.rejectSetupReady?.(new Error(message))
     this.rejectSetupReady = null
     this.resolveSetupReady = null
     this.emitVoiceStatus('ERROR', message)
-    if (shouldAlert && !this.failureNotified) {
-      this.failureNotified = true
-      alert(message)
-    }
+    this.failureNotified = true
   }
 
   async connect(): Promise<void> {

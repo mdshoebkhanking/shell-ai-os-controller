@@ -132,14 +132,16 @@ const IndexRoot = () => {
         setBackendVoiceState('GEMINI LIVE')
         shellService.setMute(false)
       } catch (err: any) {
+        const message =
+          err?.message === 'NO_API_KEY'
+            ? 'Gemini API key missing. Open Settings > API Keys and save a valid Google AI Studio key.'
+            : `Connection failed: ${err?.message || err}`
+        setBackendVoiceState(`ERROR: ${message}`)
         if (err.message === 'NO_API_KEY') {
-          alert(
-            '⚠️ CRITICAL ERROR: Gemini API Key is missing. Please enter it in the Command Center Vault (Settings Tab).'
-          )
-        } else {
-          alert(`Connection failed: ${err.message}`)
+          shellService.lastError = message
         }
         setIsSystemActive(false)
+        setIsMicMuted(true)
       }
     } else {
       if (usesShellBackend) {
@@ -181,11 +183,12 @@ const IndexRoot = () => {
       )
       return true
     } catch (err: any) {
-      if (err?.message === 'NO_API_KEY') {
-        alert('Real Gemini voice ke liye Settings > API Keys mein Gemini API key required hai.')
-      } else {
-        alert(`Real Gemini voice failed: ${err?.message || err}`)
-      }
+      const message =
+        err?.message === 'NO_API_KEY'
+          ? 'Real Gemini voice needs a valid key in Settings > API Keys.'
+          : `Real Gemini voice failed: ${err?.message || err}`
+      setBackendVoiceState(`ERROR: ${message}`)
+      shellService.lastError = message
       return false
     }
   }
