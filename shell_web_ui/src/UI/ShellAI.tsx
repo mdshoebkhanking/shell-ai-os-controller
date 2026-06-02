@@ -1,4 +1,4 @@
-import { useState, useEffect, Suspense, lazy, useCallback } from 'react'
+import { useState, useEffect, Suspense, lazy, useCallback, useRef } from 'react'
 import {
   RiWifiLine,
   RiLayoutGridLine,
@@ -60,9 +60,12 @@ const ShellAI = (props: ShellProps) => {
   const [stats, setStats] = useState<any>(null)
   const [chatHistory, setChatHistory] = useState<any[]>([])
   const [showSourceModal, setShowSourceModal] = useState(false)
+  const historyClearVersionRef = useRef(0)
 
   const fetchHistory = useCallback(async () => {
+    const clearVersion = historyClearVersionRef.current
     const history = await getHistory()
+    if (clearVersion !== historyClearVersionRef.current) return
     if (Array.isArray(history)) setChatHistory(history.slice(-15))
   }, [])
 
@@ -78,6 +81,11 @@ const ShellAI = (props: ShellProps) => {
     const interval = setInterval(fetchHistory, 500)
     return () => clearInterval(interval)
   }, [fetchHistory])
+
+  const handleTranscriptCleared = useCallback(() => {
+    historyClearVersionRef.current += 1
+    setChatHistory([])
+  }, [])
 
   const handleVisionClick = () => {
     setShowSourceModal(true)
@@ -134,7 +142,7 @@ const ShellAI = (props: ShellProps) => {
             stats={stats}
             chatHistory={chatHistory}
             onVisionClick={handleVisionClick}
-            onTranscriptCleared={() => setChatHistory([])}
+            onTranscriptCleared={handleTranscriptCleared}
           />
         </div>
 

@@ -80,7 +80,7 @@ export class GeminiLiveService {
   private rejectSetupReady: ((error: Error) => void) | null = null
 
   private nextStartTime: number = 0
-  public model: string = 'models/gemini-3.1-flash-live-preview'
+  public model: string = 'models/gemini-2.5-flash-native-audio-preview-12-2025'
 
   private aiResponseBuffer: string = ''
   private userInputBuffer: string = ''
@@ -98,8 +98,14 @@ export class GeminiLiveService {
     const systemPrompt = (event as CustomEvent<string>).detail
     if (systemPrompt && this.socket && this.socket.readyState === WebSocket.OPEN) {
       const overrideMsg = {
-        realtimeInput: {
-          text: systemPrompt
+        clientContent: {
+          turns: [
+            {
+              role: 'user',
+              parts: [{ text: systemPrompt }]
+            }
+          ],
+          turnComplete: true
         }
       }
       this.socket.send(JSON.stringify(overrideMsg))
@@ -1674,8 +1680,14 @@ ${JSON.stringify(history)}
     }
     this.socket.send(
       JSON.stringify({
-        realtimeInput: {
-          text: prompt
+        clientContent: {
+          turns: [
+            {
+              role: 'user',
+              parts: [{ text: prompt }]
+            }
+          ],
+          turnComplete: true
         }
       })
     )
@@ -1702,7 +1714,12 @@ ${JSON.stringify(history)}
         if (newClosed.length > 0) msg += `[System Notice]: User CLOSED ${newClosed.join(', ')}. `
 
         msg += ' (Context update only. DO NOT REPLY TO THIS MESSAGE.)'
-        const updateFrame = { realtimeInput: { text: msg } }
+        const updateFrame = {
+          clientContent: {
+            turns: [{ role: 'user', parts: [{ text: msg }] }],
+            turnComplete: true
+          }
+        }
 
         if (this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(updateFrame))
@@ -1717,7 +1734,7 @@ ${JSON.stringify(history)}
     }
 
     try {
-      return await navigator.mediaDevices.getUserMedia({
+      const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           channelCount: { ideal: 1 },
           echoCancellation: true,
@@ -1725,14 +1742,25 @@ ${JSON.stringify(history)}
           autoGainControl: true
         }
       })
+      return this.requireAudioInputStream(stream, 'Preferred microphone')
     } catch (preferredError) {
       console.warn('Preferred microphone constraints failed; retrying with default audio.', preferredError)
       try {
-        return await navigator.mediaDevices.getUserMedia({ audio: true })
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        return this.requireAudioInputStream(stream, 'Default microphone')
       } catch (fallbackError) {
         throw fallbackError || preferredError
       }
     }
+  }
+
+  private requireAudioInputStream(stream: MediaStream, source: string): MediaStream {
+    const audioTracks = stream.getAudioTracks()
+    if (audioTracks.length > 0) return stream
+    stream.getTracks().forEach((track) => track.stop())
+    throw new Error(
+      `${source} returned no audio track. Settings > General me real microphone select karo, Windows input permission/default recording device check karo, phir voice dobara start karo.`
+    )
   }
 
   private microphoneErrorMessage(err: unknown): string {
@@ -1774,6 +1802,7 @@ ${JSON.stringify(history)}
   }
 
   private async choosePreferredMicrophone(initialStream: MediaStream): Promise<MediaStream> {
+    initialStream = this.requireAudioInputStream(initialStream, 'Initial microphone')
     if (!navigator.mediaDevices?.enumerateDevices) return initialStream
 
     try {
@@ -1811,6 +1840,7 @@ ${JSON.stringify(history)}
             autoGainControl: true
           }
         })
+        this.requireAudioInputStream(preferredStream, preferredDevice.label || 'Preferred microphone')
         initialStream.getTracks().forEach((track) => track.stop())
         this.emitVoiceStatus('MIC READY', `Using ${preferredDevice.label || 'preferred microphone'}`)
         return preferredStream
@@ -1842,7 +1872,10 @@ ${JSON.stringify(history)}
   async startMicrophone(): Promise<void> {
     if (!this.audioContext || this.audioContext.state === 'closed') return
     try {
-      const stream = await this.choosePreferredMicrophone(await this.openMicrophoneStream())
+      const stream = this.requireAudioInputStream(
+        await this.choosePreferredMicrophone(await this.openMicrophoneStream()),
+        'Selected microphone'
+      )
       const audioContext = this.audioContext
       if (!audioContext || audioContext.state === 'closed') {
         stream.getTracks().forEach((track) => track.stop())

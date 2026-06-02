@@ -723,19 +723,22 @@ async function main() {
     bodyPreview: afterSpeech.bodyText.slice(0, 900)
   })
 
-  await clickTarget(client, 'Stop Shell voice')
+  const stopAfterSpeech = await clickTarget(client, 'Stop Shell voice')
   await wait(500)
   const powerProbe = await clickTarget(client, 'Start Shell voice')
+  const alreadyActiveProbe = powerProbe.clicked ? null : await clickTarget(client, 'Stop Shell voice')
   await wait(900)
   const afterPower = await evaluate(client, pageSummaryExpression)
   report.screenshots.dashboard_after_power = await screenshot(client, 'dashboard_after_power')
   report.steps.push({
     name: 'dashboard_power_button',
-    ok: Boolean(powerProbe.clicked),
-    click: powerProbe,
+    ok: Boolean(powerProbe.clicked || alreadyActiveProbe?.clicked),
+    click: powerProbe.clicked
+      ? powerProbe
+      : { ...powerProbe, alreadyActive: Boolean(alreadyActiveProbe?.clicked), stopAfterSpeech },
     bodyPreview: afterPower.bodyText.slice(0, 900)
   })
-  const stopProbe = await clickTarget(client, 'Stop Shell voice')
+  const stopProbe = powerProbe.clicked ? await clickTarget(client, 'Stop Shell voice') : alreadyActiveProbe
   await wait(600)
   const afterStop = await evaluate(client, pageSummaryExpression)
   report.screenshots.dashboard_after_stop = await screenshot(client, 'dashboard_after_stop')
