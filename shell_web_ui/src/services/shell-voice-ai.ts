@@ -80,7 +80,7 @@ export class GeminiLiveService {
   private rejectSetupReady: ((error: Error) => void) | null = null
 
   private nextStartTime: number = 0
-  public model: string = 'models/gemini-2.5-flash-native-audio-preview-12-2025'
+  public model: string = 'models/gemini-3.1-flash-live-preview'
 
   private aiResponseBuffer: string = ''
   private userInputBuffer: string = ''
@@ -98,14 +98,8 @@ export class GeminiLiveService {
     const systemPrompt = (event as CustomEvent<string>).detail
     if (systemPrompt && this.socket && this.socket.readyState === WebSocket.OPEN) {
       const overrideMsg = {
-        clientContent: {
-          turns: [
-            {
-              role: 'user',
-              parts: [{ text: systemPrompt }]
-            }
-          ],
-          turnComplete: true
+        realtimeInput: {
+          text: systemPrompt
         }
       }
       this.socket.send(JSON.stringify(overrideMsg))
@@ -1680,14 +1674,8 @@ ${JSON.stringify(history)}
     }
     this.socket.send(
       JSON.stringify({
-        clientContent: {
-          turns: [
-            {
-              role: 'user',
-              parts: [{ text: prompt }]
-            }
-          ],
-          turnComplete: true
+        realtimeInput: {
+          text: prompt
         }
       })
     )
@@ -1714,12 +1702,7 @@ ${JSON.stringify(history)}
         if (newClosed.length > 0) msg += `[System Notice]: User CLOSED ${newClosed.join(', ')}. `
 
         msg += ' (Context update only. DO NOT REPLY TO THIS MESSAGE.)'
-        const updateFrame = {
-          clientContent: {
-            turns: [{ role: 'user', parts: [{ text: msg }] }],
-            turnComplete: true
-          }
-        }
+        const updateFrame = { realtimeInput: { text: msg } }
 
         if (this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(JSON.stringify(updateFrame))

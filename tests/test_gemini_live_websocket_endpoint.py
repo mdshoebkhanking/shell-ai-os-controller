@@ -10,3 +10,12 @@ def test_gemini_live_websocket_uses_official_bidi_endpoint():
     ) in source
     assert "generativelanguage.googleapis.com/v1beta/${modelPath}:BidiGenerateContent" not in source
     assert "new URLSearchParams({ key: this.apiKey })" in source
+
+
+def test_gemini_live_uses_current_live_model_and_realtime_text():
+    source = Path("shell_web_ui/src/services/shell-voice-ai.ts").read_text(encoding="utf-8")
+
+    assert "models/gemini-3.1-flash-live-preview" in source
+    assert "gemini-2.5-flash-native-audio-preview-12-2025" not in source
+    assert "clientContent" not in source
+    assert "realtimeInput: {\n          text:" in source
