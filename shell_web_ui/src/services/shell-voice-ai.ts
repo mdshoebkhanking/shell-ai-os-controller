@@ -113,12 +113,16 @@ export class GeminiLiveService {
   }
 
   private geminiLiveSocketUrl(): string {
-    const modelPath = this.model.replace(/^\/+/, '')
-    const query = new URLSearchParams({
-      key: this.apiKey,
-      alt: 'ws'
-    })
-    return `wss://generativelanguage.googleapis.com/v1beta/${modelPath}:BidiGenerateContent?${query.toString()}`
+    const query = new URLSearchParams({ key: this.apiKey })
+    return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?${query.toString()}`
+  }
+
+  private describeSocketClose(event: CloseEvent): string {
+    const detail = event.reason || `socket closed with code ${event.code}`
+    if (event.code === 1006) {
+      return `${detail}; Google closed the Live API socket without a reason. Verify the API key, Live API access, model support, and network/proxy access.`
+    }
+    return detail
   }
 
   constructor() {
@@ -325,7 +329,7 @@ ${JSON.stringify(history)}
         'close',
         (event) => {
           window.clearTimeout(timeout)
-          const detail = event.reason || `socket closed with code ${event.code}`
+          const detail = this.describeSocketClose(event)
           const message = `Gemini Live closed before startup completed: ${detail}`
           this.lastError = message
           reject(new Error(message))
@@ -1648,7 +1652,7 @@ ${JSON.stringify(history)}
         return
       }
       const wasConnected = this.isConnected
-      const detail = event.reason || `socket closed with code ${event.code}`
+      const detail = this.describeSocketClose(event)
       if (!this.setupComplete && !this.failureNotified) {
         this.notifyVoiceFailure(`Gemini Live closed before setup completed: ${detail}`)
       } else if (wasConnected && !this.failureNotified) {
