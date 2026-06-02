@@ -18,12 +18,18 @@ import SmartDropZonesWidget from './Widgets/SmartZoneWidget'
 
 export type VisionMode = 'camera' | 'screen' | 'none'
 
+type SystemNotice = {
+  title: string
+  message: string
+}
+
 const IndexRoot = () => {
   const [isOverlay, setIsOverlay] = useState(false)
 
   const [isSystemActive, setIsSystemActive] = useState(false)
   const [isMicMuted, setIsMicMuted] = useState(true)
   const [backendVoiceState, setBackendVoiceState] = useState('OFFLINE')
+  const [systemNotice, setSystemNotice] = useState<SystemNotice | null>(null)
   const [voiceRuntime, setVoiceRuntime] = useState<'gemini' | 'backend'>(
     (localStorage.getItem('shell_voice_runtime') as 'gemini' | 'backend') || 'gemini'
   )
@@ -34,8 +40,23 @@ const IndexRoot = () => {
   const processingVideoRef = useRef<HTMLVideoElement>(document.createElement('video'))
   const activeStreamRef = useRef<MediaStream | null>(null)
   const aiIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const lastSystemNoticeRef = useRef('')
   const usesGeminiVoice = voiceRuntime === 'gemini'
   const usesShellBackend = Boolean(window.shellAPI && !usesGeminiVoice)
+
+  const showSystemNotice = (title: string, rawMessage: unknown) => {
+    const message = String(rawMessage || '').trim()
+    if (!message) return
+    const noticeKey = `${title}:${message}`
+    if (noticeKey === lastSystemNoticeRef.current) return
+    lastSystemNoticeRef.current = noticeKey
+    setSystemNotice({ title, message })
+  }
+
+  const clearSystemNotice = () => {
+    lastSystemNoticeRef.current = ''
+    setSystemNotice(null)
+  }
 
   useEffect(() => {
     window.electron.ipcRenderer.on('overlay-mode', (_e, mode) => setIsOverlay(mode))
@@ -48,12 +69,17 @@ const IndexRoot = () => {
     if (!usesShellBackend || !window.shellAPI) return
     const onVoiceStatus = (_event: unknown, payload?: any) => {
       const state = String(payload?.state || 'unknown').toUpperCase()
-      setBackendVoiceState(state)
+      const message = String(payload?.message || payload?.error || '').trim()
+      setBackendVoiceState(message ? `${state}: ${message}` : state)
+      if (state === 'ERROR') {
+        showSystemNotice('Voice failed', message || 'Backend voice runtime unavailable.')
+      }
       if (state === 'ERROR' || state === 'STOPPED') {
         setIsSystemActive(false)
         setIsMicMuted(true)
       }
       if (state === 'LISTENING' || state === 'STARTING') {
+        clearSystemNotice()
         setIsSystemActive(true)
         setIsMicMuted(false)
       }
@@ -82,11 +108,13 @@ const IndexRoot = () => {
       if (!state) return
       setBackendVoiceState(payload.message ? `${state}: ${payload.message}` : state)
       if (state === 'ERROR' || state === 'CLOSED') {
+        if (state === 'ERROR') showSystemNotice('Gemini Live failed', payload.message || 'Voice connection failed.')
         setIsSystemActive(false)
         setIsMicMuted(true)
         stopVision()
       }
       if (state === 'LISTENING' || state === 'CONNECTING') {
+        clearSystemNotice()
         setIsSystemActive(true)
         setIsMicMuted(false)
       }
@@ -99,7 +127,10 @@ const IndexRoot = () => {
     const watchdog = setInterval(() => {
       if (usesShellBackend) return
       if (isSystemActive && !shellService.isConnected) {
-        if (shellService.lastError) setBackendVoiceState(`ERROR: ${shellService.lastError}`)
+        if (shellService.lastError) {
+          setBackendVoiceState(`ERROR: ${shellService.lastError}`)
+          showSystemNotice('Gemini Live failed', shellService.lastError)
+        }
         setIsSystemActive(false)
         setIsMicMuted(true)
         stopVision()
@@ -114,8 +145,9 @@ const IndexRoot = () => {
         if (usesShellBackend) {
           const result = (await window.shellAPI.startVoice()) as any
           if (result?.success === false) {
-            alert(`Voice failed: ${result.message || result.error || 'backend unavailable'}`)
-            setBackendVoiceState('ERROR')
+            const message = result.message || result.error || 'backend unavailable'
+            showSystemNotice('Voice failed', message)
+            setBackendVoiceState(`ERROR: ${message}`)
             setIsSystemActive(false)
             setIsMicMuted(true)
             return
@@ -123,6 +155,7 @@ const IndexRoot = () => {
           setBackendVoiceState('STARTING')
           setIsSystemActive(true)
           setIsMicMuted(false)
+          clearSystemNotice()
           return
         }
         await shellService.connect()
@@ -131,13 +164,15 @@ const IndexRoot = () => {
         setIsMicMuted(false)
         setBackendVoiceState('GEMINI LIVE')
         shellService.setMute(false)
+        clearSystemNotice()
       } catch (err: any) {
         const message =
           err?.message === 'NO_API_KEY'
             ? 'Gemini API key missing. Open Settings > API Keys and save a valid Google AI Studio key.'
             : `Connection failed: ${err?.message || err}`
         setBackendVoiceState(`ERROR: ${message}`)
-        if (err.message === 'NO_API_KEY') {
+        showSystemNotice('Gemini Live failed', message)
+        if (err?.message === 'NO_API_KEY') {
           shellService.lastError = message
         }
         setIsSystemActive(false)
@@ -177,6 +212,7 @@ const IndexRoot = () => {
         setIsMicMuted(false)
         shellService.setMute(false)
         setBackendVoiceState('GEMINI LIVE')
+        clearSystemNotice()
       }
       await shellService.forceSpeak(
         `Speak this naturally in Shell AI voice. Keep it short and Hinglish-friendly: ${text}`
@@ -188,6 +224,7 @@ const IndexRoot = () => {
           ? 'Real Gemini voice needs a valid key in Settings > API Keys.'
           : `Real Gemini voice failed: ${err?.message || err}`
       setBackendVoiceState(`ERROR: ${message}`)
+      showSystemNotice('Real voice failed', message)
       shellService.lastError = message
       return false
     }
@@ -254,7 +291,10 @@ const IndexRoot = () => {
       if (videoTrack) videoTrack.onended = () => stopVision()
     } catch (e: any) {
       if (!activeStreamRef.current) stopVision()
-      alert(`${mode === 'camera' ? 'Camera feed' : 'Screen share'} start nahi ho paya: ${e?.message || e}`)
+      showSystemNotice(
+        mode === 'camera' ? 'Camera failed' : 'Screen share failed',
+        `${mode === 'camera' ? 'Camera feed' : 'Screen share'} start nahi ho paya: ${e?.message || e}`
+      )
     }
   }
 
@@ -309,6 +349,26 @@ const IndexRoot = () => {
           startVision={startVision}
           stopVision={stopVision}
         />
+        {systemNotice && (
+          <div className="absolute right-4 top-4 z-50 w-[min(360px,calc(100vw-24px))] rounded-lg border border-red-500/35 bg-[#120707]/95 p-3 text-red-100 shadow-2xl shadow-red-950/40">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-300">
+                  {systemNotice.title}
+                </div>
+                <div className="mt-2 text-[12px] leading-relaxed text-red-100/90">{systemNotice.message}</div>
+              </div>
+              <button
+                type="button"
+                onClick={clearSystemNotice}
+                className="shrink-0 rounded border border-red-400/30 px-2 py-1 text-[10px] font-bold text-red-100 hover:bg-red-500/20"
+                aria-label="Dismiss notification"
+              >
+                x
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -331,6 +391,24 @@ const IndexRoot = () => {
           speakRealVoice={speakRealVoice}
         />
       </div>
+      {systemNotice && (
+        <div className="absolute right-6 top-16 z-50 w-[min(420px,calc(100vw-32px))] rounded-lg border border-red-500/35 bg-[#120707]/95 p-4 text-red-100 shadow-2xl shadow-red-950/40">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-red-300">{systemNotice.title}</div>
+              <div className="mt-2 text-[12px] leading-relaxed text-red-100/90">{systemNotice.message}</div>
+            </div>
+            <button
+              type="button"
+              onClick={clearSystemNotice}
+              className="shrink-0 rounded border border-red-400/30 px-2 py-1 text-[10px] font-bold text-red-100 hover:bg-red-500/20"
+              aria-label="Dismiss notification"
+            >
+              x
+            </button>
+          </div>
+        </div>
+      )}
       <SmartDropZonesWidget />
       <SemanticWidget />
       <OracleWidget />
