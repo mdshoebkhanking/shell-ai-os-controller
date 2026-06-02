@@ -112,6 +112,15 @@ export class GeminiLiveService {
     }
   }
 
+  private geminiLiveSocketUrl(): string {
+    const modelPath = this.model.replace(/^\/+/, '')
+    const query = new URLSearchParams({
+      key: this.apiKey,
+      alt: 'ws'
+    })
+    return `wss://generativelanguage.googleapis.com/v1beta/${modelPath}:BidiGenerateContent?${query.toString()}`
+  }
+
   constructor() {
     this.apiKey = ''
   }
@@ -286,7 +295,7 @@ ${JSON.stringify(history)}
     const workletUrl = URL.createObjectURL(blob)
     await this.audioContext.audioWorklet.addModule(workletUrl)
 
-    const url = `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent?key=${encodeURIComponent(this.apiKey)}`
+    const url = this.geminiLiveSocketUrl()
     this.socket = new WebSocket(url)
     this.openPromise = new Promise((resolve, reject) => {
       if (!this.socket) {
