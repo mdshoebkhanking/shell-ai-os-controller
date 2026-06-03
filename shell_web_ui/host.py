@@ -241,7 +241,7 @@ class ShellBackendBridge(QObject):
         return {
             "geminiKey": get_configured_secret_value("GOOGLE_API_KEY", "GEMINI_API_KEY"),
             "groqKey": os.environ.get("GROQ_API_KEY", ""),
-            "hfKey": os.environ.get("HF_API_KEY", ""),
+            "hfKey": get_configured_secret_value("HF_API_KEY", "HUGGINGFACE_API_KEY"),
             "tavilyKey": os.environ.get("TAVILY_API_KEY", ""),
             "livekitKey": os.environ.get("LIVEKIT_API_KEY", ""),
             "livekitSecret": os.environ.get("LIVEKIT_API_SECRET", ""),
@@ -379,6 +379,8 @@ class ShellBackendBridge(QObject):
         messages.append({"role": "user", "parts": [{"text": text}]})
 
         route: dict[str, Any] | None = None
+        image_prompt = ""
+        image_generation_started = False
         result: Any = None
         success = True
         try:
@@ -391,10 +393,32 @@ class ShellBackendBridge(QObject):
                 from shell_nl_router import route_natural_command
 
                 route = route_natural_command(text)
+                if not (route and route.get("tool")):
+                    image_prompt = self._extract_image_generation_prompt(text)
+                    if image_prompt:
+                        route = self._image_generation_route(image_prompt)
                 if route and route.get("tool"):
-                    from shell_tool_gateway import execute_tool_sync
-
-                    result = execute_tool_sync(str(route["tool"]), route.get("args") or {})
+                    if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
+                        image_prompt = (
+                            self._clean_image_prompt(self._route_image_prompt(route))
+                            or self._extract_image_generation_prompt(text)
+                            or text
+                        )
+                        route_args = dict(route.get("args") or {})
+                        route_args["description"] = image_prompt
+                        route = {**route, "args": route_args}
+                        image_generation_started = True
+                        self.emit_event(
+                            "image-gen",
+                            {
+                                "prompt": image_prompt,
+                                "loading": True,
+                                "url": "",
+                                "source": source,
+                                "entry": entry,
+                            },
+                        )
+                    result = self._execute_routed_tool(route)
                     reply = self._format_chat_result(route, result)
                 else:
                     reply = self._brain_chat_fallback(text, previous_messages=previous_messages)
@@ -403,6 +427,18 @@ class ShellBackendBridge(QObject):
         except Exception as exc:
             success = False
             reply = f"Shell backend error: {exc}"
+            if image_generation_started:
+                self.emit_event(
+                    "image-gen",
+                    {
+                        "prompt": image_prompt or text,
+                        "loading": False,
+                        "url": "",
+                        "error": True,
+                        "errorMessage": str(exc),
+                        "source": source,
+                    },
+                )
 
         messages.append({"role": "model", "parts": [{"text": reply}]})
         self._write_history_file(messages)
@@ -411,6 +447,11 @@ class ShellBackendBridge(QObject):
             {"reply": reply, "route": route, "success": success, "source": source, "voice": source == "voice"},
         )
         return {"success": success, "reply": reply, "route": route, "result": result, "source": source}
+
+    def _execute_routed_tool(self, route: dict[str, Any]) -> Any:
+        from shell_tool_gateway import execute_tool_sync
+
+        return execute_tool_sync(str(route["tool"]), route.get("args") or {})
 
     @staticmethod
     def _compact_chat_reply(reply: str, *, limit: int = 360) -> str:
@@ -461,6 +502,81 @@ class ShellBackendBridge(QObject):
             return f"Chart: temperature {temp}C, {state}."
         state = "high" if cpu >= 80 else "moderate" if cpu >= 55 else "normal"
         return f"Chart: CPU {cpu}%, {state}. RAM {memory}%, temp {temp}C."
+
+    @staticmethod
+    def _clean_image_prompt(prompt: str) -> str:
+        cleaned = re.sub(r"\s+", " ", str(prompt or "")).strip(" :.-")
+        cleaned = re.sub(
+            r"^(?:of|for|about|ki|ka|ke|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please)\s+",
+            "",
+            cleaned,
+            flags=re.I,
+        ).strip()
+        if re.fullmatch(
+            r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra|generate|create|make|draw|design|banao|bana|banado|banaao|karo|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|\s)+",
+            cleaned,
+            flags=re.I,
+        ):
+            return ""
+        return cleaned
+
+    @classmethod
+    def _extract_image_generation_prompt(cls, text: str) -> str:
+        raw = str(text or "").strip()
+        if not raw:
+            return ""
+
+        image_word = r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)"
+        action_word = r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
+        connector = r"(?:(?:of|for|about|ki|ka|ke)\b|:)"
+        if not re.search(rf"\b{image_word}\b", raw, flags=re.I) or not re.search(
+            rf"\b{action_word}\b",
+            raw,
+            flags=re.I,
+        ):
+            return ""
+
+        patterns = (
+            rf"^(?:please\s+)?(?:generate|create|make|draw|design)\s+"
+            rf"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
+            rf"{image_word}\s*{connector}?\s*(.*)$",
+            rf"^(?:please\s+)?{image_word}\s+{action_word}\s*{connector}?\s*(.*)$",
+            rf"^(?:please\s+)?{action_word}\s+"
+            rf"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
+            rf"{image_word}\s*{connector}?\s*(.*)$",
+            rf"^(.+?)\s+(?:(?:ki|ka|ke)\b\s*)?{image_word}\s+{action_word}\s*$",
+        )
+        for pattern in patterns:
+            match = re.match(pattern, raw, flags=re.I | re.S)
+            if not match:
+                continue
+            prompt = cls._clean_image_prompt(match.group(1) if match.groups() else "")
+            if prompt:
+                return prompt
+
+        return "high quality original Shell AI concept image"
+
+    @staticmethod
+    def _image_generation_route(prompt: str) -> dict[str, Any]:
+        return {
+            "tool": "shell_image_ai:generate_image_tool",
+            "args": {
+                "description": prompt,
+                "device_type": "pc",
+                "style": "photorealistic",
+                "quality": "excellent",
+                "use_ai_enhancement": True,
+            },
+            "confidence": 0.9,
+            "source": "web-ui-image-intent",
+        }
+
+    @staticmethod
+    def _route_image_prompt(route: dict[str, Any]) -> str:
+        args = route.get("args") if isinstance(route, dict) else {}
+        if not isinstance(args, dict):
+            return ""
+        return str(args.get("description") or args.get("prompt") or "").strip()
 
     @staticmethod
     def _history_text(message: Any) -> str:
@@ -576,20 +692,54 @@ class ShellBackendBridge(QObject):
 
     def _format_chat_result(self, route: dict[str, Any], result: Any) -> str:
         tool = route.get("tool", "backend")
+        is_image_tool = str(tool) == "shell_image_ai:generate_image_tool"
+        image_prompt = self._route_image_prompt(route) if is_image_tool else ""
         if isinstance(result, dict):
             if result.get("status") == "success":
                 payload = result.get("result")
                 rendered = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False)
                 rendered_text = str(rendered).strip()
-                if str(tool) == "shell_image_ai:generate_image_tool":
+                if is_image_tool:
                     image_path = self._extract_generated_image_path(rendered_text)
                     if image_path and image_path.exists():
                         item = self._gallery_item_for_file(image_path)
                         self.emit_event("gallery-updated", {"success": True, "image": item})
+                        self.emit_event(
+                            "image-gen",
+                            {
+                                "url": item["url"],
+                                "prompt": image_prompt or item["displayName"],
+                                "loading": False,
+                                "error": False,
+                                "saved": True,
+                                "image": item,
+                            },
+                        )
                         return f"Image generated aur Gallery mein save ho gayi: {image_path.name}"
                     lowered_image_result = rendered_text.lower()
                     if "image generation failed" in lowered_image_result or "critical error" in lowered_image_result:
-                        return self._compact_chat_reply(rendered_text.strip(), limit=520)
+                        error_text = self._compact_chat_reply(rendered_text.strip(), limit=520)
+                        self.emit_event(
+                            "image-gen",
+                            {
+                                "url": "",
+                                "prompt": image_prompt,
+                                "loading": False,
+                                "error": True,
+                                "errorMessage": error_text,
+                            },
+                        )
+                        return error_text
+                    self.emit_event(
+                        "image-gen",
+                        {
+                            "url": "",
+                            "prompt": image_prompt,
+                            "loading": False,
+                            "error": True,
+                            "errorMessage": "Image generation completed but no saved image path was returned.",
+                        },
+                    )
                     return self._compact_chat_reply(rendered_text, limit=520)
                 if (
                     rendered_text.startswith("[BLOCKED]")
@@ -609,7 +759,29 @@ class ShellBackendBridge(QObject):
                             return line.strip()
                 return f"{tool} complete: {rendered_text[:700]}"
             message = result.get("message") or result.get("error") or json.dumps(result, ensure_ascii=False)
+            if is_image_tool:
+                self.emit_event(
+                    "image-gen",
+                    {
+                        "url": "",
+                        "prompt": image_prompt,
+                        "loading": False,
+                        "error": True,
+                        "errorMessage": str(message).strip()[:700],
+                    },
+                )
             return f"{tool} returned: {str(message).strip()[:700]}"
+        if is_image_tool:
+            self.emit_event(
+                "image-gen",
+                {
+                    "url": "",
+                    "prompt": image_prompt,
+                    "loading": False,
+                    "error": True,
+                    "errorMessage": str(result).strip()[:700],
+                },
+            )
         return f"{tool} complete: {str(result).strip()[:700]}"
 
     @staticmethod

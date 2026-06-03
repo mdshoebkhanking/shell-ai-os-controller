@@ -163,6 +163,67 @@ async function clickTarget(client, label) {
   return { clicked: true, label, text: rect.text, aria: rect.aria, x: Math.round(rect.x), y: Math.round(rect.y) }
 }
 
+async function typeDashboardPrompt(client, text) {
+  const focusResult = await evaluate(client, `
+    (() => {
+      const input = document.querySelector('input[placeholder^="Type to Shell"]')
+      if (!input) return { typed: false, reason: 'dashboard_prompt_not_found' }
+      input.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' })
+      input.focus()
+      input.select()
+      const rect = input.getBoundingClientRect()
+      return {
+        typed: true,
+        x: rect.left + Math.min(20, rect.width / 2),
+        y: rect.top + Math.min(20, rect.height / 2)
+      }
+    })()
+  `)
+  if (!focusResult?.typed) return focusResult
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: focusResult.x, y: focusResult.y, button: 'none' })
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: focusResult.x, y: focusResult.y, button: 'left', clickCount: 1 })
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: focusResult.x, y: focusResult.y, button: 'left', clickCount: 1 })
+  await evaluate(client, `document.querySelector('input[placeholder^="Type to Shell"]')?.select()`)
+  await client.send('Input.insertText', { text })
+  await wait(150)
+  const domValue = await evaluate(client, `document.querySelector('input[placeholder^="Type to Shell"]')?.value || ''`)
+  return { typed: domValue === text, chars: text.length, domValue }
+}
+
+async function clickDashboardSend(client) {
+  const rect = await evaluate(client, `
+    (() => {
+      const input = document.querySelector('input[placeholder^="Type to Shell"]')
+      if (!input) return null
+      const normalize = (text) => String(text || '').trim().replace(/\\s+/g, ' ')
+      const visible = (el) => {
+        const rect = el.getBoundingClientRect()
+        const style = getComputedStyle(el)
+        return rect.width > 1 && rect.height > 1 && style.visibility !== 'hidden' && style.display !== 'none'
+      }
+      const inputRect = input.getBoundingClientRect()
+      const candidates = Array.from(document.querySelectorAll('button'))
+        .filter((el) => visible(el) && !el.disabled)
+        .map((el) => {
+          const rect = el.getBoundingClientRect()
+          const text = normalize(el.innerText || el.textContent || '')
+          const aria = normalize(el.getAttribute('aria-label') || '')
+          const score = /send transcript message|send dashboard|send message/i.test(aria) ? 0 :
+            rect.top >= inputRect.top - 8 && rect.top <= inputRect.bottom + 8 && rect.left > inputRect.left ? 1 : 99
+          return { text, aria, score, x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+        })
+        .filter((item) => item.score < 99)
+        .sort((a, b) => a.score - b.score || a.x - b.x)
+      return candidates[0] || null
+    })()
+  `)
+  if (!rect) return { clicked: false, label: 'dashboard_send', reason: 'not_found' }
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x, y: rect.y, button: 'none' })
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+  return { clicked: true, label: 'dashboard_send', text: rect.text, aria: rect.aria, x: Math.round(rect.x), y: Math.round(rect.y) }
+}
+
 function placeholderRectExpression(placeholder) {
   return `
   (() => {
@@ -249,9 +310,37 @@ const pageSummaryExpression = `
   return {
     title: document.title,
     url: location.href,
-    bodyText: document.body.innerText.slice(0, 2500),
+    bodyText: document.body.innerText.slice(0, 7000),
     controlCount: controls.length,
     controls
+  }
+})()
+`
+
+const dashboardSurfaceExpression = `
+(() => {
+  const normalize = (text) => String(text || '').trim().replace(/\\s+/g, ' ')
+  const visible = (el) => {
+    const rect = el.getBoundingClientRect()
+    const style = getComputedStyle(el)
+    return rect.width > 1 && rect.height > 1 && style.visibility !== 'hidden' && style.display !== 'none'
+  }
+  const bodyText = document.body.innerText || ''
+  const buttons = Array.from(document.querySelectorAll('button'))
+    .filter(visible)
+    .map((el) => ({
+      text: normalize(el.innerText || el.textContent || ''),
+      aria: normalize(el.getAttribute('aria-label') || '')
+    }))
+  return {
+    hasTranscript: /\\bTRANSCRIPT\\b/i.test(bodyText),
+    hasPromptInput: Boolean(document.querySelector('input[placeholder^="Type to Shell"]')),
+    hasCoreMetricsBox: /\\bCORE METRICS\\b/i.test(bodyText),
+    hasMiniChartCard: /\\b1\\s+CHART\\b|\\bMINI\\s+CHART\\b/i.test(bodyText),
+    exactChartButtons: buttons.filter((item) =>
+      item.text.toLowerCase() === 'chart' || item.aria.toLowerCase() === 'send chart prompt'
+    ),
+    bodyPreview: bodyText.slice(0, 1200)
   }
 })()
 `
@@ -310,8 +399,22 @@ async function main() {
     probe: logoProbe
   })
 
+  await clickTarget(client, 'Open DASHBOARD view')
+  await wait(600)
+  const dashboardSurface = await evaluate(client, dashboardSurfaceExpression)
+  report.steps.push({
+    name: 'dashboard_no_core_metrics_or_chart_button',
+    ok:
+      dashboardSurface.hasTranscript &&
+      dashboardSurface.hasPromptInput &&
+      !dashboardSurface.hasCoreMetricsBox &&
+      !dashboardSurface.hasMiniChartCard &&
+      dashboardSurface.exactChartButtons.length === 0,
+    probe: dashboardSurface
+  })
+
   const tabs = [
-    ['Open DASHBOARD view', 'DASHBOARD', ['TRANSCRIPT', 'CORE METRICS']],
+    ['Open DASHBOARD view', 'DASHBOARD', ['TRANSCRIPT', 'Type to Shell']],
     ['Open Macros view', 'macros', ['Neural', 'Patterns', 'MODULE LIBRARY']],
     ['Open Apps view', 'apps', ['FOUND', 'INDEXING', 'INSTALLED']],
     ['Open NOTES view', 'notes', ['ITEMS', 'Memory', 'NOTE']],
@@ -506,7 +609,7 @@ async function main() {
   report.steps.push({
     name: 'phone_manual_connect_error_state',
     ok:
-      newDeviceClick.clicked &&
+      (newDeviceClick.clicked || /Target IP Address|TCP\/IP CONFIGURATION/i.test(phoneSummary.bodyText)) &&
       phoneInputFill.typed &&
       phoneConnectClick.clicked &&
       /Connection refused|Electron IPC Error|IP and Port are required/i.test(phoneSummary.bodyText),
@@ -540,6 +643,8 @@ async function main() {
 
   await clickTarget(client, 'Open DASHBOARD view')
   await wait(600)
+  await clickTarget(client, 'Clear transcript')
+  await wait(500)
   await evaluate(client, `
     (() => {
       window.__shellVoiceProbe = { speechSpeak: 0, ipcSpeak: 0, shellSpeakText: 0 }
@@ -572,20 +677,20 @@ async function main() {
       }
     })()
   `)
-  const chartTyping = await typeIntoPlaceholder(client, 'Type to Shell, or ask chart about CPU/RAM/network...', 'network latency')
+  const chartTyping = await typeDashboardPrompt(client, 'explain network protocols')
   await wait(150)
-  const chartSend = await clickTarget(client, 'Send chart prompt')
-  await wait(1000)
+  const chartSend = await clickDashboardSend(client)
+  await wait(1800)
   const chartSummary = await evaluate(client, pageSummaryExpression)
   const chartVoiceProbe = await evaluate(client, `window.__shellVoiceProbe || { speechSpeak: 0, ipcSpeak: 0, shellSpeakText: 0 }`)
-  report.screenshots.dashboard_chart_prompt = await screenshot(client, 'dashboard_chart_prompt')
+  report.screenshots.dashboard_text_prompt = await screenshot(client, 'dashboard_text_prompt')
   report.steps.push({
-    name: 'dashboard_chart_prompt',
+    name: 'dashboard_text_prompt_no_auto_voice',
     ok:
       chartTyping.typed &&
       chartSend.clicked &&
-      chartSummary.bodyText.includes('NETWORK TELEMETRY') &&
-      chartSummary.bodyText.toLowerCase().includes('chart: network') &&
+      /Network protocol|TCP\/IP|HTTP|DNS|data exchange|devices/i.test(chartSummary.bodyText) &&
+      !/Chart:\s*network/i.test(chartSummary.bodyText) &&
       chartVoiceProbe.speechSpeak === 0 &&
       chartVoiceProbe.ipcSpeak === 0 &&
       chartVoiceProbe.shellSpeakText === 0,
@@ -595,14 +700,14 @@ async function main() {
     bodyPreview: chartSummary.bodyText.slice(0, 900)
   })
 
-  const chartCommandTyping = await typeIntoPlaceholder(client, 'Type to Shell, or ask chart about CPU/RAM/network...', 'calculate 2+2')
+  const chartCommandTyping = await typeDashboardPrompt(client, 'calculate 2+2')
   await wait(150)
-  const chartCommandSend = await clickTarget(client, 'Send chart prompt')
+  const chartCommandSend = await clickDashboardSend(client)
   await wait(1200)
   const chartCommandSummary = await evaluate(client, pageSummaryExpression)
   const chartCommandVoiceProbe = await evaluate(client, `window.__shellVoiceProbe || { speechSpeak: 0, ipcSpeak: 0, shellSpeakText: 0 }`)
   report.steps.push({
-    name: 'dashboard_chart_text_command_route',
+    name: 'dashboard_text_command_route_no_auto_voice',
     ok:
       chartCommandTyping.typed &&
       chartCommandSend.clicked &&
@@ -699,9 +804,9 @@ async function main() {
   await clickTarget(client, 'Stop active vision capture')
   await wait(250)
 
-  const transcriptTyping = await typeIntoPlaceholder(client, 'Type to Shell, or ask chart about CPU/RAM/network...', 'calculate 2+2')
+  const transcriptTyping = await typeDashboardPrompt(client, 'calculate 2+2')
   await wait(150)
-  const transcriptSend = await clickTarget(client, 'Send transcript message')
+  const transcriptSend = await clickDashboardSend(client)
   await wait(1400)
   const transcriptSummary = await evaluate(client, pageSummaryExpression)
   report.screenshots.dashboard_transcript_prompt = await screenshot(client, 'dashboard_transcript_prompt')

@@ -1,11 +1,9 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
 import Sphere from '@renderer/components/Sphere'
 import {
-  RiCpuLine,
   RiCameraLine,
   RiTerminalBoxLine,
   RiSwapBoxLine,
-  RiLayoutGridLine,
   RiMicLine,
   RiMicOffLine,
   RiPhoneFill,
@@ -15,13 +13,9 @@ import {
   RiServerLine,
   RiEarthLine,
   RiSendPlane2Line,
-  RiBarChartBoxLine,
   RiVolumeUpLine,
   RiCloseCircleLine
 } from 'react-icons/ri'
-import { FaMemory } from 'react-icons/fa6'
-import { GiTinker } from 'react-icons/gi'
-import { HiComputerDesktop } from 'react-icons/hi2'
 import * as faceapi from 'face-api.js'
 import { VisionMode } from '@renderer/IndexRoot'
 
@@ -48,7 +42,11 @@ interface DashboardViewProps {
   onTranscriptCleared?: () => void
 }
 
-type ChartMode = 'core' | 'network' | 'memory'
+type ImageGenerationState = {
+  status: 'generating' | 'saving' | 'saved' | 'error'
+  prompt: string
+  message: string
+}
 
 const glassPanel = 'bg-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl'
 
@@ -59,26 +57,6 @@ const compactForSpeech = (value: string, limit = 240) => {
     .trim()
   if (cleaned.length <= limit) return cleaned
   return `${cleaned.slice(0, limit).replace(/\s+\S*$/, '')}...`
-}
-
-const hasCommandIntent = (value: string) =>
-  /\b(open|close|run|start|stop|launch|kill|type|write|search|google|download|install|delete|remove|move|copy|send|create|make|build|fix|scan|execute|control|volume|brightness|screenshot|terminal|calculator)\b/i.test(
-    value
-  )
-
-const isTelemetryChartPrompt = (value: string) => {
-  const text = String(value || '').trim()
-  if (!text || hasCommandIntent(text)) return false
-  const hasChartWord = /\b(chart|graph|telemetry|metric|metrics)\b/i.test(text)
-  if (hasChartWord) return true
-  if (/\b(what|why|how|explain|define|meaning|tell me|who|when|where|kya|kaise|kyun)\b/i.test(text)) {
-    return false
-  }
-  const hasTelemetryWord =
-    /\b(cpu|processor|ram|memory|network|latency|ping|packet|tx|rx|temp|temperature|heat|load|usage)\b/i.test(
-      text
-    )
-  return hasTelemetryWord && text.split(/\s+/).length <= 12
 }
 
 const speakWithBrowser = (text: string) =>
@@ -114,7 +92,6 @@ const speakWithBrowser = (text: string) =>
 
 export default function DashboardView({
   props,
-  stats,
   chatHistory,
   onVisionClick,
   onTranscriptCleared
@@ -144,12 +121,10 @@ export default function DashboardView({
 
   const [networkStats, setNetworkStats] = useState({ ping: 24, rate: 1.2, tx: 40, rx: 60 })
   const [transcriptPrompt, setTranscriptPrompt] = useState('')
-  const [chartTitle, setChartTitle] = useState('LIVE SYSTEM CHART')
-  const [chartMode, setChartMode] = useState<ChartMode>('core')
-  const [chartSeries, setChartSeries] = useState([18, 42, 28, 64, 40, 72])
   const [isSendingPrompt, setIsSendingPrompt] = useState(false)
   const [voiceEventState, setVoiceEventState] = useState(backendVoiceState || 'OFFLINE')
   const [speechState, setSpeechState] = useState('VOICE OUT')
+  const [imageGenerationState, setImageGenerationState] = useState<ImageGenerationState | null>(null)
 
   const readTranscriptPrompt = () => (transcriptPrompt || transcriptInputRef.current?.value || '').trim()
 
@@ -213,6 +188,68 @@ export default function DashboardView({
   }, [speakShell])
 
   useEffect(() => {
+    const normalizePrompt = (value: unknown) => String(value || '').trim() || 'Shell AI image'
+    const onImageGenerationPayload = (payload: any) => {
+      const prompt = normalizePrompt(payload?.prompt || payload?.image?.displayName)
+      if (payload?.loading) {
+        setImageGenerationState({
+          status: 'generating',
+          prompt,
+          message: 'GENERATING IMAGE'
+        })
+        return
+      }
+      if (payload?.error) {
+        setImageGenerationState({
+          status: 'error',
+          prompt,
+          message: String(payload?.errorMessage || 'IMAGE GENERATION FAILED').slice(0, 180)
+        })
+        return
+      }
+      if (payload?.saved || payload?.image?.filename) {
+        setImageGenerationState({
+          status: 'saved',
+          prompt,
+          message: 'SAVED TO GALLERY'
+        })
+        return
+      }
+      if (payload?.url) {
+        setImageGenerationState({
+          status: 'saving',
+          prompt,
+          message: 'SAVING TO GALLERY'
+        })
+      }
+    }
+    const onDomImageGeneration = (event: Event) =>
+      onImageGenerationPayload((event as CustomEvent).detail || {})
+    const onBridgeImageGeneration = (_event: unknown, payload?: unknown) =>
+      onImageGenerationPayload(payload)
+    const onGalleryUpdated = (_event: unknown, payload?: any) => {
+      if (!payload?.image) return
+      setImageGenerationState((current) => {
+        if (!current || (current.status !== 'generating' && current.status !== 'saving')) return current
+        return {
+          status: 'saved',
+          prompt: normalizePrompt(payload.image.displayName || current.prompt),
+          message: 'SAVED TO GALLERY'
+        }
+      })
+    }
+
+    window.addEventListener('image-gen', onDomImageGeneration)
+    window.shellAPI?.on?.('image-gen', onBridgeImageGeneration)
+    window.shellAPI?.on?.('gallery-updated', onGalleryUpdated)
+    return () => {
+      window.removeEventListener('image-gen', onDomImageGeneration)
+      window.shellAPI?.off?.('image-gen', onBridgeImageGeneration)
+      window.shellAPI?.off?.('gallery-updated', onGalleryUpdated)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!isSystemActive) {
       setNetworkStats({ ping: 0, rate: 0.0, tx: 0, rx: 0 })
       return
@@ -229,27 +266,6 @@ export default function DashboardView({
 
     return () => clearInterval(interval)
   }, [isSystemActive])
-
-  useEffect(() => {
-    if (!stats || !isSystemActive) return
-    if (chartMode === 'network') {
-      setChartSeries([networkStats.ping, networkStats.rate * 10, networkStats.tx, networkStats.rx, 34, 58])
-      return
-    }
-    if (chartMode === 'memory') {
-      const memory = Number(stats?.memory?.usedPercentage || 0)
-      setChartSeries([memory, Math.max(0, memory - 8), memory + 4, memory - 3, memory + 6, memory])
-      return
-    }
-    setChartSeries([
-      Number(stats.cpu || 0),
-      Number(stats.memory?.usedPercentage || 0),
-      Math.min(Number(stats.temperature || 0), 100),
-      networkStats.tx,
-      networkStats.rx,
-      Math.min(networkStats.ping, 100)
-    ])
-  }, [stats, networkStats, isSystemActive, chartMode])
 
   useEffect(() => {
     const loadModels = async () => {
@@ -383,45 +399,6 @@ export default function DashboardView({
     startVision(nextMode)
   }
 
-  const saveTranscriptPair = async (userText: string, replyText: string) => {
-    await window.electron?.ipcRenderer.invoke('add-message', {
-      role: 'user',
-      parts: [{ text: userText }]
-    })
-    await window.electron?.ipcRenderer.invoke('add-message', {
-      role: 'model',
-      parts: [{ text: replyText }]
-    })
-  }
-
-  const buildChartReply = (text: string, title: string) => {
-    const cpu = Number(stats?.cpu || 0)
-    const memory = Number(stats?.memory?.usedPercentage || 0)
-    const temp = Number(stats?.temperature || 0)
-    const ping = Number(networkStats.ping || 0)
-    const tx = Number(networkStats.tx || 0)
-    const rx = Number(networkStats.rx || 0)
-    const lower = text.toLowerCase()
-
-    if (lower.includes('network') || lower.includes('latency') || title.includes('NETWORK')) {
-      const state = ping > 80 ? 'high latency' : ping > 45 ? 'medium latency' : 'stable'
-      return `Chart: network ${state}. Ping ${ping}ms, TX ${tx}%, RX ${rx}%.`
-    }
-    if (lower.includes('memory') || lower.includes('ram') || title.includes('MEMORY')) {
-      const state = memory >= 80 ? 'high' : memory >= 60 ? 'moderate' : 'normal'
-      return `Chart: RAM ${memory}% used, ${state}.`
-    }
-    if (lower.includes('cpu')) {
-      const state = cpu >= 80 ? 'high' : cpu >= 55 ? 'moderate' : 'normal'
-      return `Chart: CPU ${cpu}%, ${state}.`
-    }
-    if (lower.includes('temp') || lower.includes('heat')) {
-      const state = temp >= 80 ? 'hot' : temp >= 65 ? 'warm' : 'normal'
-      return `Chart: temperature ${temp}C, ${state}.`
-    }
-    return `Chart: CPU ${cpu}%, RAM ${memory}%, temp ${temp}C. System looks stable.`
-  }
-
   const sendTranscriptPrompt = async () => {
     const text = readTranscriptPrompt()
     if (!text || isSendingPrompt) return
@@ -442,119 +419,6 @@ export default function DashboardView({
       onTranscriptCleared?.()
     }
   }
-
-  const runChartPrompt = async () => {
-    const text = readTranscriptPrompt()
-    if (!text || isSendingPrompt) return
-    const lower = text.toLowerCase()
-    let nextTitle = 'CORE METRICS'
-    setIsSendingPrompt(true)
-    setTranscriptPrompt('')
-    if (!isTelemetryChartPrompt(text)) {
-      try {
-        const result = await window.electron?.ipcRenderer.invoke('chat-message', text, {
-          source: 'text',
-          entry: 'chart'
-        })
-        const reply = String(result?.reply || '').trim()
-        if (reply) lastSpokenRef.current = reply
-      } finally {
-        setIsSendingPrompt(false)
-      }
-      return
-    }
-
-    if (lower.includes('network') || lower.includes('latency')) {
-      nextTitle = 'NETWORK TELEMETRY'
-      setChartMode('network')
-      setChartTitle(nextTitle)
-      setChartSeries([networkStats.ping, networkStats.rate * 10, networkStats.tx, networkStats.rx, 34, 58])
-    } else if (lower.includes('memory') || lower.includes('ram')) {
-      nextTitle = 'MEMORY PROFILE'
-      setChartMode('memory')
-      setChartTitle(nextTitle)
-      const memory = Number(stats?.memory?.usedPercentage || 0)
-      setChartSeries([memory, Math.max(0, memory - 8), memory + 4, memory - 3, memory + 6, memory])
-    } else {
-      nextTitle = 'CORE METRICS'
-      setChartMode('core')
-      setChartTitle(nextTitle)
-      setChartSeries([
-        Number(stats?.cpu || 0),
-        Number(stats?.memory?.usedPercentage || 0),
-        Math.min(Number(stats?.temperature || 0), 100),
-        networkStats.tx,
-        networkStats.rx,
-        Math.min(networkStats.ping, 100)
-      ])
-    }
-    try {
-      const reply = buildChartReply(text, nextTitle)
-      await saveTranscriptPair(`Chart: ${text}`, reply)
-      lastSpokenRef.current = reply
-    } finally {
-      setIsSendingPrompt(false)
-    }
-  }
-
-  const systemMetrics = [
-    {
-      icon: <RiCpuLine />,
-      bgIcon: <RiCpuLine size={140} />,
-      label: 'CPU LOAD',
-      val: isSystemActive && stats ? `${stats.cpu}%` : '--',
-      raw: isSystemActive && stats ? stats.cpu : 0,
-      colorClass: 'text-emerald-400',
-      bgClass: 'bg-emerald-500',
-      glowClass: 'via-emerald-500/50',
-      shadowClass: 'shadow-[0_0_8px_#10b981]',
-      bgGradient: 'from-emerald-950/30 to-black/60',
-      pattern:
-        'bg-[linear-linear(to_right,#10b98108_1px,transparent_1px),linear-linear(to_bottom,#10b98108_1px,transparent_1px)] bg-[size:12px_12px]'
-    },
-    {
-      icon: <FaMemory />,
-      bgIcon: <FaMemory size={140} />,
-      label: 'RAM USAGE',
-      val: isSystemActive && stats ? `${stats.memory.usedPercentage}%` : '--',
-      raw: isSystemActive && stats ? stats.memory.usedPercentage : 0,
-      colorClass: 'text-cyan-400',
-      bgClass: 'bg-cyan-500',
-      glowClass: 'via-cyan-500/50',
-      shadowClass: 'shadow-[0_0_8px_#06b6d4]',
-      bgGradient: 'from-cyan-950/30 to-black/60',
-      pattern: 'bg-[radial-linear(#06b6d415_1px,transparent_1px)] bg-[size:10px_10px]'
-    },
-    {
-      icon: <GiTinker />,
-      bgIcon: <GiTinker size={140} />,
-      label: 'TEMP',
-      val: isSystemActive && stats ? `${stats.temperature}°C` : '--',
-      raw: isSystemActive && stats ? Math.min((stats.temperature / 90) * 100, 100) : 0,
-      colorClass: 'text-orange-400',
-      bgClass: 'bg-orange-500',
-      glowClass: 'via-orange-500/50',
-      shadowClass: 'shadow-[0_0_8px_#f97316]',
-      bgGradient: 'from-orange-950/30 to-black/60',
-      pattern:
-        'bg-[radial-linear(ellipse_at_top_right,_var(--tw-linear-stops))] from-orange-900/20 via-transparent to-transparent'
-    },
-    {
-      icon: <HiComputerDesktop />,
-      bgIcon: <HiComputerDesktop size={140} />,
-      label: 'OS',
-      val: isSystemActive && stats ? `${stats.os.type}` : '--',
-      raw: 0,
-      colorClass: 'text-purple-400',
-      bgClass: 'bg-purple-500',
-      glowClass: 'via-purple-500/50',
-      shadowClass: '',
-      bgGradient: 'from-purple-950/30 to-black/60',
-      pattern:
-        'bg-[linear-linear(45deg,#a855f708_25%,transparent_25%,transparent_50%,#a855f708_50%,#a855f708_75%,transparent_75%,transparent)] bg-[size:24px_24px]',
-      hideBar: true
-    }
-  ]
 
   const visionDisplayLabel = isVideoOn
     ? visionMode === 'screen'
@@ -695,64 +559,9 @@ export default function DashboardView({
           </div>
         </div>
 
-        <div className={`${glassPanel} flex-1 min-h-0 p-4 flex flex-col gap-3 overflow-hidden`}>
-          <div className="flex items-center justify-between border-b border-white/10 pb-2">
-            <span className="text-[10px] font-bold tracking-widest text-zinc-400">
-              <RiLayoutGridLine className="inline mr-1" /> CORE METRICS
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 flex-1 min-h-0 pb-1">
-            {systemMetrics.map((m, i) => (
-              <div
-                key={i}
-                className={`cursor-pointer relative rounded-xl p-3 flex flex-col justify-between border border-white/5 overflow-hidden group hover:border-white/10 transition-all duration-300 bg-linear-to-br ${m.bgGradient}`}
-              >
-                <div
-                  className={`absolute inset-0 ${m.pattern} opacity-30 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none`}
-                />
-
-                <div
-                  className={`absolute -bottom-8 -right-8 opacity-[0.03] group-hover:opacity-[0.08] transition-all duration-500 transform group-hover:scale-110 pointer-events-none ${m.colorClass}`}
-                >
-                  {m.bgIcon}
-                </div>
-
-                <div
-                  className={`absolute top-0 left-0 w-full h-px bg-linear-to-r from-transparent ${m.glowClass} to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500`}
-                />
-
-                <div className="relative z-10 flex justify-between items-start text-zinc-500">
-                  <span
-                    className={`text-base ${m.colorClass} opacity-70 group-hover:opacity-100 transition-opacity`}
-                  >
-                    {m.icon}
-                  </span>
-                  <span className="text-[8px] font-mono tracking-widest uppercase opacity-70 group-hover:opacity-100 transition-opacity text-zinc-300">
-                    {m.label}
-                  </span>
-                </div>
-
-                <div className="relative z-10 flex flex-col gap-1.5 mt-2">
-                  <span className="text-sm font-bold text-white text-right font-mono tracking-wider drop-shadow-md">
-                    {m.val}
-                  </span>
-
-                  {!m.hideBar && (
-                    <div className="w-full h-1 bg-black/40 rounded-full overflow-hidden backdrop-blur-sm border border-white/5">
-                      <div
-                        className={`h-full ${m.bgClass} ${m.shadowClass} transition-all duration-700 ease-out`}
-                        style={{ width: isSystemActive ? `${m.raw}%` : '0%' }}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
-      <div className="col-span-12 md:col-span-7 lg:col-span-6 relative flex flex-col items-center justify-center min-h-[320px] md:min-h-0">
+      <div className="col-span-12 md:col-span-7 lg:col-span-5 relative flex flex-col items-center justify-center min-h-[320px] md:min-h-0">
         <div
           className={`lg:hidden absolute top-4 right-4 w-32 h-28 ${glassPanel} z-50 overflow-hidden ${isVideoOn ? 'block' : 'hidden'}`}
         >
@@ -815,52 +624,87 @@ export default function DashboardView({
         </div>
       </div>
 
-      <div className="col-span-12 md:col-span-5 lg:col-span-3 flex flex-col overflow-hidden min-h-[360px] md:min-h-0 md:h-full z-40">
-        <div className={`${glassPanel} h-full p-4 flex flex-col gap-3`}>
-          <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-2">
-            <span className="text-[10px] font-bold tracking-widest text-zinc-400">
-              <RiTerminalBoxLine className="inline mr-1" /> TRANSCRIPT
-            </span>
-            <div className="flex items-center gap-2">
+      <div className="col-span-12 md:col-span-5 lg:col-span-4 flex flex-col overflow-hidden min-h-[420px] md:min-h-0 md:h-full z-40">
+        <div className={`${glassPanel} h-full p-4 lg:p-5 flex flex-col gap-4 border-emerald-500/10 bg-zinc-950/55`}>
+          <div className="flex items-start justify-between gap-3 border-b border-emerald-500/10 pb-3">
+            <div className="min-w-0">
+              <span className="flex items-center gap-2 text-[10px] font-bold tracking-widest text-zinc-300">
+                <RiTerminalBoxLine className="text-emerald-400" /> TRANSCRIPT
+              </span>
+              <div className="mt-1 h-px w-24 bg-linear-to-r from-emerald-400/60 to-transparent" />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
               <button
                 aria-label="Clear transcript"
                 onClick={clearTranscript}
-                className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[8px] font-black tracking-widest text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-all flex items-center gap-1"
+                className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[8px] font-black tracking-widest text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-all flex items-center gap-1"
               >
                 <RiCloseCircleLine size={12} />
                 CLEAR
               </button>
               <span
-                className={`text-[8px] font-mono ${voiceEventState === 'ERROR' ? 'text-red-400' : isSystemActive ? 'text-emerald-400' : 'text-zinc-500'}`}
+                className={`rounded-full border px-2 py-1 text-[8px] font-mono font-bold ${voiceEventState === 'ERROR' ? 'border-red-500/30 bg-red-500/10 text-red-300' : isSystemActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-zinc-500'}`}
               >
                 {voiceDisplayState}
               </span>
             </div>
           </div>
-          <div className="shrink-0 rounded-xl border border-white/5 bg-black/30 p-3">
-            <div className="flex items-center justify-between text-[9px] font-bold tracking-widest text-zinc-500 mb-3">
-              <span className="flex items-center gap-1">
-                <RiBarChartBoxLine className="text-emerald-400" /> {chartTitle}
-              </span>
-              <span className="text-emerald-500/60">1 CHART</span>
-            </div>
-            <div className="h-20 flex items-end gap-2 rounded-lg bg-black/40 border border-white/5 px-2 py-2">
-              {chartSeries.map((value, index) => (
-                <div key={index} className="flex-1 h-full rounded-t bg-zinc-900/80 border border-white/5 overflow-hidden flex items-end">
+          {imageGenerationState && (
+            <div
+              className={`shrink-0 overflow-hidden rounded-2xl border p-3 ${
+                imageGenerationState.status === 'error'
+                  ? 'border-red-500/30 bg-red-500/10'
+                  : imageGenerationState.status === 'saved'
+                    ? 'border-emerald-500/30 bg-emerald-500/10'
+                    : 'border-cyan-500/30 bg-cyan-500/10'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <div
-                    className="w-full rounded-t bg-linear-to-t from-emerald-500 via-cyan-400 to-white shadow-[0_0_14px_rgba(16,185,129,0.55)] transition-all duration-500"
-                    style={{ height: `${Math.max(14, Math.min(100, value))}%` }}
-                  />
+                    className={`text-[9px] font-black tracking-widest ${
+                      imageGenerationState.status === 'error'
+                        ? 'text-red-300'
+                        : imageGenerationState.status === 'saved'
+                          ? 'text-emerald-300'
+                          : 'text-cyan-300'
+                    }`}
+                  >
+                    {imageGenerationState.message}
+                  </div>
+                  <div className="mt-1 truncate text-[10px] font-mono text-zinc-400">
+                    {imageGenerationState.prompt}
+                  </div>
                 </div>
-              ))}
+                {(imageGenerationState.status === 'generating' ||
+                  imageGenerationState.status === 'saving') && (
+                  <div className="flex shrink-0 items-end gap-1" aria-label="Image generation animation">
+                    {[0, 1, 2, 3].map((item) => (
+                      <span
+                        key={item}
+                        className="block h-5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.75)] animate-pulse"
+                        style={{ animationDelay: `${item * 120}ms` }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              {(imageGenerationState.status === 'generating' ||
+                imageGenerationState.status === 'saving') && (
+                <div className="mt-3 h-1 overflow-hidden rounded-full bg-black/50">
+                  <div className="h-full w-1/2 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-linear-to-r from-cyan-400 via-emerald-300 to-cyan-400 shadow-[0_0_16px_rgba(16,185,129,0.5)]" />
+                </div>
+              )}
             </div>
-          </div>
-          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-2 scrollbar-small">
+          )}
+          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scrollbar-small">
             {chatHistory.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-zinc-700 gap-2 opacity-50">
-                <RiHistoryLine size={24} />
+              <div className="h-full flex flex-col items-center justify-center text-zinc-700 gap-3 opacity-60">
+                <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+                  <RiHistoryLine size={28} />
+                </div>
                 <span className="text-[9px] tracking-widest uppercase font-mono">
-                  No Data Stream
+                  No Transcript
                 </span>
               </div>
             ) : (
@@ -869,8 +713,13 @@ export default function DashboardView({
                   key={idx}
                   className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
+                  <span
+                    className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-emerald-500/60' : 'text-zinc-500'}`}
+                  >
+                    {msg.role === 'user' ? 'YOU' : 'SHELL'}
+                  </span>
                   <div
-                    className={`max-w-[95%] py-2 px-3 rounded-lg text-[11px] leading-relaxed border font-mono font-semibold ${msg.role === 'user' ? 'bg-emerald-900/20 border-emerald-500/20 text-emerald-100/90 rounded-br-none' : 'bg-zinc-900/50 border-white/5 text-zinc-400 rounded-bl-none'}`}
+                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${msg.role === 'user' ? 'bg-emerald-500/10 border-emerald-400/20 text-emerald-50 rounded-br-md' : 'bg-black/50 border-white/10 text-zinc-300 rounded-bl-md'}`}
                   >
                     {msg.parts && msg.parts[0] ? msg.parts[0].text : msg.content}
                   </div>
@@ -878,35 +727,29 @@ export default function DashboardView({
               ))
             )}
           </div>
-          <div className="shrink-0 flex gap-2 border-t border-white/10 pt-3">
-            <input
-              ref={transcriptInputRef}
-              value={transcriptPrompt}
-              onChange={(event) => setTranscriptPrompt(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') sendTranscriptPrompt()
-              }}
-              placeholder="Type to Shell, or ask chart about CPU/RAM/network..."
-              className="min-w-0 flex-1 bg-black/60 border border-white/10 rounded-lg px-3 py-2.5 text-[10px] xl:text-[11px] font-mono text-zinc-100 outline-none focus:border-emerald-500/50 placeholder:text-zinc-600"
-            />
-            <button
-              aria-label="Send chart prompt"
-              onClick={runChartPrompt}
-              disabled={isSendingPrompt}
-              className="cursor-pointer rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 text-cyan-300 hover:bg-cyan-500 hover:text-black disabled:opacity-40 transition-all flex items-center gap-1.5 text-[9px] font-black tracking-widest"
-            >
-              <RiBarChartBoxLine size={16} />
-              CHART
-            </button>
-            <button
-              aria-label="Send transcript message"
-              onClick={sendTranscriptPrompt}
-              disabled={isSendingPrompt}
-              className="cursor-pointer rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-2.5 text-emerald-300 hover:bg-emerald-500 hover:text-black disabled:opacity-40 transition-all flex items-center gap-1.5 text-[9px] font-black tracking-widest"
-            >
-              <RiSendPlane2Line size={16} />
-              SEND
-            </button>
+          <div className="shrink-0 border-t border-emerald-500/10 pt-3">
+            <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-black/70 p-2 shadow-[0_0_28px_rgba(16,185,129,0.08),inset_0_1px_0_rgba(255,255,255,0.04)]">
+              <input
+                ref={transcriptInputRef}
+                value={transcriptPrompt}
+                onChange={(event) => setTranscriptPrompt(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') sendTranscriptPrompt()
+                }}
+                aria-label="Shell command input"
+                placeholder="Type to Shell command or image request"
+                className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[12px] font-mono text-zinc-100 outline-none placeholder:text-zinc-600"
+              />
+              <button
+                aria-label="Send transcript message"
+                onClick={sendTranscriptPrompt}
+                disabled={isSendingPrompt}
+                className="cursor-pointer h-11 shrink-0 rounded-xl border border-emerald-400/40 bg-emerald-400 px-4 text-black hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40 transition-all flex items-center gap-2 text-[9px] font-black tracking-widest shadow-[0_0_18px_rgba(52,211,153,0.28)]"
+              >
+                <RiSendPlane2Line size={16} />
+                <span>SEND</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>

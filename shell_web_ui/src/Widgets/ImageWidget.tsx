@@ -8,25 +8,29 @@ export default function ImageWidget() {
   const [hasError, setHasError] = useState(false)
   const [statusText, setStatusText] = useState('')
   const [debugMsg, setDebugMsg] = useState('')
+  const [savedImageName, setSavedImageName] = useState('')
 
   const abortControllerRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
-    const handleEvent = (event: any) => {
-      const { url, prompt, loading, error, errorMessage } = event.detail
+    const handlePayload = (detail: any) => {
+      const { url, prompt, loading, error, errorMessage, saved, image } = detail || {}
 
-      setPrompt(prompt)
+      setPrompt(String(prompt || ''))
 
       if (loading) {
         setIsVisible(true)
         setLoading(true)
         setHasError(false)
         setImageSrc('')
+        setDebugMsg('')
+        setSavedImageName('')
         setStatusText('Shell AI IS CRAFTING YOUR IMAGE...')
         return
       }
 
       if (error) {
+        setIsVisible(true)
         setHasError(true)
         setLoading(false)
         setDebugMsg(errorMessage || 'API Error')
@@ -34,12 +38,27 @@ export default function ImageWidget() {
       }
 
       if (url) {
-        downloadAndAutoSave(url, prompt)
+        setIsVisible(true)
+        if (saved || image?.path || String(url).startsWith('file:')) {
+          setImageSrc(url)
+          setLoading(false)
+          setHasError(false)
+          setSavedImageName(image?.displayName || image?.filename || '')
+          setStatusText('SAVED TO GALLERY ✔️')
+          return
+        }
+        downloadAndAutoSave(url, String(prompt || 'Shell AI image'))
       }
     }
+    const handleEvent = (event: any) => handlePayload(event.detail)
+    const handleBridgeEvent = (_event: unknown, payload?: unknown) => handlePayload(payload)
 
     window.addEventListener('image-gen', handleEvent)
-    return () => window.removeEventListener('image-gen', handleEvent)
+    window.shellAPI?.on?.('image-gen', handleBridgeEvent)
+    return () => {
+      window.removeEventListener('image-gen', handleEvent)
+      window.shellAPI?.off?.('image-gen', handleBridgeEvent)
+    }
   }, [])
 
   const downloadAndAutoSave = async (url: string, currentPrompt: string) => {
@@ -65,11 +84,12 @@ export default function ImageWidget() {
       reader.onloadend = async () => {
         const base64data = reader.result
 
-        await window.electron.ipcRenderer.invoke('save-image-to-gallery', {
+        const saved = await window.electron.ipcRenderer.invoke('save-image-to-gallery', {
           title: currentPrompt,
           base64Data: base64data
         })
 
+        setSavedImageName(saved?.image?.displayName || saved?.image?.filename || currentPrompt)
         setStatusText('SAVED TO GALLERY ✔️')
       }
     } catch (err: any) {
@@ -127,7 +147,7 @@ export default function ImageWidget() {
                 className="w-full h-auto max-h-full object-contain animate-in fade-in duration-1000"
               />
               <div className="absolute bottom-4 right-4 bg-green-500/20 text-green-400 border border-green-500/50 px-3 py-1 rounded-full text-xs font-bold font-mono animate-in slide-in-from-bottom-2 fade-in duration-700 delay-500">
-                💾 SAVED TO GALLERY
+                💾 {savedImageName ? 'SAVED TO GALLERY' : statusText}
               </div>
             </div>
           )}

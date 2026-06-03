@@ -115,6 +115,71 @@ async function setPrompt(client, value) {
   `)
 }
 
+async function clickDashboardSend(client) {
+  const rect = await evaluate(client, `
+    (() => {
+      const input = document.querySelector('input[placeholder^="Type to Shell"]')
+      if (!input) return null
+      const visible = (el) => {
+        const rect = el.getBoundingClientRect()
+        const style = getComputedStyle(el)
+        return rect.width > 1 && rect.height > 1 && style.display !== 'none' && style.visibility !== 'hidden'
+      }
+      const inputRect = input.getBoundingClientRect()
+      const buttons = Array.from(document.querySelectorAll('button'))
+        .filter((el) => visible(el) && !el.disabled)
+        .map((el) => {
+          const rect = el.getBoundingClientRect()
+          const text = String(el.innerText || el.textContent || '').trim().replace(/\\s+/g, ' ')
+          const aria = String(el.getAttribute('aria-label') || '').trim()
+          const score =
+            /send transcript message|send dashboard|send message/i.test(aria) ? 0 :
+              rect.top >= inputRect.top - 8 && rect.top <= inputRect.bottom + 8 && rect.left > inputRect.left ? 1 : 99
+          return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2, text, aria, score }
+        })
+        .filter((item) => item.score < 99)
+        .sort((a, b) => a.score - b.score || a.x - b.x)
+      return buttons[0] || null
+    })()
+  `)
+  if (!rect) return { clicked: false, label: 'dashboard_send', reason: 'not_found' }
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: rect.x, y: rect.y, button: 'none' })
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: rect.x, y: rect.y, button: 'left', clickCount: 1 })
+  return { clicked: true, label: 'dashboard_send', text: rect.text, aria: rect.aria, x: Math.round(rect.x), y: Math.round(rect.y) }
+}
+
+async function dashboardSurfaceProbe(client) {
+  return evaluate(client, `
+    (() => {
+      const normalize = (text) => String(text || '').trim().replace(/\\s+/g, ' ')
+      const visible = (el) => {
+        const rect = el.getBoundingClientRect()
+        const style = getComputedStyle(el)
+        return rect.width > 1 && rect.height > 1 && style.display !== 'none' && style.visibility !== 'hidden'
+      }
+      const bodyText = document.body.innerText || ''
+      const buttons = Array.from(document.querySelectorAll('button'))
+        .filter(visible)
+        .map((el) => ({
+          text: normalize(el.innerText || el.textContent || ''),
+          aria: normalize(el.getAttribute('aria-label') || '')
+        }))
+      const exactChartButtons = buttons.filter((item) =>
+        item.text.toLowerCase() === 'chart' || item.aria.toLowerCase() === 'send chart prompt'
+      )
+      return {
+        hasTranscript: /\\bTRANSCRIPT\\b/i.test(bodyText),
+        hasPromptInput: Boolean(document.querySelector('input[placeholder^="Type to Shell"]')),
+        hasCoreMetricsBox: /\\bCORE METRICS\\b/i.test(bodyText),
+        hasMiniChartCard: /\\b1\\s+CHART\\b|\\bMINI\\s+CHART\\b/i.test(bodyText),
+        exactChartButtons,
+        bodyPreview: bodyText.slice(0, 1200)
+      }
+    })()
+  `)
+}
+
 async function bodyText(client) {
   return evaluate(client, `document.body.innerText || ''`)
 }
@@ -129,10 +194,10 @@ async function waitForText(client, pattern, timeout = 12000) {
   return { ok: false, text: await bodyText(client) }
 }
 
-async function runChartQuestion(client, prompt, expected, notExpected, name) {
+async function runDashboardQuestion(client, prompt, expected, notExpected, name) {
   const typed = await setPrompt(client, prompt)
   await wait(100)
-  const sent = await click(client, 'Send chart prompt')
+  const sent = await clickDashboardSend(client)
   const result = await waitForText(client, expected)
   const text = result.text
   return {
@@ -182,18 +247,31 @@ async function main() {
     await click(client, 'Open DASHBOARD view')
     await wait(600)
 
+    const dashboardSurface = await dashboardSurfaceProbe(client)
+    report.steps.push({
+      name: 'dashboard_no_core_metrics_or_chart_button',
+      ok:
+        dashboardSurface.hasTranscript &&
+        dashboardSurface.hasPromptInput &&
+        !dashboardSurface.hasCoreMetricsBox &&
+        !dashboardSurface.hasMiniChartCard &&
+        dashboardSurface.exactChartButtons.length === 0,
+      probe: dashboardSurface,
+      screenshot: await screenshot(client, 'dashboard_no_core_metrics_or_chart_button')
+    })
+
     const clear1 = await click(client, 'Clear transcript')
-    const cleared = await waitForText(client, /No Data Stream/i, 4000)
+    const cleared = await waitForText(client, /No Transcript|No Data Stream/i, 4000)
     report.steps.push({
       name: 'transcript_clear_button',
-      ok: clear1.clicked && !/Result:\s*4|Chart: network|Shell ne message receive/i.test(cleared.text),
+      ok: clear1.clicked && cleared.ok && !/Result:\s*4|Chart: network|Shell ne message receive/i.test(cleared.text),
       click: clear1,
       bodyPreview: cleared.text.slice(0, 1000),
       screenshot: await screenshot(client, 'transcript_clear_button')
     })
 
     report.steps.push(
-      await runChartQuestion(
+      await runDashboardQuestion(
         client,
         'what is memory in Python?',
         /Memory in Python|Python memory|heap|garbage collector|reference counting/i,
@@ -202,7 +280,7 @@ async function main() {
       )
     )
     report.steps.push(
-      await runChartQuestion(
+      await runDashboardQuestion(
         client,
         'explain network protocols',
         /Network protocol|TCP\/IP|HTTP|DNS|data exchange|devices/i,
@@ -211,16 +289,7 @@ async function main() {
       )
     )
     report.steps.push(
-      await runChartQuestion(
-        client,
-        'show CPU chart',
-        /Chart:\s*CPU|CORE METRICS/i,
-        null,
-        'chart_explicit_cpu_chart'
-      )
-    )
-    report.steps.push(
-      await runChartQuestion(
+      await runDashboardQuestion(
         client,
         'calculate 7*6',
         /Result:\s*42|\b42\b/i,
@@ -229,7 +298,7 @@ async function main() {
       )
     )
     report.steps.push(
-      await runChartQuestion(
+      await runDashboardQuestion(
         client,
         'tumhe yaad hai maine abhi kya kaam diya tha?',
         /Tumne pichla kaam bola tha:\s*"calculate 7\*6"|pichla kaam.*calculate 7\*6/i,
@@ -241,7 +310,7 @@ async function main() {
     const voiceProbe = await evaluate(client, `window.__shellVoiceProbe || { speechSpeak: 0, ipcSpeak: 0, shellSpeakText: 0 }`)
     const terminalHiddenText = await bodyText(client)
     report.steps.push({
-      name: 'chart_text_mode_no_voice_and_no_hidden_terminal',
+      name: 'dashboard_text_mode_no_voice_and_no_hidden_terminal',
       ok:
         voiceProbe.speechSpeak === 0 &&
         voiceProbe.ipcSpeak === 0 &&

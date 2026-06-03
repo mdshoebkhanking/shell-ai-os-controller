@@ -1,4 +1,5 @@
 from PyQt6.QtCore import QCoreApplication
+import pytest
 
 
 PNG_DATA_URL = (
@@ -74,6 +75,65 @@ def test_image_generation_chat_result_surfaces_gallery_path(monkeypatch, tmp_pat
 
     assert "Gallery mein save ho gayi" in reply
     assert image_path.name in reply
+
+
+@pytest.mark.parametrize(
+    ("text", "meta", "expected_prompt"),
+    [
+        ("photo generate karo", {"source": "voice"}, "high quality original Shell AI concept image"),
+        ("photo generate karke do", {"source": "text"}, "high quality original Shell AI concept image"),
+        ("image banao", {"source": "text"}, "high quality original Shell AI concept image"),
+        ("generate image", {"source": "text", "entry": "chart"}, "high quality original Shell AI concept image"),
+        ("pic banao", {"source": "voice", "entry": "chart"}, "high quality original Shell AI concept image"),
+        ("cyberpunk city ki image banao", {"source": "text"}, "cyberpunk city"),
+    ],
+)
+def test_short_image_intents_route_to_generation_and_emit_gallery_events(
+    monkeypatch, tmp_path, text, meta, expected_prompt
+):
+    import shell_web_ui.host as host
+
+    gallery = tmp_path / "Pictures" / "Shell_Generated"
+    gallery.mkdir(parents=True)
+    image_path = gallery / f"{host.ShellBackendBridge._slug(expected_prompt)}.png"
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setattr(host, "GALLERY_DIR", gallery)
+    monkeypatch.setattr(host, "GALLERY_META_PATH", tmp_path / "runtime" / "web_ui_gallery.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    executed_routes = []
+
+    def fake_emit(channel, payload):
+        emitted.append((channel, payload))
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_image_ai:generate_image_tool"
+        assert route["args"]["description"] == expected_prompt
+        image_path.write_bytes(b"\x89PNG\r\n\x1a\nprobe")
+        return {"status": "success", "result": f"Image Generated\nSaved: `{image_path}`"}
+
+    monkeypatch.setattr(bridge, "emit_event", fake_emit)
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+
+    result = bridge._chat_message([text, meta])
+
+    image_events = [payload for channel, payload in emitted if channel == "image-gen"]
+    gallery_events = [payload for channel, payload in emitted if channel == "gallery-updated"]
+    chat_events = [payload for channel, payload in emitted if channel == "chat-updated"]
+
+    assert executed_routes
+    assert result["success"] is True
+    assert result["route"]["tool"] == "shell_image_ai:generate_image_tool"
+    assert "Gallery mein save ho gayi" in result["reply"]
+    assert image_events[0]["loading"] is True
+    assert image_events[0]["prompt"] == expected_prompt
+    assert image_events[-1]["loading"] is False
+    assert image_events[-1]["saved"] is True
+    assert gallery_events[-1]["image"]["filename"] == image_path.name
+    assert chat_events[-1]["source"] == meta.get("source", "text")
+    assert chat_events[-1]["voice"] is (meta.get("source") == "voice")
 
 
 def test_code_write_blocked_reply_names_relevant_safety_settings():
