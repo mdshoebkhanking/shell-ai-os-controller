@@ -124,7 +124,7 @@ jobs:
           subject-path: "dist/shell-ai-os-controller-*.zip"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -202,7 +202,7 @@ jobs:
           subject-path: "dist/shell-ai-os-controller-setup-*.exe"
 
       - name: Attach Windows setup to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
@@ -212,7 +212,7 @@ jobs:
           generate_release_notes: true
 
       - name: Attach Windows setup to requested GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: github.event_name == 'workflow_dispatch' && inputs.version != ''
         with:
           tag_name: v${{ inputs.version }}
