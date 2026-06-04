@@ -96,6 +96,8 @@ def test_public_launch_docs_and_ci_gate_are_linked():
     assert '"codex/**"' in release
     assert "windows-installer-branch-artifact" in release
     assert "shell-ai-os-controller-windows-setup" in release
+    assert "Attach Windows setup to requested GitHub Release" in release
+    assert "tag_name: v${{ inputs.version }}" in release
     assert "\n    needs: package\n" not in release
 
 

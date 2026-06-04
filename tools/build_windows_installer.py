@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.metadata as importlib_metadata
 import json
 import os
 import platform
@@ -64,6 +65,18 @@ PYINSTALLER_COPY_METADATA = [
     "python-socketio",
     "requests",
 ]
+
+
+def _available_pyinstaller_copy_metadata() -> list[str]:
+    available: list[str] = []
+    for package in PYINSTALLER_COPY_METADATA:
+        try:
+            importlib_metadata.distribution(package)
+        except importlib_metadata.PackageNotFoundError:
+            print(f"Skipping PyInstaller metadata for missing optional package: {package}")
+            continue
+        available.append(package)
+    return available
 
 
 def _safe_clear_staging() -> None:
@@ -201,7 +214,7 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
     ]
     for hidden_import in PYINSTALLER_HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", hidden_import])
-    for package in PYINSTALLER_COPY_METADATA:
+    for package in _available_pyinstaller_copy_metadata():
         cmd.extend(["--copy-metadata", package])
     if app_icon and app_icon.exists():
         cmd.extend(["--icon", str(app_icon)])

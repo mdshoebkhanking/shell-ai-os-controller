@@ -179,6 +179,9 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "shell_hub" in builder
     assert "aiohttp_cors" in builder
     assert "engineio.async_drivers.aiohttp" in builder
+    assert "_available_pyinstaller_copy_metadata" in builder
+    assert "PackageNotFoundError" in builder
+    assert "Skipping PyInstaller metadata for missing optional package" in builder
     assert "copy_web_ui_dist_to_stage" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert "RequestExecutionLevel user" in nsi
