@@ -31,8 +31,10 @@ def test_coordinator_uses_three_agent_trace_for_shell_command() -> None:
     assert names[-1] == "CoordinatorAgent"
 
 
-def test_cli_run_json_smoke(capsys) -> None:
+def test_cli_run_json_smoke(capsys, monkeypatch, tmp_path) -> None:
     from shellai.cli import main
+
+    monkeypatch.setenv("SHELLAI_CONFIG", str(tmp_path / "config.json"))
 
     assert main(["run", "!git", "status", "--json"]) == 0
     output = capsys.readouterr().out
