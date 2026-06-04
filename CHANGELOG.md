@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.4 - Release Web UI package readiness
+
+- Builds the React Shell Web UI renderer inside the release package job before
+  running public package health checks.
+- Keeps generated `shell_web_ui/dist` out of the source zip while allowing
+  release health to verify the renderer exists.
+
 ## 1.0.3 - Release test stability fix
 
 - Updated release tests so patch-level 1.0.x installer releases are accepted

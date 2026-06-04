@@ -47,6 +47,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements-ci.txt
 
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: shell_web_ui/package-lock.json
+
       - name: Install CI dependencies
         run: |
           python -m pip install --upgrade pip
@@ -62,6 +69,11 @@ jobs:
 
       - name: Config diagnostics
         run: python tools/config_diagnostics.py --fail-on-error
+
+      - name: Build Web UI renderer
+        run: |
+          npm ci --prefix shell_web_ui
+          npm run build --prefix shell_web_ui
 
       - name: Build package
         run: python tools/package_public_release.py
