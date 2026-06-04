@@ -136,6 +136,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
     assert "tools\\build_windows_installer.py" in exe_builder
+    assert "bundle ShellAI.exe with PyInstaller" in exe_builder
     assert "JRSoftware.InnoSetup" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
@@ -165,8 +166,13 @@ def test_windows_inno_setup_installer_config_creates_shortcuts_and_startup_optio
 
     assert "OutputBaseFilename=shell-ai-os-controller-setup-{#AppVersion}" in iss
     assert "DefaultDirName={localappdata}\\Programs\\ShellAI" in iss
+    assert '#define AppExeName "ShellAIApp\\ShellAI.exe"' in iss
     assert "ONE_CLICK_INSTALL.bat" in iss
-    assert "Start_ShellAI.bat" in iss
+    assert "Start_ShellAI.bat" not in iss
+    assert "ShellAIApp\\ShellAI.exe" in builder
+    assert "build_bundled_desktop_app" in builder
+    assert "PyInstaller" in builder
+    assert "copy_web_ui_dist_to_stage" in builder
     assert "{userstartup}\\Shell AI OS Controller" in iss
     assert "PrivilegesRequired=lowest" in iss
     assert "validate_release_file_set(files)" in builder

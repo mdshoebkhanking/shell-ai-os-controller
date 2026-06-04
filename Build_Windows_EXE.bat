@@ -19,6 +19,8 @@ echo   dist\shell-ai-os-controller-setup-[VERSION].exe
 echo.
 echo  This will:
 echo   - validate the release package inputs
+echo   - build the React renderer
+echo   - bundle ShellAI.exe with PyInstaller
 echo   - stage a clean installer tree without secrets/runtime files
 echo   - compile a Windows setup EXE with Inno Setup
 echo.
@@ -70,6 +72,7 @@ echo.
 if "!SHELL_RC!"=="0" (
   echo ============================================================
   echo  Windows setup EXE created in dist.
+  echo  Installer shortcuts launch ShellAIApp\ShellAI.exe.
   echo  Upload the setup EXE as the release asset for Settings updates.
   echo ============================================================
 ) else (

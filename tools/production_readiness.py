@@ -144,6 +144,7 @@ def _verify_package() -> tuple[bool, str]:
                 "Build_Windows_EXE.bat",
                 "Run_Windows_Acceptance_Test.bat",
                 "tools/build_windows_installer.py",
+                "tools/windows_app/shellai_desktop_entry.py",
                 "tools/windows_installer/ShellAI_Setup.iss",
                 "tools/windows_acceptance_probe.py",
                 "tools/signing_notarization_check.py",

@@ -60,6 +60,7 @@ REQUIRED_PACKAGE_FILES = {
     "shell_web_ui/tsconfig.json",
     "shell_web_ui/vite.config.ts",
     "tools/build_windows_installer.py",
+    "tools/windows_app/shellai_desktop_entry.py",
     "tools/windows_installer/ShellAI_Setup.iss",
 }
 

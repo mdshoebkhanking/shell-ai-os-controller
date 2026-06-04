@@ -23,6 +23,13 @@ APP_STAGE = STAGING_ROOT / "ShellAI"
 DIST_DIR = ROOT / "dist"
 INNO_SCRIPT = ROOT / "tools" / "windows_installer" / "ShellAI_Setup.iss"
 REPORT_PATH = DIST_DIR / "windows_installer_package.json"
+WINDOWS_APP_ENTRY = ROOT / "tools" / "windows_app" / "shellai_desktop_entry.py"
+WEB_UI_ROOT = ROOT / "shell_web_ui"
+WEB_UI_DIST = WEB_UI_ROOT / "dist"
+WEB_UI_DIST_INDEX = WEB_UI_DIST / "index.html"
+APP_BUNDLE_DIR = APP_STAGE / "ShellAIApp"
+APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
+APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 
 
 def _safe_clear_staging() -> None:
@@ -56,6 +63,101 @@ def stage_release_files() -> dict[str, object]:
         encoding="utf-8",
     )
     return marker
+
+
+def _npm_command() -> str:
+    return shutil.which("npm.cmd") or shutil.which("npm") or "npm"
+
+
+def ensure_web_ui_build() -> None:
+    if WEB_UI_DIST_INDEX.exists():
+        return
+    package_json = WEB_UI_ROOT / "package.json"
+    if not package_json.exists():
+        raise RuntimeError("shell_web_ui/package.json is missing; cannot build bundled renderer.")
+    npm = _npm_command()
+    install_cmd = [npm, "ci"] if (WEB_UI_ROOT / "package-lock.json").exists() else [npm, "install"]
+    subprocess.run(install_cmd, cwd=str(WEB_UI_ROOT), check=True)
+    subprocess.run([npm, "run", "build"], cwd=str(WEB_UI_ROOT), check=True)
+    if not WEB_UI_DIST_INDEX.exists():
+        raise RuntimeError("Shell Web UI build finished but shell_web_ui/dist/index.html is missing.")
+
+
+def copy_web_ui_dist_to_stage() -> None:
+    ensure_web_ui_build()
+    target = APP_STAGE / "shell_web_ui" / "dist"
+    if target.exists():
+        shutil.rmtree(target)
+    shutil.copytree(WEB_UI_DIST, target)
+
+
+def build_bundled_desktop_app() -> dict[str, object]:
+    if platform.system().lower() != "windows":
+        raise RuntimeError("Bundled ShellAI.exe compilation requires Windows with PyInstaller.")
+    if not WINDOWS_APP_ENTRY.exists():
+        raise RuntimeError(f"Windows desktop app entry is missing: {WINDOWS_APP_ENTRY}")
+
+    pyinstaller_probe = subprocess.run(
+        [sys.executable, "-m", "PyInstaller", "--version"],
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if pyinstaller_probe.returncode != 0:
+        raise RuntimeError("PyInstaller is not installed. Run Repair_ShellAI.bat or install shell_ui/requirements_ui.txt.")
+
+    dist_root = STAGING_ROOT / "pyinstaller_dist"
+    work_root = STAGING_ROOT / "pyinstaller_build"
+    spec_root = STAGING_ROOT / "pyinstaller_spec"
+    for path in (dist_root, work_root, spec_root, APP_BUNDLE_DIR):
+        if path.exists():
+            shutil.rmtree(path)
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onedir",
+        "--windowed",
+        "--name",
+        "ShellAI",
+        "--distpath",
+        str(dist_root),
+        "--workpath",
+        str(work_root),
+        "--specpath",
+        str(spec_root),
+        "--paths",
+        str(ROOT),
+        "--hidden-import",
+        "PyQt6.QtWebChannel",
+        "--hidden-import",
+        "PyQt6.QtWebEngineCore",
+        "--hidden-import",
+        "PyQt6.QtWebEngineWidgets",
+        "--hidden-import",
+        "shell_web_ui.host",
+        "--hidden-import",
+        "shell_ui.splash_screen",
+        "--collect-all",
+        "PyQt6",
+        str(WINDOWS_APP_ENTRY),
+    ]
+    subprocess.run(cmd, cwd=str(ROOT), check=True)
+    built = dist_root / "ShellAI"
+    built_exe = built / "ShellAI.exe"
+    if not built_exe.exists():
+        raise RuntimeError(f"PyInstaller finished but bundled app is missing: {built_exe}")
+    shutil.move(str(built), str(APP_BUNDLE_DIR))
+    return {
+        "app_dir": str(APP_BUNDLE_DIR),
+        "app_exe": str(APP_BUNDLE_EXE),
+        "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
+    }
 
 
 def find_inno_compiler() -> str | None:
@@ -95,6 +197,8 @@ def compile_inno_setup(iscc: str) -> Path:
         f"/DAppSource={APP_STAGE}",
         f"/DOutputDir={DIST_DIR}",
         f"/DAppVersion={version()}",
+        f"/DAppExeName={APP_EXE_RELATIVE}",
+        "/DBundledApp=1",
         str(INNO_SCRIPT),
     ]
     subprocess.run(cmd, cwd=str(ROOT), check=True)
@@ -103,17 +207,24 @@ def compile_inno_setup(iscc: str) -> Path:
     return installer_path
 
 
-def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: bool) -> dict[str, object]:
+def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: bool, skip_app_build: bool = False) -> dict[str, object]:
     if not skip_release_check:
         run_release_check(strict=strict)
     marker = stage_release_files()
+    if not dry_run:
+        copy_web_ui_dist_to_stage()
     iscc = find_inno_compiler()
+    app_report: dict[str, object] = {
+        "status": "not-built",
+        "expected_app_exe": str(APP_BUNDLE_EXE),
+    }
     report: dict[str, object] = {
         "status": "staged",
         "version": version(),
         "staging_dir": str(APP_STAGE),
         "inno_compiler": iscc or "",
         "source_file_count": marker["source_file_count"],
+        "bundled_app": app_report,
         "expected_output": str(DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"),
     }
     if dry_run:
@@ -121,6 +232,12 @@ def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: 
     else:
         if platform.system().lower() != "windows":
             raise RuntimeError("Windows .exe installer compilation requires Windows with Inno Setup.")
+        if skip_app_build:
+            report["bundled_app"] = {"status": "skipped", "expected_app_exe": str(APP_BUNDLE_EXE)}
+        else:
+            app_report = build_bundled_desktop_app()
+            app_report["status"] = "success"
+            report["bundled_app"] = app_report
         if not iscc:
             raise RuntimeError("Inno Setup compiler not found. Install Inno Setup 6 or set INNO_SETUP_COMPILER.")
         installer = compile_inno_setup(iscc)
@@ -141,12 +258,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true", help="Stage release files and validate installer inputs without compiling.")
     parser.add_argument("--skip-release-check", action="store_true", help="Skip production release check; intended for CI jobs that already ran it.")
     parser.add_argument("--no-strict", action="store_true", help="Do not treat local .env development flags as release blockers.")
+    parser.add_argument("--skip-app-build", action="store_true", help="Compile installer from staged source without building bundled ShellAI.exe.")
     args = parser.parse_args(argv)
     try:
         report = build_windows_installer(
             dry_run=args.dry_run,
             skip_release_check=args.skip_release_check,
             strict=not args.no_strict,
+            skip_app_build=args.skip_app_build,
         )
     except Exception as exc:
         print(f"Windows installer build failed: {exc}")
@@ -154,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Shell AI Windows installer {report['status']}")
     print(f"Version: {report['version']}")
     print(f"Staging: {report['staging_dir']}")
+    bundled = report.get("bundled_app") or {}
+    if isinstance(bundled, dict):
+        print(f"App EXE: {bundled.get('app_exe') or bundled.get('expected_app_exe')}")
     print(f"Output: {report.get('path') or report.get('expected_output')}")
     return 0
 

@@ -10,9 +10,12 @@
   #define AppVersion "1.0.0"
 #endif
 
+#ifndef AppExeName
+  #define AppExeName "ShellAIApp\ShellAI.exe"
+#endif
+
 #define AppPublisher "mdshoebking"
 #define AppName "Shell AI OS Controller"
-#define AppExeName "Start_ShellAI.bat"
 
 [Setup]
 AppId={{9D77E6BF-78C4-47D5-9F54-8E2464E84A2A}
@@ -42,7 +45,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 Name: "startup"; Description: "Start Shell AI when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
-Name: "bootstrap"; Description: "Install or repair Shell AI dependencies now"; GroupDescription: "First run setup:"; Flags: checkedonce
+Name: "bootstrap"; Description: "Install or repair Shell AI dependencies now"; GroupDescription: "First run setup:"; Flags: unchecked
 
 [Files]
 Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,3 +64,4 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch Shell AI"; WorkingDir: "{a
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\.shell_runtime\updates"
 Type: filesandordirs; Name: "{app}\.shell_runtime\windows_installer_staging"
+Type: filesandordirs; Name: "{app}\ShellAIApp"

@@ -61,9 +61,10 @@ Windows setup EXE build:
 
 - On Windows, double-click `Build_Windows_EXE.bat`.
 - The builder stages a clean public installer tree under `.shell_runtime/windows_installer_staging`.
+- The builder creates the React renderer build and bundles `ShellAI.exe` with PyInstaller under `ShellAIApp\`.
 - Inno Setup compiles `tools/windows_installer/ShellAI_Setup.iss`.
 - The setup EXE is written to `dist/shell-ai-os-controller-setup-[version].exe`.
-- The installer creates Start Menu shortcuts, optional desktop shortcut, optional Windows-startup shortcut, and can run the dependency bootstrap on first install.
+- The installer creates Start Menu shortcuts, optional desktop shortcut, optional Windows-startup shortcut, and launches the bundled app executable. Dependency bootstrap remains available as an optional repair/fallback task.
 
 Updates:
 
