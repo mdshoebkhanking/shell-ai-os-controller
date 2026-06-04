@@ -153,7 +153,7 @@ dist/shell-ai-os-controller-setup-1.0.0.exe
 The EXE builder stages the same public release file set, excludes local
 secrets/runtime files, builds the React renderer, bundles a desktop
 `ShellAI.exe` with PyInstaller under `ShellAIApp\`, compiles
-`tools/windows_installer/ShellAI_Setup.iss` with Inno Setup, and creates
+`tools/windows_installer/ShellAI_Setup.nsi` with NSIS / Nullsoft, and creates
 Start Menu/Desktop/startup shortcuts that launch the bundled app executable.
 GitHub Actions also builds this setup EXE on `windows-latest` for release
 artifacts.

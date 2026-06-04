@@ -22,7 +22,7 @@ echo   - validate the release package inputs
 echo   - build the React renderer
 echo   - bundle ShellAI.exe with PyInstaller
 echo   - stage a clean installer tree without secrets/runtime files
-echo   - compile a Windows setup EXE with Inno Setup
+echo   - compile a Windows setup EXE with NSIS / Nullsoft
 echo.
 
 set "PY_CMD="
@@ -41,23 +41,23 @@ if not defined PY_CMD (
   exit /b 1
 )
 
-where ISCC.exe >nul 2>nul
+where makensis.exe >nul 2>nul
 if errorlevel 1 (
-  echo Inno Setup compiler was not found. Trying winget install...
-  winget install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements
+  echo NSIS compiler was not found. Trying winget install...
+  winget install --id NSIS.NSIS -e --accept-source-agreements --accept-package-agreements
   call :refresh_path
 )
 
-where ISCC.exe >nul 2>nul
+where makensis.exe >nul 2>nul
 if errorlevel 1 (
-  if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "INNO_SETUP_COMPILER=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+  if exist "%ProgramFiles(x86)%\NSIS\makensis.exe" set "NSIS_COMPILER=%ProgramFiles(x86)%\NSIS\makensis.exe"
 )
-if not defined INNO_SETUP_COMPILER (
-  if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "INNO_SETUP_COMPILER=%ProgramFiles%\Inno Setup 6\ISCC.exe"
+if not defined NSIS_COMPILER (
+  if exist "%ProgramFiles%\NSIS\makensis.exe" set "NSIS_COMPILER=%ProgramFiles%\NSIS\makensis.exe"
 )
 
 echo Using Python command: !PY_CMD!
-if defined INNO_SETUP_COMPILER echo Using Inno compiler: !INNO_SETUP_COMPILER!
+if defined NSIS_COMPILER echo Using NSIS compiler: !NSIS_COMPILER!
 echo.
 
 echo Preparing installer build environment...
@@ -103,6 +103,6 @@ if not errorlevel 1 set "PY_CMD=python"
 goto :eof
 
 :refresh_path
-set "PATH=%ProgramFiles%\Inno Setup 6;%ProgramFiles(x86)%\Inno Setup 6;%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%LOCALAPPDATA%\Microsoft\WinGet\Links;%USERPROFILE%\.local\bin;%APPDATA%\Python\Scripts;%PATH%"
+set "PATH=%ProgramFiles%\NSIS;%ProgramFiles(x86)%\NSIS;%ProgramFiles%\Inno Setup 6;%ProgramFiles(x86)%\Inno Setup 6;%ProgramFiles%\nodejs;%ProgramFiles(x86)%\nodejs;%LOCALAPPDATA%\Microsoft\WinGet\Links;%USERPROFILE%\.local\bin;%APPDATA%\Python\Scripts;%PATH%"
 for /f "usebackq delims=" %%P in (`powershell -NoProfile -ExecutionPolicy Bypass -Command "$machine=[Environment]::GetEnvironmentVariable('Path','Machine'); $user=[Environment]::GetEnvironmentVariable('Path','User'); Write-Output ($machine + ';' + $user)" 2^>nul`) do set "PATH=%%P;%PATH%"
 goto :eof

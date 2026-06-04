@@ -22,6 +22,7 @@ STAGING_ROOT = ROOT / ".shell_runtime" / "windows_installer_staging"
 APP_STAGE = STAGING_ROOT / "ShellAI"
 DIST_DIR = ROOT / "dist"
 INNO_SCRIPT = ROOT / "tools" / "windows_installer" / "ShellAI_Setup.iss"
+NSIS_SCRIPT = ROOT / "tools" / "windows_installer" / "ShellAI_Setup.nsi"
 REPORT_PATH = DIST_DIR / "windows_installer_package.json"
 WINDOWS_APP_ENTRY = ROOT / "tools" / "windows_app" / "shellai_desktop_entry.py"
 WEB_UI_ROOT = ROOT / "shell_web_ui"
@@ -30,6 +31,9 @@ WEB_UI_DIST_INDEX = WEB_UI_DIST / "index.html"
 APP_BUNDLE_DIR = APP_STAGE / "ShellAIApp"
 APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
+ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
+ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
+ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
 
 
 def _safe_clear_staging() -> None:
@@ -56,7 +60,7 @@ def stage_release_files() -> dict[str, object]:
         "version": version(),
         "created_at": time.time(),
         "source_file_count": len(files),
-        "installer": "Inno Setup",
+        "installer": "NSIS",
     }
     (APP_STAGE / "windows_installer_build.json").write_text(
         json.dumps(marker, indent=2, sort_keys=True),
@@ -91,7 +95,36 @@ def copy_web_ui_dist_to_stage() -> None:
     shutil.copytree(WEB_UI_DIST, target)
 
 
-def build_bundled_desktop_app() -> dict[str, object]:
+def prepare_windows_icon(*, dry_run: bool) -> dict[str, object]:
+    if not ICON_SOURCE.exists():
+        raise RuntimeError(f"Shell app logo is missing: {ICON_SOURCE}")
+    report = {
+        "source": str(ICON_SOURCE),
+        "icon": str(ICON_ICO),
+        "status": "planned" if dry_run else "pending",
+    }
+    if dry_run:
+        return report
+
+    try:
+        from PIL import Image
+    except ModuleNotFoundError as exc:
+        raise RuntimeError("Pillow is required to convert the Shell logo into a Windows .ico asset.") from exc
+
+    ICON_BUILD_DIR.mkdir(parents=True, exist_ok=True)
+    with Image.open(ICON_SOURCE) as image:
+        image.convert("RGBA").save(
+            ICON_ICO,
+            format="ICO",
+            sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
+        )
+    if not ICON_ICO.exists():
+        raise RuntimeError(f"Windows icon conversion failed: {ICON_ICO}")
+    report.update({"status": "success", "size_bytes": ICON_ICO.stat().st_size})
+    return report
+
+
+def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]:
     if platform.system().lower() != "windows":
         raise RuntimeError("Bundled ShellAI.exe compilation requires Windows with PyInstaller.")
     if not WINDOWS_APP_ENTRY.exists():
@@ -145,8 +178,10 @@ def build_bundled_desktop_app() -> dict[str, object]:
         "shell_ui.splash_screen",
         "--collect-all",
         "PyQt6",
-        str(WINDOWS_APP_ENTRY),
     ]
+    if app_icon and app_icon.exists():
+        cmd.extend(["--icon", str(app_icon)])
+    cmd.append(str(WINDOWS_APP_ENTRY))
     subprocess.run(cmd, cwd=str(ROOT), check=True)
     built = dist_root / "ShellAI"
     built_exe = built / "ShellAI.exe"
@@ -156,6 +191,7 @@ def build_bundled_desktop_app() -> dict[str, object]:
     return {
         "app_dir": str(APP_BUNDLE_DIR),
         "app_exe": str(APP_BUNDLE_EXE),
+        "app_icon": str(app_icon) if app_icon else "",
         "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
     }
 
@@ -182,6 +218,28 @@ def find_inno_compiler() -> str | None:
     return None
 
 
+def find_nsis_compiler() -> str | None:
+    configured = os.environ.get("NSIS_COMPILER", "").strip()
+    candidates = [configured] if configured else []
+    candidates.extend(["makensis.exe", "makensis"])
+    program_files = [
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+    ]
+    for root in program_files:
+        if root:
+            candidates.append(str(Path(root) / "NSIS" / "makensis.exe"))
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        found = shutil.which(candidate) if not Path(candidate).exists() else candidate
+        if found:
+            return str(found)
+    return None
+
+
 def run_release_check(*, strict: bool) -> None:
     report = build_report(include_health=True, strict=strict)
     if report.get("status") != "pass":
@@ -189,7 +247,7 @@ def run_release_check(*, strict: bool) -> None:
         raise RuntimeError(f"Production release check failed: {blockers}")
 
 
-def compile_inno_setup(iscc: str) -> Path:
+def compile_inno_setup(iscc: str, app_icon: Path | None = None) -> Path:
     DIST_DIR.mkdir(parents=True, exist_ok=True)
     installer_path = DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"
     cmd = [
@@ -199,21 +257,56 @@ def compile_inno_setup(iscc: str) -> Path:
         f"/DAppVersion={version()}",
         f"/DAppExeName={APP_EXE_RELATIVE}",
         "/DBundledApp=1",
-        str(INNO_SCRIPT),
     ]
+    if app_icon and app_icon.exists():
+        cmd.append(f"/DInstallerIcon={app_icon}")
+    cmd.append(str(INNO_SCRIPT))
     subprocess.run(cmd, cwd=str(ROOT), check=True)
     if not installer_path.exists():
         raise RuntimeError(f"Inno Setup finished but installer is missing: {installer_path}")
     return installer_path
 
 
-def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: bool, skip_app_build: bool = False) -> dict[str, object]:
+def compile_nsis_setup(makensis: str, app_icon: Path | None = None) -> Path:
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
+    installer_path = DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"
+    cmd = [
+        makensis,
+        f"/DAppSource={APP_STAGE}",
+        f"/DOutputDir={DIST_DIR}",
+        f"/DAppVersion={version()}",
+        f"/DAppExeName={APP_EXE_RELATIVE}",
+        f"/DLicenseFile={ROOT / 'LICENSE'}",
+    ]
+    if app_icon and app_icon.exists():
+        cmd.append(f"/DInstallerIcon={app_icon}")
+    cmd.append(str(NSIS_SCRIPT))
+    subprocess.run(cmd, cwd=str(ROOT), check=True)
+    if not installer_path.exists():
+        raise RuntimeError(f"NSIS finished but installer is missing: {installer_path}")
+    return installer_path
+
+
+def build_windows_installer(
+    *,
+    dry_run: bool,
+    skip_release_check: bool,
+    strict: bool,
+    skip_app_build: bool = False,
+    installer_engine: str = "nsis",
+) -> dict[str, object]:
     if not skip_release_check:
         run_release_check(strict=strict)
+    if installer_engine not in {"nsis", "inno"}:
+        raise RuntimeError(f"Unsupported installer engine: {installer_engine}")
     marker = stage_release_files()
     if not dry_run:
         copy_web_ui_dist_to_stage()
+    icon_report = prepare_windows_icon(dry_run=dry_run)
+    app_icon = ICON_ICO if not dry_run else None
     iscc = find_inno_compiler()
+    makensis = find_nsis_compiler()
+    compiler = makensis if installer_engine == "nsis" else iscc
     app_report: dict[str, object] = {
         "status": "not-built",
         "expected_app_exe": str(APP_BUNDLE_EXE),
@@ -222,6 +315,11 @@ def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: 
         "status": "staged",
         "version": version(),
         "staging_dir": str(APP_STAGE),
+        "installer_engine": installer_engine,
+        "installer_script": str(NSIS_SCRIPT if installer_engine == "nsis" else INNO_SCRIPT),
+        "installer_compiler": compiler or "",
+        "icon": icon_report,
+        "nsis_compiler": makensis or "",
         "inno_compiler": iscc or "",
         "source_file_count": marker["source_file_count"],
         "bundled_app": app_report,
@@ -231,16 +329,22 @@ def build_windows_installer(*, dry_run: bool, skip_release_check: bool, strict: 
         report["status"] = "dry-run"
     else:
         if platform.system().lower() != "windows":
-            raise RuntimeError("Windows .exe installer compilation requires Windows with Inno Setup.")
+            engine_name = "NSIS" if installer_engine == "nsis" else "Inno Setup"
+            raise RuntimeError(f"Windows .exe installer compilation requires Windows with {engine_name}.")
         if skip_app_build:
             report["bundled_app"] = {"status": "skipped", "expected_app_exe": str(APP_BUNDLE_EXE)}
         else:
-            app_report = build_bundled_desktop_app()
+            app_report = build_bundled_desktop_app(app_icon)
             app_report["status"] = "success"
             report["bundled_app"] = app_report
-        if not iscc:
-            raise RuntimeError("Inno Setup compiler not found. Install Inno Setup 6 or set INNO_SETUP_COMPILER.")
-        installer = compile_inno_setup(iscc)
+        if installer_engine == "nsis":
+            if not makensis:
+                raise RuntimeError("NSIS compiler not found. Install NSIS or set NSIS_COMPILER.")
+            installer = compile_nsis_setup(makensis, app_icon)
+        else:
+            if not iscc:
+                raise RuntimeError("Inno Setup compiler not found. Install Inno Setup 6 or set INNO_SETUP_COMPILER.")
+            installer = compile_inno_setup(iscc, app_icon)
         report.update(
             {
                 "status": "success",
@@ -259,6 +363,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--skip-release-check", action="store_true", help="Skip production release check; intended for CI jobs that already ran it.")
     parser.add_argument("--no-strict", action="store_true", help="Do not treat local .env development flags as release blockers.")
     parser.add_argument("--skip-app-build", action="store_true", help="Compile installer from staged source without building bundled ShellAI.exe.")
+    parser.add_argument(
+        "--installer-engine",
+        choices=("nsis", "inno"),
+        default="nsis",
+        help="Windows setup compiler to use. NSIS matches the IRIS/electron-builder setup style.",
+    )
     args = parser.parse_args(argv)
     try:
         report = build_windows_installer(
@@ -266,12 +376,14 @@ def main(argv: list[str] | None = None) -> int:
             skip_release_check=args.skip_release_check,
             strict=not args.no_strict,
             skip_app_build=args.skip_app_build,
+            installer_engine=args.installer_engine,
         )
     except Exception as exc:
         print(f"Windows installer build failed: {exc}")
         return 2
     print(f"Shell AI Windows installer {report['status']}")
     print(f"Version: {report['version']}")
+    print(f"Installer engine: {report.get('installer_engine')}")
     print(f"Staging: {report['staging_dir']}")
     bundled = report.get("bundled_app") or {}
     if isinstance(bundled, dict):

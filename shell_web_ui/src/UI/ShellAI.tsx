@@ -140,6 +140,31 @@ const ShellAI = (props: ShellProps) => {
     setShowSourceModal(true)
   }
 
+  const activeView = () => {
+    if (activeTab === 'DASHBOARD') {
+      return (
+        <DashboardView
+          props={props}
+          stats={stats}
+          chatHistory={chatHistory}
+          onVisionClick={handleVisionClick}
+          onTranscriptCleared={handleTranscriptCleared}
+        />
+      )
+    }
+    if (activeTab === 'PHONE') return <PhoneView glassPanel={glassPanel} />
+    return (
+      <Suspense fallback={<ViewSkeleton />}>
+        {activeTab === 'Macros' && <WorkFlowEditorView />}
+        {activeTab === 'Apps' && <AppsView />}
+        {activeTab === 'NOTES' && <NotesView glassPanel={glassPanel} />}
+        {activeTab === 'CONTROL' && <ControlCenter />}
+        {activeTab === 'SETTINGS' && <SettingsView isSystemActive={props.isSystemActive} />}
+        {activeTab === 'GALLERY' && <GalleryView />}
+      </Suspense>
+    )
+  }
+
   return (
     <div className="shell-ui-root h-full w-full text-zinc-100 font-sans overflow-hidden select-none flex flex-col relative pb-4">
       <div className="shell-topbar h-14 w-full flex items-center justify-between px-6 z-50">
@@ -228,29 +253,8 @@ const ShellAI = (props: ShellProps) => {
       </div>
 
       <div className="shell-page-surface flex-1 min-h-0 overflow-hidden relative">
-        <div className={`absolute inset-0 ${activeTab === 'DASHBOARD' ? 'block shell-view-pane' : 'hidden'}`}>
-          <DashboardView
-            props={props}
-            stats={stats}
-            chatHistory={chatHistory}
-            onVisionClick={handleVisionClick}
-            onTranscriptCleared={handleTranscriptCleared}
-          />
-        </div>
-
-        <div className={`absolute inset-0 ${activeTab === 'PHONE' ? 'block shell-view-pane' : 'hidden'}`}>
-          <PhoneView glassPanel={glassPanel} />
-        </div>
-
-        <div className={`absolute inset-0 ${activeTab !== 'DASHBOARD' && activeTab !== 'PHONE' ? 'block shell-view-pane' : 'hidden'}`}>
-          <Suspense fallback={<ViewSkeleton />}>
-            {activeTab === 'Macros' && <WorkFlowEditorView />}
-            {activeTab === 'Apps' && <AppsView />}
-            {activeTab === 'NOTES' && <NotesView glassPanel={glassPanel} />}
-            {activeTab === 'CONTROL' && <ControlCenter />}
-            {activeTab === 'SETTINGS' && <SettingsView isSystemActive={props.isSystemActive} />}
-            {activeTab === 'GALLERY' && <GalleryView />}
-          </Suspense>
+        <div key={activeTab} className="absolute inset-0 shell-view-pane">
+          {activeView()}
         </div>
       </div>
 

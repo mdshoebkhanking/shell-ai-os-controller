@@ -113,6 +113,7 @@ def test_public_release_package_includes_web_ui_source_and_windows_launchers():
     assert "tools/build_windows_installer.py" in rel_paths
     assert "tools/windows_app/shellai_desktop_entry.py" in rel_paths
     assert "tools/windows_installer/ShellAI_Setup.iss" in rel_paths
+    assert "tools/windows_installer/ShellAI_Setup.nsi" in rel_paths
     assert "AGENT_FIX.md" not in rel_paths
     assert "SESSION_LOG.md" not in rel_paths
     assert not any(path.startswith("shell_web_ui/dist/") for path in rel_paths)

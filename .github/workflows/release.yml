@@ -160,10 +160,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
-          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts sounddevice SpeechRecognition pynput keyboard
+          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts sounddevice SpeechRecognition pynput keyboard pillow
 
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
 
       - name: Build Windows setup EXE
         run: python tools/build_windows_installer.py --skip-release-check
@@ -228,10 +228,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
-          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts sounddevice SpeechRecognition pynput keyboard
+          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts sounddevice SpeechRecognition pynput keyboard pillow
 
-      - name: Install Inno Setup
-        run: choco install innosetup --no-progress -y
+      - name: Install NSIS
+        run: choco install nsis --no-progress -y
 
       - name: Build Windows setup EXE
         run: python tools/build_windows_installer.py --skip-release-check

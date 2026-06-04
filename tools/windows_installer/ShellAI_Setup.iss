@@ -38,6 +38,9 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayName={#AppName}
 SetupLogging=yes
+#ifdef InstallerIcon
+SetupIconFile={#InstallerIcon}
+#endif
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

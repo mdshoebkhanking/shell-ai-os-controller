@@ -273,6 +273,10 @@ body {
 }
 
 .shell-view-pane {
+  backface-visibility: hidden;
+  contain: layout paint;
+  transform: translate3d(0, 0, 0);
+  will-change: opacity, transform;
   animation: shell-panel-arrive 340ms var(--shell-liquid-ease) both;
 }
 

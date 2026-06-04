@@ -146,6 +146,7 @@ def _verify_package() -> tuple[bool, str]:
                 "tools/build_windows_installer.py",
                 "tools/windows_app/shellai_desktop_entry.py",
                 "tools/windows_installer/ShellAI_Setup.iss",
+                "tools/windows_installer/ShellAI_Setup.nsi",
                 "tools/windows_acceptance_probe.py",
                 "tools/signing_notarization_check.py",
             }

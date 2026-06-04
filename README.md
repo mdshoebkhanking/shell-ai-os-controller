@@ -428,7 +428,7 @@ Double-click Build_Windows_EXE.bat
 ```
 
 The generated installer is written to `dist\shell-ai-os-controller-setup-[version].exe`.
-The installer is a proper desktop app package: it builds the React renderer,
+The installer is a proper NSIS/Nullsoft desktop app package: it builds the React renderer,
 bundles `ShellAI.exe` with PyInstaller under `ShellAIApp\`, and points Start
 Menu/Desktop/startup shortcuts at that app executable. The batch launchers stay
 in the install folder only as repair/fallback tools.

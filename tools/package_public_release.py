@@ -62,6 +62,7 @@ REQUIRED_PACKAGE_FILES = {
     "tools/build_windows_installer.py",
     "tools/windows_app/shellai_desktop_entry.py",
     "tools/windows_installer/ShellAI_Setup.iss",
+    "tools/windows_installer/ShellAI_Setup.nsi",
 }
 
 FORBIDDEN_PACKAGE_PATH_PREFIXES = {

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.6 - NSIS Windows app installer
+
+- Switched the primary Windows setup builder to an NSIS / Nullsoft installer
+  flow matching the IRIS-style `*-setup.exe` packaging family.
+- Kept Inno Setup available as an explicit fallback engine while making NSIS
+  the default for CI and `Build_Windows_EXE.bat`.
+- Wired the existing Shell logo asset into the generated Windows `.ico`,
+  PyInstaller app executable, and NSIS setup icon.
+- Stabilized Shell Web UI tab switching by rendering only the active tab pane
+  and reducing panel animation flicker.
+
 ## 1.0.5 - Source package release health split
 
 - Separates source package validation from installed runtime venv health so
