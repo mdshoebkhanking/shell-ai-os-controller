@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2 - Release CI Qt dependency fix
+
+- Added Linux Qt runtime packages to the release workflow so PyQt tests can
+  import Qt GUI modules on Ubuntu release runners.
+- Kept the bundled Windows desktop app installer changes from 1.0.1.
+
 ## 1.0.1 - Bundled Windows desktop app installer
 
 - Replaced the Windows setup shortcut target with a bundled
