@@ -212,8 +212,8 @@ def _run_tests() -> tuple[bool, str]:
     return proc.returncode == 0, tail
 
 
-def build_readiness_report(*, run_tests: bool = False) -> dict[str, Any]:
-    release = build_release_report(include_health=True, strict=True)
+def build_readiness_report(*, run_tests: bool = False, include_health: bool = True) -> dict[str, Any]:
+    release = build_release_report(include_health=include_health, strict=True)
     package_ok, package_details = _verify_package()
     tests_ok = True
     tests_details = "not run in this invocation; use --run-tests"
@@ -291,10 +291,15 @@ def print_report(report: dict[str, Any]) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Score Shell AI automated production readiness.")
     parser.add_argument("--run-tests", action="store_true", help="Run focused production test suite.")
+    parser.add_argument(
+        "--skip-runtime-health",
+        action="store_true",
+        help="Skip installed runtime health checks when scoring a source release package in CI.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON report.")
     args = parser.parse_args(argv)
 
-    report = build_readiness_report(run_tests=args.run_tests)
+    report = build_readiness_report(run_tests=args.run_tests, include_health=not args.skip_runtime_health)
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
     REPORT_PATH.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
     if args.json:

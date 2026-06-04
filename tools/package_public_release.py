@@ -265,9 +265,11 @@ def validate_release_file_set(files: list[Path]) -> None:
 
 
 def build_package(*, strict: bool = True, dry_run: bool = False) -> dict[str, object]:
-    report = build_report(include_health=True, strict=strict)
+    report = build_report(include_health=False, strict=strict)
     if report["status"] != "pass":
-        raise RuntimeError("Public release check failed. Run tools/production_release_check.py for details.")
+        blockers = [str(item) for item in report.get("blockers") or []]
+        details = "; ".join(blockers[:5]) or "no blocker details returned"
+        raise RuntimeError(f"Public release check failed: {details}. Run tools/production_release_check.py for details.")
 
     name = f"shell-ai-os-controller-{version()}.zip"
     output = DIST_DIR / name

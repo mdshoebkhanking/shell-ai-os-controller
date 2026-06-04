@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.5 - Source package release health split
+
+- Separates source package validation from installed runtime venv health so
+  GitHub release packaging can run on clean CI runners.
+- Adds clearer package blocker output and keeps runtime health covered by
+  installer repair, acceptance, and external Windows clean-machine gates.
+
 ## 1.0.4 - Release Web UI package readiness
 
 - Builds the React Shell Web UI renderer inside the release package job before

@@ -85,7 +85,7 @@ jobs:
           cat SHA256SUMS.txt
 
       - name: Production readiness
-        run: python tools/production_readiness.py
+        run: python tools/production_readiness.py --skip-runtime-health
 
       - name: Enterprise diagnostics
         run: python tools/enterprise_diagnostics.py --fail-on-attention
