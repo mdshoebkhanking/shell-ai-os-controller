@@ -93,6 +93,9 @@ def test_public_launch_docs_and_ci_gate_are_linked():
     assert "PUBLIC_GITHUB_RELEASE_PLAYBOOK.md" in readme
     assert "tools/public_github_launch_audit.py" in ci
     assert "tools/public_github_launch_audit.py" in release
+    assert '"codex/**"' in release
+    assert "windows-installer-branch-artifact" in release
+    assert "shell-ai-os-controller-windows-setup" in release
 
 
 def test_public_release_package_includes_web_ui_source_and_windows_launchers():
