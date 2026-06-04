@@ -6,9 +6,15 @@ PYTHON_BIN="${PYTHON_BIN:-python3}"
 export SHELL_LEGACY_UI="${SHELL_LEGACY_UI:-0}"
 export SHELL_TTS_ENGINE="${SHELL_TTS_ENGINE:-fast}"
 export SHELL_V2_STREAM="${SHELL_V2_STREAM:-1}"
+export SHELL_IMAGE_LOCAL_FALLBACK="${SHELL_IMAGE_LOCAL_FALLBACK:-1}"
 
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   echo "Python 3 is missing. Run installer/install_linux.sh or installer/install_mac.command first."
+  exit 1
+fi
+
+if ! "$PYTHON_BIN" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
+  echo "Python 3.10+ is required. Run installer/install_linux.sh or installer/install_mac.command first."
   exit 1
 fi
 

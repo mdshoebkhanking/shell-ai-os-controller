@@ -6,6 +6,7 @@ def test_workspace_tools_are_in_catalog():
     ids = {item["id"] for item in discover_tool_catalog()}
 
     assert "shell_workspace_tools:create_workspace_file_tool" in ids
+    assert "shell_workspace_tools:create_user_file_tool" in ids
     assert "shell_workspace_tools:read_workspace_file_tool" in ids
     assert "shell_workspace_tools:list_workspace_files_tool" in ids
 
@@ -44,3 +45,58 @@ def test_workspace_tools_reject_path_escape(monkeypatch, tmp_path):
     assert result["result"]["ok"] is False
     assert "Path traversal is not allowed" in result["result"]["message"]
     assert not (tmp_path.parent / "outside.txt").exists()
+
+
+def test_create_user_file_writes_to_desktop(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = execute_tool_sync(
+        "shell_workspace_tools:create_user_file_tool",
+        {
+            "filename": "shell-note.txt",
+            "content": "hello desktop",
+            "destination": "desktop",
+            "file_type": "txt",
+        },
+    )
+
+    assert result["status"] == "success"
+    assert result["result"]["ok"] is True
+    output = tmp_path / "Desktop" / "shell-note.txt"
+    assert output.read_text(encoding="utf-8").strip() == "hello desktop"
+
+
+def test_create_user_file_can_write_pdf(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = execute_tool_sync(
+        "shell_workspace_tools:create_user_file_tool",
+        {
+            "filename": "shell-report.pdf",
+            "content": "Shell PDF content",
+            "destination": "desktop",
+            "file_type": "pdf",
+        },
+    )
+
+    assert result["status"] == "success"
+    assert result["result"]["ok"] is True
+    output = tmp_path / "Desktop" / "shell-report.pdf"
+    assert output.read_bytes().startswith(b"%PDF")
+
+
+def test_create_user_file_rejects_unsupported_extension(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    result = execute_tool_sync(
+        "shell_workspace_tools:create_user_file_tool",
+        {
+            "filename": "run.exe",
+            "content": "blocked",
+            "destination": "desktop",
+        },
+    )
+
+    assert result["status"] == "success"
+    assert result["result"]["ok"] is False
+    assert not (tmp_path / "Desktop" / "run.exe").exists()

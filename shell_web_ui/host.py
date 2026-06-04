@@ -36,6 +36,7 @@ NOTES_PATH = PROJECT_ROOT / ".shell_runtime" / "web_ui_notes.json"
 GALLERY_DIR = Path.home() / "Pictures" / "Shell_Generated"
 GALLERY_META_PATH = PROJECT_ROOT / ".shell_runtime" / "web_ui_gallery.json"
 GALLERY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
 
 
 def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> str:
@@ -372,56 +373,101 @@ class ShellBackendBridge(QObject):
         if source not in {"text", "voice"}:
             source = "text"
         if not text:
-            return {"success": False, "reply": "Message empty hai.", "error": "Missing message"}
+            attachments_probe = meta.get("attachments") if isinstance(meta, dict) else None
+            if not attachments_probe:
+                return {"success": False, "reply": "Message empty hai.", "error": "Missing message"}
 
         previous_messages = self._read_history_file()
+        attachments = self._prepare_chat_attachments(meta.get("attachments"))
+        attachment_context = self._attachment_context(attachments)
+        processing_text = f"{text}\n\n{attachment_context}".strip() if attachment_context else text
+        display_text = text or "Attached file"
+        if attachments:
+            display_text = (
+                f"{display_text}\n\nAttached: "
+                + ", ".join(str(item.get("name") or "file") for item in attachments[:4])
+            ).strip()
         messages = list(previous_messages)
-        messages.append({"role": "user", "parts": [{"text": text}]})
+        messages.append({"role": "user", "parts": [{"text": display_text}]})
 
         route: dict[str, Any] | None = None
         image_prompt = ""
         image_generation_started = False
+        activity_descriptor: dict[str, Any] | None = None
         result: Any = None
         success = True
         try:
-            recall_reply = self._conversation_recall_reply(text, previous_messages)
-            if recall_reply:
-                reply = recall_reply
-            elif self._is_telemetry_chart_prompt(text, entry=entry):
-                reply = self._chart_summary_reply(text)
+            identity_reply = self._creator_identity_reply(text, source=source)
+            if identity_reply:
+                reply = identity_reply
             else:
-                from shell_nl_router import route_natural_command
-
-                route = route_natural_command(text)
-                if not (route and route.get("tool")):
-                    image_prompt = self._extract_image_generation_prompt(text)
-                    if image_prompt:
-                        route = self._image_generation_route(image_prompt)
-                if route and route.get("tool"):
-                    if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
-                        image_prompt = (
-                            self._clean_image_prompt(self._route_image_prompt(route))
-                            or self._extract_image_generation_prompt(text)
-                            or text
-                        )
-                        route_args = dict(route.get("args") or {})
-                        route_args["description"] = image_prompt
-                        route = {**route, "args": route_args}
-                        image_generation_started = True
-                        self.emit_event(
-                            "image-gen",
-                            {
-                                "prompt": image_prompt,
-                                "loading": True,
-                                "url": "",
-                                "source": source,
-                                "entry": entry,
-                            },
-                        )
-                    result = self._execute_routed_tool(route)
-                    reply = self._format_chat_result(route, result)
+                recall_reply = self._conversation_recall_reply(text, previous_messages)
+                if recall_reply:
+                    reply = recall_reply
+                elif self._is_telemetry_chart_prompt(text, entry=entry):
+                    reply = self._chart_summary_reply(text)
                 else:
-                    reply = self._brain_chat_fallback(text, previous_messages=previous_messages)
+                    from shell_nl_router import route_natural_command
+
+                    route = route_natural_command(text)
+                    if not (route and route.get("tool")):
+                        image_prompt = self._extract_image_generation_prompt(text)
+                        if image_prompt:
+                            route = self._image_generation_route(image_prompt)
+                    if route and route.get("tool"):
+                        if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
+                            image_prompt = (
+                                self._clean_image_prompt(self._route_image_prompt(route))
+                                or self._extract_image_generation_prompt(text)
+                                or text
+                            )
+                            route_args = dict(route.get("args") or {})
+                            route_args["description"] = image_prompt
+                            route = {**route, "args": route_args}
+                            image_generation_started = True
+                            self.emit_event(
+                                "image-gen",
+                                {
+                                    "prompt": image_prompt,
+                                    "loading": True,
+                                    "url": "",
+                                    "source": source,
+                                    "entry": entry,
+                                },
+                            )
+                        activity_descriptor = self._activity_descriptor(
+                            text,
+                            route,
+                            image_prompt=image_prompt,
+                        )
+                        self._emit_activity(
+                            activity_descriptor,
+                            status="running",
+                            progress=34 if image_generation_started else 22,
+                            source=source,
+                            entry=entry,
+                        )
+                        result = self._execute_routed_tool(route)
+                        self._emit_activity(
+                            activity_descriptor,
+                            status="running",
+                            message="FORMATTING RESULT",
+                            progress=82,
+                            source=source,
+                            entry=entry,
+                        )
+                        reply = self._format_chat_result(route, result)
+                        tool_success = self._activity_result_success(route, result, reply)
+                        self._emit_activity(
+                            activity_descriptor,
+                            status="done" if tool_success else "error",
+                            message="TASK COMPLETE" if tool_success else "TASK FAILED",
+                            progress=100,
+                            source=source,
+                            entry=entry,
+                        )
+                    else:
+                        reply = self._brain_chat_fallback(processing_text, previous_messages=previous_messages)
             if entry == "chart":
                 reply = self._compact_chat_reply(reply, limit=360)
         except Exception as exc:
@@ -439,6 +485,14 @@ class ShellBackendBridge(QObject):
                         "source": source,
                     },
                 )
+            self._emit_activity(
+                activity_descriptor,
+                status="error",
+                message=str(exc),
+                progress=100,
+                source=source,
+                entry=entry,
+            )
 
         messages.append({"role": "model", "parts": [{"text": reply}]})
         self._write_history_file(messages)
@@ -579,6 +633,156 @@ class ShellBackendBridge(QObject):
         return str(args.get("description") or args.get("prompt") or "").strip()
 
     @staticmethod
+    def _safe_upload_filename(name: str) -> str:
+        cleaned = re.sub(r"[^a-zA-Z0-9._ -]+", "_", str(name or "upload")).strip(" ._-")
+        return cleaned[:120] or "upload"
+
+    def _prepare_chat_attachments(self, attachments: Any) -> list[dict[str, Any]]:
+        if not isinstance(attachments, list):
+            return []
+        UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        prepared: list[dict[str, Any]] = []
+        for index, item in enumerate(attachments[:4]):
+            if not isinstance(item, dict):
+                continue
+            name = self._safe_upload_filename(str(item.get("name") or f"attachment_{index + 1}"))
+            file_type = str(item.get("type") or mimetypes.guess_type(name)[0] or "application/octet-stream")
+            size = int(float(item.get("size") or 0))
+            text = str(item.get("text") or "")[:26000]
+            saved_path = ""
+            data_url = str(item.get("dataUrl") or "")
+            if data_url.startswith("data:") and "," in data_url:
+                try:
+                    header, encoded = data_url.split(",", 1)
+                    binary = base64.b64decode(encoded, validate=False)
+                    if len(binary) <= 5 * 1024 * 1024:
+                        suffix = Path(name).suffix or mimetypes.guess_extension(file_type) or ".bin"
+                        stem = Path(name).stem[:80] or "attachment"
+                        path = UPLOADS_DIR / f"{int(time.time() * 1000)}_{index}_{stem}{suffix}"
+                        path.write_bytes(binary)
+                        saved_path = str(path)
+                        if not size:
+                            size = len(binary)
+                        if not file_type or file_type == "application/octet-stream":
+                            guessed = header[5:].split(";", 1)[0].strip()
+                            file_type = guessed or file_type
+                except Exception:
+                    saved_path = ""
+            prepared.append(
+                {
+                    "name": name,
+                    "type": file_type,
+                    "size": size,
+                    "path": saved_path,
+                    "text": text,
+                    "error": str(item.get("error") or "")[:200],
+                }
+            )
+        return prepared
+
+    @staticmethod
+    def _attachment_context(attachments: list[dict[str, Any]]) -> str:
+        if not attachments:
+            return ""
+        rows = ["Attached files for this Shell request:"]
+        for index, item in enumerate(attachments, start=1):
+            rows.append(
+                f"{index}. {item.get('name')} ({item.get('type')}, {item.get('size')} bytes)"
+                + (f" saved at {item.get('path')}" if item.get("path") else "")
+                + (f" error: {item.get('error')}" if item.get("error") else "")
+            )
+            text = str(item.get("text") or "").strip()
+            if text:
+                rows.append(f"Content excerpt:\n{text[:6000]}")
+        return "\n".join(rows)
+
+    @staticmethod
+    def _activity_descriptor(text: str, route: dict[str, Any] | None, *, image_prompt: str = "") -> dict[str, Any] | None:
+        if not route or not route.get("tool"):
+            return None
+        tool = str(route.get("tool") or "")
+        args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        prompt = (
+            image_prompt
+            or str(args.get("description") or args.get("task") or args.get("query") or args.get("goal") or args.get("app_type") or "")
+            or str(text or "")
+        ).strip()
+        lower_tool = tool.lower()
+        lower_text = str(text or "").lower()
+        if tool == "shell_image_ai:generate_image_tool":
+            kind = "image"
+            title = "IMAGE GENERATION"
+            message = "GENERATING VISUAL"
+        elif "research_agent" in lower_tool or re.search(r"\b(deep\s*(?:research|recerch)|research|recerch|fact\s*check)\b", lower_text):
+            kind = "research"
+            title = "DEEP RESEARCH"
+            message = "SEARCHING AND VERIFYING"
+        elif any(token in lower_tool for token in ("code_engine", "game_builder", "website_builder", "app_builder")):
+            kind = "build"
+            title = "BUILD TASK"
+            message = "BUILDING OUTPUT"
+        elif any(token in lower_tool for token in ("browser", "search", "open_url", "youtube")):
+            kind = "search"
+            title = "LIVE SEARCH"
+            message = "FETCHING RESULT"
+        else:
+            kind = "tool"
+            title = "SHELL ACTION"
+            message = "RUNNING TOOL"
+        return {
+            "id": f"{kind}-{int(time.time() * 1000)}",
+            "kind": kind,
+            "title": title,
+            "prompt": prompt[:220],
+            "tool": tool,
+            "message": message,
+        }
+
+    def _emit_activity(
+        self,
+        descriptor: dict[str, Any] | None,
+        *,
+        status: str,
+        message: str = "",
+        progress: int = 18,
+        source: str = "text",
+        entry: str = "",
+    ) -> None:
+        if not descriptor:
+            return
+        payload = dict(descriptor)
+        payload.update(
+            {
+                "status": status,
+                "message": str(message or descriptor.get("message") or "WORKING")[:220],
+                "progress": max(0, min(100, int(progress))),
+                "source": source,
+                "entry": entry,
+                "ts": time.time(),
+            }
+        )
+        self.emit_event("activity-updated", payload)
+
+    @staticmethod
+    def _activity_result_success(route: dict[str, Any], result: Any, reply: str) -> bool:
+        tool = str(route.get("tool") or "")
+        lower_reply = str(reply or "").lower()
+        if "[blocked]" in lower_reply or "blocked" in lower_reply or "failed" in lower_reply:
+            return False
+        if tool == "shell_image_ai:generate_image_tool":
+            return "gallery mein save ho gayi" in lower_reply or "saved to gallery" in lower_reply
+        if isinstance(result, dict):
+            if result.get("status") == "success":
+                return True
+            if result.get("success") is True:
+                return True
+            if result.get("error"):
+                return False
+            if result.get("status") in {"error", "failed", "blocked"}:
+                return False
+        return True
+
+    @staticmethod
     def _history_text(message: Any) -> str:
         if not isinstance(message, dict):
             return ""
@@ -629,6 +833,36 @@ class ShellBackendBridge(QObject):
         last_task = previous_user_texts[-1]
         return f"Haan bhai, yaad hai. Tumne pichla kaam bola tha: \"{last_task}\"."
 
+    @staticmethod
+    def _creator_identity_reply(text: str, *, source: str = "text") -> str:
+        normalized = " ".join(str(text or "").lower().split())
+        if not normalized:
+            return ""
+
+        subject_intent = bool(
+            re.search(r"\b(shell|shell ai|you|your|tum|tumhe|tumko|tujhe|tume|aap|aapko|apko|tere|tera|tu)\b", normalized)
+        )
+        creator_intent = bool(
+            re.search(
+                r"\b("
+                r"kis\s*ne|kisne|kaun|kon|who|whom|which company|company|creator|maker|founder|owner|developer|"
+                r"made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|"
+                r"banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya"
+                r")\b",
+                normalized,
+            )
+        )
+        explicit_creator_phrase = bool(
+            re.search(r"\b(shell|shell ai|your|tumhara|tera|aapka)\s+(creator|maker|founder|owner|developer)\b", normalized)
+            or re.search(r"\b(creator|maker|founder|owner|developer)\s+(kaun|kon|who|kisne|kis\s*ne)\b", normalized)
+        )
+        if not ((subject_intent and creator_intent) or explicit_creator_phrase):
+            return ""
+
+        if source == "voice":
+            return "Mujhe Md Shoaib King ne banaya hai."
+        return "Mujhe Md Shoeb King ne banaya hai."
+
     def _history_context_snippet(self, previous_messages: list[Any], *, limit: int = 6) -> str:
         rows: list[str] = []
         for message in previous_messages[-limit:]:
@@ -642,6 +876,8 @@ class ShellBackendBridge(QObject):
         context = self._history_context_snippet(previous_messages or [])
         system_prompt = (
             "You are Shell AI, a concise Hinglish desktop OS assistant. "
+            "If the user asks who made, created, built, developed, owns, or created Shell AI, "
+            "answer exactly: Mujhe Md Shoeb King ne banaya hai. Never say Meta, Google, OpenAI, Gemini, or any provider made you. "
             "Answer the user's normal text question directly in 1-3 short lines. "
             "Do not claim you executed tools in this text-only fallback. "
             "Use recent conversation context if the user asks what they said or what task they gave."
@@ -690,6 +926,26 @@ class ShellBackendBridge(QObject):
             "API key set karoge to main is par proper detailed jawab de paungi."
         )
 
+    @classmethod
+    def _format_agent_success_reply(cls, tool: str, rendered_text: str) -> str:
+        if "research_agent" in str(tool).lower():
+            cleaned = re.sub(r"^\[ResearchAgent\]\s*\([^)]*\)\s*", "", rendered_text, flags=re.I | re.S).strip()
+            cleaned = re.sub(r"\s*\[Tool Execution:\s*[^\]]+\]\s*$", "", cleaned, flags=re.I | re.S).strip()
+            cleaned = re.sub(r"^\*\*(summary[^*]*):\*\*\s*", r"\1: ", cleaned, flags=re.I).strip()
+            return f"Deep research complete: {cls._compact_chat_reply(cleaned or rendered_text, limit=900)}"
+        return f"{tool} complete: {rendered_text[:700]}"
+
+    @staticmethod
+    def _friendly_image_failure(rendered_text: str) -> str:
+        text = str(rendered_text or "")
+        if "image generation failed" not in text.lower() and "no provider returned" not in text.lower():
+            return text[:700]
+        return (
+            "Image generate nahi ho payi kyunki koi real image provider ready nahi tha. "
+            "Settings > API Keys mein OpenAI, Stability, Replicate, ya HuggingFace key add karo. "
+            "Free Pollinations fallback bhi try hota hai; agar network/public API empty response de to Shell local preview fallback save karega."
+        )
+
     def _format_chat_result(self, route: dict[str, Any], result: Any) -> str:
         tool = route.get("tool", "backend")
         is_image_tool = str(tool) == "shell_image_ai:generate_image_tool"
@@ -718,7 +974,7 @@ class ShellBackendBridge(QObject):
                         return f"Image generated aur Gallery mein save ho gayi: {image_path.name}"
                     lowered_image_result = rendered_text.lower()
                     if "image generation failed" in lowered_image_result or "critical error" in lowered_image_result:
-                        error_text = self._compact_chat_reply(rendered_text.strip(), limit=520)
+                        error_text = self._friendly_image_failure(rendered_text)
                         self.emit_event(
                             "image-gen",
                             {
@@ -757,7 +1013,7 @@ class ShellBackendBridge(QObject):
                     for line in rendered_text.splitlines():
                         if line.strip().lower().startswith("result:"):
                             return line.strip()
-                return f"{tool} complete: {rendered_text[:700]}"
+                return self._format_agent_success_reply(str(tool), rendered_text)
             message = result.get("message") or result.get("error") or json.dumps(result, ensure_ascii=False)
             if is_image_tool:
                 self.emit_event(

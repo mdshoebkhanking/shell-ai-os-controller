@@ -425,6 +425,10 @@ async function main() {
   ]
 
   for (const [targetLabel, reportLabel, expected] of tabs) {
+    if (targetLabel === 'Open Macros view' || targetLabel === 'Open PHONE view') {
+      await clickTarget(client, 'Open more Shell views')
+      await wait(250)
+    }
     const click = await clickTarget(client, targetLabel)
     await wait(900)
     const summary = await evaluate(client, pageSummaryExpression)
@@ -597,6 +601,8 @@ async function main() {
     bodyPreview: controlSummary.bodyText.slice(0, 1600)
   })
 
+  await clickTarget(client, 'Open more Shell views')
+  await wait(250)
   await clickTarget(client, 'Open PHONE view')
   await wait(700)
   const newDeviceClick = await clickTarget(client, 'NEW DEVICE')

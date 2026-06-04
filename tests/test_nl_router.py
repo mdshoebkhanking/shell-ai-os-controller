@@ -152,6 +152,29 @@ def test_hinglish_photo_generation_routes_to_image_tool():
     assert route["args"]["quality"] == "excellent"
 
 
+def test_image_generate_phrase_with_app_words_stays_image_tool():
+    route = route_natural_command("simple shell ai dashboard icon image generate karo")
+
+    assert route["tool"] == "shell_image_ai:generate_image_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["description"] == "simple shell ai dashboard icon"
+
+
+def test_speechy_photo_generate_phrase_routes_to_image_tool():
+    route = route_natural_command("photo generate karo quantum battery ki ok")
+
+    assert route["tool"] == "shell_image_ai:generate_image_tool"
+    assert route["args"]["description"] == "quantum battery ki"
+
+
+def test_hinglish_deep_research_routes_to_research_agent():
+    route = route_natural_command("AI chips ke bare mein deep recerch karo")
+
+    assert route["tool"] == "shell_agents:research_agent_tool"
+    assert route["kind"] == "agent"
+    assert route["args"]["task"] == "AI chips"
+
+
 def test_natural_click_route_uses_cross_platform_desktop_tool():
     route = route_natural_command("click 120 340")
 
@@ -190,6 +213,30 @@ def test_natural_workspace_create_file_route():
     assert route["tool"] == "shell_workspace_tools:create_workspace_file_tool"
     assert route["kind"] == "tool"
     assert route["args"] == {"path": "notes.md", "content": "hello shell", "overwrite": False}
+
+
+def test_natural_desktop_file_save_route():
+    route = route_natural_command("notes.txt desktop pe save karo with content hello shell")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {
+        "filename": "notes.txt",
+        "content": "hello shell",
+        "destination": "desktop",
+        "file_type": "txt",
+        "overwrite": False,
+    }
+
+
+def test_natural_desktop_pdf_save_route():
+    route = route_natural_command("quantum battery ke bare mein pdf bana ke desktop pe save karo")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "pdf"
+    assert route["args"]["content"] == "quantum battery"
 
 
 def test_natural_workspace_read_file_route():

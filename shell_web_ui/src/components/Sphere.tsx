@@ -18,10 +18,10 @@ const hasWebGLSupport = () => {
 
 const SphereFallback = () => (
   <div className="relative h-full w-full grid place-items-center">
-    <div className="absolute h-[62%] w-[62%] rounded-full border border-emerald-400/40 shadow-[0_0_70px_rgba(16,185,129,0.28)]" />
-    <div className="absolute h-[46%] w-[46%] rounded-full border border-cyan-300/35 shadow-[0_0_45px_rgba(34,211,238,0.24)] animate-pulse" />
-    <div className="absolute h-[28%] w-[28%] rounded-full bg-emerald-300/20 blur-sm" />
-    <div className="relative h-5 w-5 rounded-full bg-emerald-300 shadow-[0_0_30px_rgba(110,231,183,0.9)]" />
+    <div className="absolute h-[62%] w-[62%] rounded-full border border-white/18 shadow-[0_0_62px_rgba(185,201,238,0.16)]" />
+    <div className="absolute h-[46%] w-[46%] rounded-full border border-slate-200/22 shadow-[0_0_38px_rgba(215,225,238,0.12)] animate-pulse" />
+    <div className="absolute h-[28%] w-[28%] rounded-full bg-slate-200/10 blur-sm" />
+    <div className="relative h-5 w-5 rounded-full bg-slate-100 shadow-[0_0_24px_rgba(215,225,238,0.55)]" />
   </div>
 )
 
@@ -50,8 +50,8 @@ const CustomParticleSphere = ({ count = 3000 }) => {
 
   const dataArray = useMemo(() => new Uint8Array(128), [])
 
-  const colorStart = useMemo(() => new THREE.Color('#33db12'), [])
-  const colorEnd = useMemo(() => new THREE.Color('#FFFFFF'), [])
+  const colorStart = useMemo(() => new THREE.Color('#8FA8D8'), [])
+  const colorEnd = useMemo(() => new THREE.Color('#EEF4FC'), [])
   const colorTarget = useMemo(() => new THREE.Color(), [])
 
   const { positions, originalPositions, spreadFactors } = useMemo(() => {
@@ -124,7 +124,7 @@ const CustomParticleSphere = ({ count = 3000 }) => {
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
       </bufferGeometry>
       <pointsMaterial
-        color="#00F0FF"
+        color="#8FA8D8"
         size={0.012}
         transparent={true}
         opacity={0.9}

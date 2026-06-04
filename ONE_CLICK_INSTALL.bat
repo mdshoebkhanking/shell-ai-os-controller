@@ -7,6 +7,8 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "SHELL_TTS_ENGINE=fast"
 set "SHELL_LEGACY_UI=0"
+set "SHELL_V2_STREAM=1"
+set "SHELL_IMAGE_LOCAL_FALLBACK=1"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
 call :refresh_path
 
@@ -22,6 +24,7 @@ echo   - install all UI requirements from shell_ui\requirements_ui.txt
 echo   - install and build the React Shell Web UI in shell_web_ui
 echo   - install Playwright Chromium
 echo   - install ffmpeg, OCR, uv/uvx, and Node.js 20.19+/22.12+ where winget supports it
+echo   - keep image generation usable with local fallback if cloud image APIs are not configured
 echo   - create .env and runtime folders
 echo   - run health checks
 echo.
@@ -55,6 +58,7 @@ if "%SHELL_RC%"=="0" (
   echo ============================================================
   echo  Install complete.
   echo  Now double-click Start_ShellAI.bat to open Shell AI.
+  echo  Optional final check: Run_Windows_Acceptance_Test.bat
   echo ============================================================
 ) else (
   echo ============================================================

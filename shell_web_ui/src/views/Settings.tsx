@@ -1,15 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
-import * as faceapi from 'face-api.js'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
 import { GiArtificialIntelligence } from 'react-icons/gi'
 import {
   RiKey2Line,
   RiSave3Line,
   RiUserVoiceLine,
   RiUserLine,
-  RiLockPasswordLine,
-  RiScan2Line,
-  RiAddLine,
   RiRecordCircleLine,
   RiLock2Line,
   RiSettings4Line,
@@ -30,7 +26,28 @@ interface SettingsProps {
   isSystemActive: boolean
 }
 
-type TabType = 'updates' | 'general' | 'keys' | 'security'
+type TabType = 'updates' | 'general' | 'keys'
+
+const settingsTabs = [
+  {
+    id: 'updates' as const,
+    label: 'SYSTEM',
+    ariaLabel: 'Open settings system tab',
+    Icon: RiTerminalWindowLine
+  },
+  {
+    id: 'general' as const,
+    label: 'GENERAL',
+    ariaLabel: 'Open settings general tab',
+    Icon: RiSettings4Line
+  },
+  {
+    id: 'keys' as const,
+    label: 'API KEYS',
+    ariaLabel: 'Open settings api keys tab',
+    Icon: RiPlugLine
+  }
+]
 
 const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('updates')
@@ -85,16 +102,17 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [telegramBusy, setTelegramBusy] = useState('')
   const [apiSaveResult, setApiSaveResult] = useState('')
 
-  const [isSecurityUnlocked, setIsSecurityUnlocked] = useState(false)
-  const [authPin, setAuthPin] = useState('')
-  const [authError, setAuthError] = useState(false)
-
-  const [newPin, setNewPin] = useState('')
-  const [faceCount, setFaceCount] = useState(0)
-
-  const [isScanningFace, setIsScanningFace] = useState(false)
-  const [enrollStatus, setEnrollStatus] = useState('')
-  const videoRef = useRef<HTMLVideoElement>(null)
+  const settingsTabRailRef = useRef<HTMLDivElement | null>(null)
+  const settingsTabButtonRefs = useRef<Record<TabType, HTMLButtonElement | null>>({
+    updates: null,
+    general: null,
+    keys: null
+  })
+  const [settingsTabIndicatorStyle, setSettingsTabIndicatorStyle] = useState({
+    opacity: 1,
+    transform: 'translate3d(4px, 0, 0)',
+    width: '104px'
+  })
 
   const [appVersion, setAppVersion] = useState('1.1.5')
   const [updateStatus, setUpdateStatus] = useState<
@@ -109,10 +127,6 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       window.electron.ipcRenderer.invoke('get-personality').then((res) => {
         if (res) setPersonality(res)
       })
-      window.electron.ipcRenderer
-        .invoke('check-vault-status')
-        .then((res) => setFaceCount(res?.faceCount || 0))
-
       window.electron.ipcRenderer.invoke('get-app-version').then((v) => setAppVersion(v))
       window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
         if (!keys || typeof keys !== 'object') return
@@ -172,6 +186,40 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
         window.electron.ipcRenderer.removeAllListeners('updater-event')
     }
   }, [])
+
+  const updateSettingsTabIndicator = useCallback(() => {
+    const activeButton = settingsTabButtonRefs.current[activeTab]
+    if (!activeButton) {
+      setSettingsTabIndicatorStyle((current) => ({ ...current, opacity: 0 }))
+      return
+    }
+
+    setSettingsTabIndicatorStyle({
+      opacity: 1,
+      transform: `translate3d(${activeButton.offsetLeft}px, 0, 0)`,
+      width: `${activeButton.offsetWidth}px`
+    })
+  }, [activeTab])
+
+  useLayoutEffect(() => {
+    updateSettingsTabIndicator()
+
+    const rail = settingsTabRailRef.current
+    const activeButton = settingsTabButtonRefs.current[activeTab]
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => updateSettingsTabIndicator())
+        : null
+
+    if (rail) resizeObserver?.observe(rail)
+    if (activeButton) resizeObserver?.observe(activeButton)
+    window.addEventListener('resize', updateSettingsTabIndicator)
+
+    return () => {
+      resizeObserver?.disconnect()
+      window.removeEventListener('resize', updateSettingsTabIndicator)
+    }
+  }, [activeTab, updateSettingsTabIndicator])
 
   const checkForUpdates = () => window.electron.ipcRenderer.invoke('check-for-updates')
   const downloadUpdate = () => window.electron.ipcRenderer.invoke('download-update')
@@ -363,69 +411,6 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .split(/\s+/)
     .filter((w) => w.length > 0).length
 
-  const unlockSecurityModule = async () => {
-    if (!window.electron?.ipcRenderer) return
-    const isValid = await window.electron.ipcRenderer.invoke('verify-vault-pin', authPin)
-    if (isValid) {
-      setIsSecurityUnlocked(true)
-      setAuthPin('')
-    } else {
-      setAuthError(true)
-      setTimeout(() => setAuthError(false), 1000)
-    }
-  }
-
-  const updateMasterPin = async () => {
-    if (newPin.length !== 4 || !window.electron?.ipcRenderer) return
-    await window.electron.ipcRenderer.invoke('setup-vault-pin', newPin)
-    setNewPin('')
-    alert('Master PIN Updated Successfully.')
-  }
-
-  const startFaceEnrollment = async () => {
-    setIsScanningFace(true)
-    setEnrollStatus('INITIALIZING CAMERA...')
-    try {
-      await Promise.all([
-        faceapi.nets.ssdMobilenetv1.loadFromUri('./models'),
-        faceapi.nets.faceLandmark68Net.loadFromUri('./models'),
-        faceapi.nets.faceRecognitionNet.loadFromUri('./models')
-      ])
-
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true })
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        setEnrollStatus('POSITION FACE IN FRAME')
-
-        const scanInterval = setInterval(async () => {
-          if (!videoRef.current || videoRef.current.readyState !== 4) return
-          const detection = await faceapi
-            .detectSingleFace(videoRef.current)
-            .withFaceLandmarks()
-            .withFaceDescriptor()
-
-          if (detection) {
-            clearInterval(scanInterval)
-            setEnrollStatus('FACE ACQUIRED. ENCRYPTING...')
-            const descriptorArray = Array.from(detection.descriptor)
-
-            if (window.electron?.ipcRenderer) {
-              await window.electron.ipcRenderer.invoke('setup-vault-face', descriptorArray)
-            }
-
-            stream.getTracks().forEach((t) => t.stop())
-            setIsScanningFace(false)
-            setFaceCount((prev) => prev + 1)
-            alert('New Biometric Identity Saved.')
-          }
-        }, 1000)
-      }
-    } catch (e) {
-      setEnrollStatus('CAMERA ERROR')
-      setTimeout(() => setIsScanningFace(false), 2000)
-    }
-  }
-
   const cardClass =
     'bg-[#0f0f13] border border-white/10 p-6 md:p-8 rounded-2xl flex flex-col gap-5 hover:border-white/20 transition-all shadow-lg'
   const inputContainerClass =
@@ -456,35 +441,29 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
             </div>
           </div>
 
-          <div className="flex bg-[#0a0a0c] p-1 rounded-xl border border-white/10 w-full md:w-fit shadow-lg overflow-x-auto scrollbar-none">
-            <button
-              aria-label="Open settings system tab"
-              onClick={() => setActiveTab('updates')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold tracking-widest rounded-lg transition-all duration-300 ${activeTab === 'updates' ? 'bg-white text-black shadow-md' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
-            >
-              <RiTerminalWindowLine size={16} /> SYSTEM
-            </button>
-            <button
-              aria-label="Open settings general tab"
-              onClick={() => setActiveTab('general')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold tracking-widest rounded-lg transition-all duration-300 ${activeTab === 'general' ? 'bg-white text-black shadow-md' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
-            >
-              <RiSettings4Line size={16} /> GENERAL
-            </button>
-            <button
-              aria-label="Open settings api keys tab"
-              onClick={() => setActiveTab('keys')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold tracking-widest rounded-lg transition-all duration-300 ${activeTab === 'keys' ? 'bg-white text-black shadow-md' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
-            >
-              <RiPlugLine size={16} /> API KEYS
-            </button>
-            <button
-              aria-label="Open settings security tab"
-              onClick={() => setActiveTab('security')}
-              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold tracking-widest rounded-lg transition-all duration-300 ${activeTab === 'security' ? 'bg-white text-black shadow-md' : 'text-zinc-500 hover:text-white hover:bg-white/5'}`}
-            >
-              <RiShieldKeyholeLine size={16} /> SECURITY
-            </button>
+          <div
+            ref={settingsTabRailRef}
+            className="shell-tabs shell-settings-tabs flex p-1 rounded-xl w-full md:w-fit shadow-lg scrollbar-none"
+          >
+            <div className="shell-tab-indicator" style={settingsTabIndicatorStyle} />
+            {settingsTabs.map((tab) => {
+              const Icon = tab.Icon
+              return (
+                <button
+                  key={tab.id}
+                  ref={(element) => {
+                    settingsTabButtonRefs.current[tab.id] = element
+                  }}
+                  aria-label={tab.ariaLabel}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`shell-tab flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold tracking-widest rounded-lg whitespace-nowrap ${
+                    activeTab === tab.id ? 'shell-tab-active' : ''
+                  }`}
+                >
+                  <Icon size={16} /> {tab.label}
+                </button>
+              )
+            })}
           </div>
         </div>
 
@@ -1108,120 +1087,6 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                       local OS. Shell AI does not transmit these keys to any centralized server. You
                       maintain full ownership and billing control over your provider endpoints.
                     </p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* --- TAB 4: SECURITY --- */}
-            {activeTab === 'security' && (
-              <motion.div
-                key="security"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-                className="w-full rounded-3xl overflow-hidden shadow-2xl border border-white/5"
-              >
-                <AnimatePresence>
-                  {!isSecurityUnlocked && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0, backdropFilter: 'blur(0px)' }}
-                      className="absolute inset-0 z-20 backdrop-blur-2xl bg-black/70 border border-white/10 rounded-3xl flex flex-col items-center justify-center"
-                    >
-                      <div className="bg-[#111] p-5 rounded-full mb-6 border border-white/10 shadow-[0_0_30px_rgba(255,255,255,0.05)]">
-                        <RiLockPasswordLine size={40} className="text-white" />
-                      </div>
-                      <p className="text-xs text-zinc-300 font-mono tracking-widest uppercase mb-6 font-semibold">
-                        Authenticate to access Vault Settings
-                      </p>
-                      <div className="flex gap-3 items-center h-12">
-                        <input
-                          type="password"
-                          maxLength={4}
-                          pattern="\d*"
-                          value={authPin}
-                          onChange={(e) => setAuthPin(e.target.value.replace(/\D/g, ''))}
-                          placeholder="PIN"
-                          className={`h-full bg-[#050505] border w-32 rounded-lg text-center text-xl tracking-[0.5em] text-white outline-none transition-colors ${authError ? 'border-red-500 text-red-500 bg-red-500/10' : 'border-white/20 focus:border-white focus:bg-[#111]'}`}
-                        />
-                        <button
-                          onClick={unlockSecurityModule}
-                          className="h-full px-8 bg-white text-black text-xs font-bold tracking-widest rounded-lg hover:bg-zinc-200 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.2)] cursor-pointer"
-                        >
-                          UNLOCK
-                        </button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-[#0a0a0c] p-6 rounded-3xl border border-white/5">
-                  <div className="bg-[#111113] border border-white/10 p-7 rounded-2xl flex flex-col gap-5">
-                    <span className={titleClass}>
-                      <RiLockPasswordLine className="text-zinc-400" size={18} /> Update Master PIN
-                    </span>
-                    <div className={inputContainerClass}>
-                      <input
-                        type="password"
-                        maxLength={4}
-                        pattern="\d*"
-                        value={newPin}
-                        onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Enter new 4-digit PIN..."
-                        className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full tracking-[0.3em]"
-                      />
-                      <button
-                        onClick={updateMasterPin}
-                        className="text-zinc-500 hover:text-white transition-colors ml-2 cursor-pointer"
-                      >
-                        <RiSave3Line size={20} />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="bg-[#111113] border border-white/10 p-7 rounded-2xl flex flex-col gap-6">
-                    <div className="flex justify-between items-center border-b border-white/10 pb-4">
-                      <span className={titleClass}>
-                        <RiScan2Line className="text-zinc-400" size={18} /> Biometric Registry
-                      </span>
-                      <span className="text-[10px] text-white font-mono tracking-widest bg-white/10 px-3 py-1.5 rounded-md font-semibold border border-white/5">
-                        {faceCount} ENROLLED
-                      </span>
-                    </div>
-
-                    {isScanningFace ? (
-                      <div className="flex items-center gap-4 bg-[#050505] p-3 rounded-xl border border-white/20">
-                        <video
-                          ref={videoRef}
-                          autoPlay
-                          muted
-                          playsInline
-                          className="w-16 h-16 rounded-lg object-cover -scale-x-100 border border-white/10"
-                        />
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[11px] text-white font-mono tracking-widest animate-pulse font-bold">
-                            {enrollStatus}
-                          </span>
-                          <span className="text-xs text-zinc-400">Keep head steady...</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-4 h-full justify-between">
-                        <p className="text-xs text-zinc-400 leading-relaxed">
-                          Enroll additional structural face descriptors. Data is mathematically
-                          encrypted and stored locally.
-                        </p>
-                        <button
-                          onClick={startFaceEnrollment}
-                          className="w-full py-3 rounded-lg bg-white text-black font-bold tracking-widest text-[12px] flex items-center justify-center gap-2 hover:bg-zinc-200 transition-all shadow-[0_0_15px_rgba(255,255,255,0.1)] mt-auto cursor-pointer"
-                        >
-                          <RiAddLine size={18} /> ENROLL NEW IDENTITY
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               </motion.div>

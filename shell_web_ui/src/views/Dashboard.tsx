@@ -14,9 +14,11 @@ import {
   RiEarthLine,
   RiSendPlane2Line,
   RiVolumeUpLine,
-  RiCloseCircleLine
+  RiCloseCircleLine,
+  RiAttachment2,
+  RiCloseLine,
+  RiFileTextLine
 } from 'react-icons/ri'
-import * as faceapi from 'face-api.js'
 import { VisionMode } from '@renderer/IndexRoot'
 
 interface ShellProps {
@@ -42,13 +44,131 @@ interface DashboardViewProps {
   onTranscriptCleared?: () => void
 }
 
-type ImageGenerationState = {
-  status: 'generating' | 'saving' | 'saved' | 'error'
+type ActivityKind = 'research' | 'image' | 'build' | 'search' | 'file' | 'tool'
+type ActivityStatus = 'running' | 'done' | 'error'
+
+type ActivityState = {
+  id: string
+  kind: ActivityKind
+  status: ActivityStatus
+  title: string
   prompt: string
   message: string
+  progress: number
+  startedAt: number
 }
 
-const glassPanel = 'bg-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl'
+type AttachedFile = {
+  id: string
+  name: string
+  type: string
+  size: number
+  text?: string
+  dataUrl?: string
+  error?: string
+}
+
+type FaceApiModule = typeof import('face-api.js')
+
+const glassPanel = 'shell-liquid-panel'
+const MAX_CHAT_ATTACHMENTS = 4
+const MAX_CHAT_ATTACHMENT_BYTES = 5 * 1024 * 1024
+const MAX_TEXT_ATTACHMENT_CHARS = 26000
+
+const ACTIVITY_STEPS: Record<ActivityKind, string[]> = {
+  research: ['Parse request', 'Search sources', 'Cross-check facts', 'Prepare answer'],
+  image: ['Lock prompt', 'Generate image', 'Save gallery', 'Sync preview'],
+  build: ['Plan build', 'Generate files', 'Validate output', 'Package result'],
+  search: ['Route query', 'Open source', 'Read result', 'Return summary'],
+  file: ['Load file', 'Inspect content', 'Attach context', 'Ready for Shell'],
+  tool: ['Route task', 'Run tool', 'Read result', 'Report status']
+}
+
+const ACTIVITY_TITLES: Record<ActivityKind, string> = {
+  research: 'DEEP RESEARCH',
+  image: 'IMAGE GENERATION',
+  build: 'BUILD TASK',
+  search: 'LIVE SEARCH',
+  file: 'FILE CONTEXT',
+  tool: 'SHELL ACTION'
+}
+
+const clampProgress = (value: unknown, fallback = 18) => {
+  const number = Number(value)
+  if (!Number.isFinite(number)) return fallback
+  return Math.min(100, Math.max(0, Math.round(number)))
+}
+
+const coerceActivityKind = (value: unknown): ActivityKind => {
+  const kind = String(value || '').toLowerCase()
+  if (kind === 'research' || kind === 'image' || kind === 'build' || kind === 'search' || kind === 'file') return kind
+  return 'tool'
+}
+
+const formatBytes = (size: number) => {
+  if (!Number.isFinite(size) || size <= 0) return '0 KB'
+  if (size < 1024 * 1024) return `${Math.max(1, Math.round(size / 1024))} KB`
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`
+}
+
+const isTextLikeFile = (file: File) => {
+  const type = (file.type || '').toLowerCase()
+  const name = file.name.toLowerCase()
+  return (
+    type.startsWith('text/') ||
+    /\.(txt|md|markdown|json|csv|log|py|js|jsx|ts|tsx|html|css|xml|yaml|yml|ini|env|bat|ps1|sh)$/i.test(name)
+  )
+}
+
+const readFileAsText = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || '').slice(0, MAX_TEXT_ATTACHMENT_CHARS))
+    reader.onerror = () => reject(reader.error || new Error('file text read failed'))
+    reader.readAsText(file)
+  })
+
+const readFileAsDataUrl = (file: File) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ''))
+    reader.onerror = () => reject(reader.error || new Error('file data read failed'))
+    reader.readAsDataURL(file)
+  })
+
+const coerceActivityStatus = (value: unknown): ActivityStatus => {
+  const status = String(value || '').toLowerCase()
+  if (status === 'done' || status === 'complete' || status === 'completed' || status === 'saved') return 'done'
+  if (status === 'error' || status === 'failed' || status === 'fail') return 'error'
+  return 'running'
+}
+
+const createActivityState = (payload: any, fallbackKind: ActivityKind = 'tool'): ActivityState => {
+  const kind = payload?.kind ? coerceActivityKind(payload.kind) : fallbackKind
+  const status = coerceActivityStatus(payload?.status)
+  const prompt = String(payload?.prompt || payload?.query || payload?.target || payload?.file_name || '').trim()
+  return {
+    id: String(payload?.id || `${kind}-${Date.now()}`),
+    kind,
+    status,
+    title: String(payload?.title || ACTIVITY_TITLES[kind]),
+    prompt,
+    message: String(
+      payload?.message ||
+        (status === 'error'
+          ? 'TASK FAILED'
+          : status === 'done'
+            ? 'TASK COMPLETE'
+            : kind === 'research'
+              ? 'SEARCHING AND VERIFYING'
+              : kind === 'image'
+                ? 'GENERATING VISUAL'
+                : 'WORKING')
+    ),
+    progress: clampProgress(payload?.progress, status === 'done' || status === 'error' ? 100 : 18),
+    startedAt: Number(payload?.startedAt || Date.now())
+  }
+}
 
 const compactForSpeech = (value: string, limit = 240) => {
   const cleaned = String(value || '')
@@ -114,8 +234,11 @@ export default function DashboardView({
   const videoElementRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const transcriptInputRef = useRef<HTMLInputElement | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const faceScanInterval = useRef<NodeJS.Timeout | null>(null)
+  const faceApiRef = useRef<FaceApiModule | null>(null)
   const lastSpokenRef = useRef('')
+  const transcriptPinnedRef = useRef(true)
 
   const [modelsLoaded, setModelsLoaded] = useState(false)
 
@@ -124,9 +247,16 @@ export default function DashboardView({
   const [isSendingPrompt, setIsSendingPrompt] = useState(false)
   const [voiceEventState, setVoiceEventState] = useState(backendVoiceState || 'OFFLINE')
   const [speechState, setSpeechState] = useState('VOICE OUT')
-  const [imageGenerationState, setImageGenerationState] = useState<ImageGenerationState | null>(null)
+  const [activityState, setActivityState] = useState<ActivityState | null>(null)
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
 
   const readTranscriptPrompt = () => (transcriptPrompt || transcriptInputRef.current?.value || '').trim()
+
+  const onTranscriptScroll = () => {
+    const node = scrollRef.current
+    if (!node) return
+    transcriptPinnedRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 40
+  }
 
   const speakShell = useCallback(async (text: string) => {
     const speechText = compactForSpeech(text)
@@ -154,7 +284,9 @@ export default function DashboardView({
   }, [speakRealVoice, voiceRuntime])
 
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (scrollRef.current && transcriptPinnedRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
   }, [chatHistory])
 
   useEffect(() => {
@@ -188,66 +320,195 @@ export default function DashboardView({
   }, [speakShell])
 
   useEffect(() => {
-    const normalizePrompt = (value: unknown) => String(value || '').trim() || 'Shell AI image'
-    const onImageGenerationPayload = (payload: any) => {
-      const prompt = normalizePrompt(payload?.prompt || payload?.image?.displayName)
+    const normalizePrompt = (value: unknown, fallback = 'Shell AI task') =>
+      String(value || '').trim() || fallback
+    const setImageActivity = (payload: any) => {
+      const prompt = normalizePrompt(payload?.prompt || payload?.image?.displayName, 'Shell AI image')
       if (payload?.loading) {
-        setImageGenerationState({
-          status: 'generating',
+        setActivityState(createActivityState({
+          id: payload?.id,
+          kind: 'image',
+          status: 'running',
+          title: 'IMAGE GENERATION',
           prompt,
-          message: 'GENERATING IMAGE'
-        })
+          message: 'GENERATING VISUAL',
+          progress: payload?.progress || 38
+        }, 'image'))
         return
       }
       if (payload?.error) {
-        setImageGenerationState({
+        setActivityState(createActivityState({
+          id: payload?.id,
+          kind: 'image',
           status: 'error',
+          title: 'IMAGE GENERATION',
           prompt,
-          message: String(payload?.errorMessage || 'IMAGE GENERATION FAILED').slice(0, 180)
-        })
+          message: String(payload?.errorMessage || 'IMAGE GENERATION FAILED').slice(0, 180),
+          progress: 100
+        }, 'image'))
         return
       }
       if (payload?.saved || payload?.image?.filename) {
-        setImageGenerationState({
-          status: 'saved',
+        setActivityState(createActivityState({
+          id: payload?.id,
+          kind: 'image',
+          status: 'done',
+          title: 'IMAGE GENERATION',
           prompt,
-          message: 'SAVED TO GALLERY'
-        })
+          message: 'SAVED TO GALLERY',
+          progress: 100
+        }, 'image'))
         return
       }
       if (payload?.url) {
-        setImageGenerationState({
-          status: 'saving',
+        setActivityState(createActivityState({
+          id: payload?.id,
+          kind: 'image',
+          status: 'running',
+          title: 'IMAGE GENERATION',
           prompt,
-          message: 'SAVING TO GALLERY'
-        })
+          message: 'SAVING TO GALLERY',
+          progress: 82
+        }, 'image'))
       }
     }
+    const setWorkActivity = (payload: any, fallbackKind: ActivityKind = 'tool') => {
+      setActivityState(createActivityState(payload || {}, fallbackKind))
+    }
     const onDomImageGeneration = (event: Event) =>
-      onImageGenerationPayload((event as CustomEvent).detail || {})
+      setImageActivity((event as CustomEvent).detail || {})
     const onBridgeImageGeneration = (_event: unknown, payload?: unknown) =>
-      onImageGenerationPayload(payload)
+      setImageActivity(payload)
+    const onActivityUpdated = (_event: unknown, payload?: unknown) =>
+      setWorkActivity(payload, 'tool')
     const onGalleryUpdated = (_event: unknown, payload?: any) => {
       if (!payload?.image) return
-      setImageGenerationState((current) => {
-        if (!current || (current.status !== 'generating' && current.status !== 'saving')) return current
-        return {
-          status: 'saved',
-          prompt: normalizePrompt(payload.image.displayName || current.prompt),
-          message: 'SAVED TO GALLERY'
-        }
+      setActivityState((current) => {
+        if (!current || current.kind !== 'image' || current.status !== 'running') return current
+        return createActivityState({
+          ...current,
+          status: 'done',
+          prompt: normalizePrompt(payload.image.displayName || current.prompt, 'Shell AI image'),
+          message: 'SAVED TO GALLERY',
+          progress: 100
+        }, 'image')
       })
+    }
+    const onDeepResearchStart = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        id: detail.id,
+        kind: 'research',
+        status: 'running',
+        title: 'DEEP RESEARCH',
+        prompt: normalizePrompt(detail.query, 'Research task'),
+        message: 'SEARCHING AND VERIFYING',
+        progress: 18
+      }, 'research')
+    }
+    const onDeepResearchDone = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        id: detail.id,
+        kind: 'research',
+        status: detail.success === false ? 'error' : 'done',
+        title: 'DEEP RESEARCH',
+        prompt: normalizePrompt(detail.query, 'Research task'),
+        message: detail.success === false ? 'RESEARCH FAILED' : 'RESEARCH COMPLETE',
+        progress: 100
+      }, 'research')
+    }
+    const onSemanticStart = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        kind: 'search',
+        status: 'running',
+        title: 'SEMANTIC SEARCH',
+        prompt: normalizePrompt(detail.target, 'Workspace search'),
+        message: `${normalizePrompt(detail.mode, 'SEARCH').toUpperCase()} IN PROGRESS`,
+        progress: 22
+      }, 'search')
+    }
+    const onSemanticDone = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        kind: 'search',
+        status: detail.success === false ? 'error' : 'done',
+        title: 'SEMANTIC SEARCH',
+        message: detail.success === false ? 'SEARCH FAILED' : 'SEARCH COMPLETE',
+        progress: 100
+      }, 'search')
+    }
+    const onOracleProgress = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        kind: 'research',
+        status: 'running',
+        title: 'RAG ORACLE',
+        prompt: normalizePrompt(detail.path || detail.query || detail.message, 'Knowledge task'),
+        message: normalizePrompt(detail.message || detail.stage, 'INDEXING SOURCES').toUpperCase(),
+        progress: clampProgress(detail.progress, 44)
+      }, 'research')
+    }
+    const onOracleDone = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        kind: 'research',
+        status: detail.success === false ? 'error' : 'done',
+        title: 'RAG ORACLE',
+        message: detail.success === false ? 'ORACLE FAILED' : 'ORACLE COMPLETE',
+        progress: 100
+      }, 'research')
+    }
+    const onAiStartCoding = (event: Event) => {
+      const detail = (event as CustomEvent).detail || {}
+      setWorkActivity({
+        kind: 'build',
+        status: 'running',
+        title: 'CODE BUILD',
+        prompt: normalizePrompt(detail.prompt || detail.file_name, 'Build task'),
+        message: 'GENERATING FILE',
+        progress: 28
+      }, 'build')
     }
 
     window.addEventListener('image-gen', onDomImageGeneration)
+    window.addEventListener('deep-research-start', onDeepResearchStart)
+    window.addEventListener('deep-research-done', onDeepResearchDone)
+    window.addEventListener('semantic-start', onSemanticStart)
+    window.addEventListener('semantic-done', onSemanticDone)
+    window.addEventListener('oracle-progress', onOracleProgress)
+    window.addEventListener('oracle-ingest-start', onOracleProgress)
+    window.addEventListener('oracle-ingest-done', onOracleDone)
+    window.addEventListener('oracle-answered', onOracleDone)
+    window.addEventListener('ai-start-coding', onAiStartCoding)
     window.shellAPI?.on?.('image-gen', onBridgeImageGeneration)
     window.shellAPI?.on?.('gallery-updated', onGalleryUpdated)
+    window.shellAPI?.on?.('activity-updated', onActivityUpdated)
     return () => {
       window.removeEventListener('image-gen', onDomImageGeneration)
+      window.removeEventListener('deep-research-start', onDeepResearchStart)
+      window.removeEventListener('deep-research-done', onDeepResearchDone)
+      window.removeEventListener('semantic-start', onSemanticStart)
+      window.removeEventListener('semantic-done', onSemanticDone)
+      window.removeEventListener('oracle-progress', onOracleProgress)
+      window.removeEventListener('oracle-ingest-start', onOracleProgress)
+      window.removeEventListener('oracle-ingest-done', onOracleDone)
+      window.removeEventListener('oracle-answered', onOracleDone)
+      window.removeEventListener('ai-start-coding', onAiStartCoding)
       window.shellAPI?.off?.('image-gen', onBridgeImageGeneration)
       window.shellAPI?.off?.('gallery-updated', onGalleryUpdated)
+      window.shellAPI?.off?.('activity-updated', onActivityUpdated)
     }
   }, [])
+
+  useEffect(() => {
+    if (!activityState || activityState.status === 'running') return
+    const timeout = window.setTimeout(() => {
+      setActivityState((current) => (current?.id === activityState.id ? null : current))
+    }, activityState.status === 'error' ? 9000 : 5200)
+    return () => window.clearTimeout(timeout)
+  }, [activityState?.id, activityState?.status])
 
   useEffect(() => {
     if (!isSystemActive) {
@@ -268,28 +529,39 @@ export default function DashboardView({
   }, [isSystemActive])
 
   useEffect(() => {
+    if (!isVideoOn || visionMode !== 'camera' || modelsLoaded) return
+    let cancelled = false
     const loadModels = async () => {
       try {
+        const faceapi = await import('face-api.js')
         const MODEL_URL = './models'
         await Promise.all([
           faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
           faceapi.nets.faceExpressionNet.loadFromUri(MODEL_URL),
           faceapi.nets.ageGenderNet.loadFromUri(MODEL_URL)
         ])
-        setModelsLoaded(true)
+        if (!cancelled) {
+          faceApiRef.current = faceapi
+          setModelsLoaded(true)
+        }
       } catch (e) {}
     }
     loadModels()
-  }, [])
+    return () => {
+      cancelled = true
+    }
+  }, [isVideoOn, visionMode, modelsLoaded])
 
   useEffect(() => {
     if (
       isVideoOn &&
       visionMode === 'camera' &&
       modelsLoaded &&
+      faceApiRef.current &&
       videoElementRef.current &&
       canvasRef.current
     ) {
+      const faceapi = faceApiRef.current
       if (faceScanInterval.current) clearInterval(faceScanInterval.current)
 
       faceScanInterval.current = setInterval(async () => {
@@ -322,7 +594,7 @@ export default function DashboardView({
 
             const mirroredX = vw - x - width
 
-            ctx.strokeStyle = '#34d399'
+            ctx.strokeStyle = '#60a5fa'
             ctx.lineWidth = 4
             const l = 25
 
@@ -352,11 +624,11 @@ export default function DashboardView({
             ctx.fillStyle = 'rgba(10, 10, 10, 0.85)'
             ctx.fillRect(mirroredX, y - 32, width, 26)
 
-            ctx.fillStyle = '#34d399'
+            ctx.fillStyle = '#60a5fa'
             ctx.font = 'bold 16px monospace'
             ctx.fillText(labelText, mirroredX + 5, y - 14)
           } else {
-            ctx.fillStyle = 'rgba(52, 211, 153, 0.8)'
+            ctx.fillStyle = 'rgba(96, 165, 250, 0.82)'
             ctx.font = 'bold 14px monospace'
             ctx.fillText('SCANNING OPTICS...', 20, 30)
           }
@@ -399,13 +671,61 @@ export default function DashboardView({
     startVision(nextMode)
   }
 
+  const attachFiles = async (files: FileList | null) => {
+    const selected = Array.from(files || []).slice(0, Math.max(0, MAX_CHAT_ATTACHMENTS - attachedFiles.length))
+    if (!selected.length) return
+    const prepared: AttachedFile[] = []
+    for (const file of selected) {
+      const base = {
+        id: `${file.name}-${file.size}-${file.lastModified}-${Date.now()}`,
+        name: file.name,
+        type: file.type || 'application/octet-stream',
+        size: file.size
+      }
+      if (file.size > MAX_CHAT_ATTACHMENT_BYTES) {
+        prepared.push({ ...base, error: `Too large: ${formatBytes(file.size)}` })
+        continue
+      }
+      try {
+        if (isTextLikeFile(file)) {
+          prepared.push({ ...base, text: await readFileAsText(file) })
+        } else {
+          prepared.push({ ...base, dataUrl: await readFileAsDataUrl(file) })
+        }
+      } catch (error) {
+        prepared.push({ ...base, error: error instanceof Error ? error.message : 'Could not read file' })
+      }
+    }
+    setAttachedFiles((current) => [...current, ...prepared].slice(0, MAX_CHAT_ATTACHMENTS))
+    setActivityState(createActivityState({
+      kind: 'file',
+      status: 'done',
+      title: 'FILE CONTEXT',
+      prompt: prepared.map((item) => item.name).join(', '),
+      message: 'FILES ATTACHED',
+      progress: 100
+    }, 'file'))
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const removeAttachedFile = (id: string) => {
+    setAttachedFiles((current) => current.filter((item) => item.id !== id))
+  }
+
   const sendTranscriptPrompt = async () => {
     const text = readTranscriptPrompt()
-    if (!text || isSendingPrompt) return
+    if ((!text && attachedFiles.length === 0) || isSendingPrompt) return
     setIsSendingPrompt(true)
     setTranscriptPrompt('')
+    transcriptPinnedRef.current = true
+    const attachments = attachedFiles
+    setAttachedFiles([])
     try {
-      await window.electron?.ipcRenderer.invoke('chat-message', text, { source: 'text' })
+      await window.electron?.ipcRenderer.invoke('chat-message', text, {
+        source: 'text',
+        entry: 'chart',
+        attachments
+      })
     } finally {
       setIsSendingPrompt(false)
     }
@@ -429,9 +749,65 @@ export default function DashboardView({
     !isSystemActive && ['OFFLINE', 'STOPPED', 'UNKNOWN'].includes(String(voiceEventState || '').toUpperCase())
       ? 'STANDBY'
       : voiceEventState
+  const activitySteps = activityState ? ACTIVITY_STEPS[activityState.kind] : []
+  const activityStepIndex = activityState
+    ? activityState.status === 'done'
+      ? activitySteps.length - 1
+      : Math.min(activitySteps.length - 1, Math.max(0, Math.floor((activityState.progress / 100) * activitySteps.length)))
+    : 0
+  const activityPanel = activityState ? (
+    <div className="shell-workstream-anchor" aria-live="polite">
+      <div className={`shell-workstream-panel shell-workstream-${activityState.status} shell-workstream-${activityState.kind}`}>
+        <div className="shell-workstream-head">
+          <span>LIVE WORK</span>
+          <span className="shell-workstream-badge">
+            {activityState.status === 'running'
+              ? 'ACTIVE'
+              : activityState.status === 'done'
+                ? 'COMPLETE'
+                : 'ATTENTION'}
+          </span>
+        </div>
+        <div className="shell-workstream-core">
+          <div className="shell-workstream-orb" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <div className="min-w-0">
+            <div className="shell-workstream-title">{activityState.title}</div>
+            <div className="shell-workstream-message">{activityState.message}</div>
+            {activityState.prompt && <div className="shell-workstream-prompt">{activityState.prompt}</div>}
+          </div>
+        </div>
+        <div className="shell-workstream-progress-row" aria-hidden="true">
+          <div className="shell-workstream-progress">
+            <span style={{ width: `${activityState.progress}%` }} />
+          </div>
+          <span>{activityState.progress}%</span>
+        </div>
+        <div className="shell-workstream-steps">
+          {activitySteps.map((step, index) => (
+            <span
+              key={step}
+              className={
+                index < activityStepIndex || activityState.status === 'done'
+                  ? 'is-complete'
+                  : index === activityStepIndex && activityState.status === 'running'
+                    ? 'is-active'
+                    : ''
+              }
+            >
+              {step}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : null
 
   return (
-    <div className="flex-1 p-4 bg-white/2 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative animate-in fade-in zoom-in duration-300 w-full scrollbar-small">
+    <div className="flex-1 p-4 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative animate-in fade-in zoom-in duration-300 w-full scrollbar-small">
       <div className="hidden lg:flex col-span-3 flex-col gap-4 h-full z-40 overflow-y-auto pr-1 scrollbar-small">
         <div
           className={`${glassPanel} h-32 shrink-0 flex flex-col p-1 overflow-hidden relative group`}
@@ -451,7 +827,7 @@ export default function DashboardView({
             <button
               aria-label="Switch vision source"
               onClick={toggleSource}
-              className="absolute top-2 right-2 z-30 p-1.5 rounded-md bg-black/50 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-black transition-all"
+              className="shell-control-button absolute top-2 right-2 z-30 p-1.5 rounded-lg bg-black/50 text-blue-300 border border-blue-500/20 hover:bg-blue-500 hover:text-black"
             >
               <RiSwapBoxLine size={14} />
             </button>
@@ -489,16 +865,16 @@ export default function DashboardView({
           className={`${glassPanel} h-32 shrink-0 p-4 flex flex-col justify-between relative overflow-hidden`}
         >
           <div
-            className={`absolute inset-0 bg-linear-to-r from-emerald-500/5 to-transparent transition-opacity duration-1000 ${isSystemActive ? 'opacity-100' : 'opacity-0'}`}
+            className={`absolute inset-0 bg-linear-to-r from-blue-500/10 to-transparent transition-opacity duration-700 ${isSystemActive ? 'opacity-100' : 'opacity-0'}`}
           />
 
           <div className="flex items-center justify-between border-b border-white/10 pb-2 relative z-10">
             <span className="text-[10px] font-bold tracking-widest text-zinc-400 flex items-center gap-1">
-              <RiPulseLine className={isSystemActive ? 'text-emerald-500 animate-pulse' : ''} />{' '}
+              <RiPulseLine className={isSystemActive ? 'text-blue-400 animate-pulse' : ''} />{' '}
               NETWORK TELEMETRY
             </span>
             <span
-              className={`text-[8px] px-2 py-0.5 rounded-full font-mono font-bold border ${isSystemActive ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-zinc-600 border-zinc-800 bg-zinc-900'}`}
+              className={`text-[8px] px-2 py-0.5 rounded-full font-mono font-bold border ${isSystemActive ? 'text-blue-300 border-blue-500/30 bg-blue-500/10' : 'text-zinc-600 border-zinc-800 bg-zinc-900'}`}
             >
               {isSystemActive ? 'SECURE UPLINK' : 'STANDBY'}
             </span>
@@ -510,7 +886,7 @@ export default function DashboardView({
                 WSS LATENCY
               </span>
               <span className="text-xs font-bold text-emerald-50 font-mono flex items-center gap-1.5 transition-all">
-                <RiWifiLine className={isSystemActive ? 'text-emerald-400' : 'text-zinc-600'} />
+                <RiWifiLine className={isSystemActive ? 'text-blue-300' : 'text-zinc-600'} />
                 {isSystemActive ? `${networkStats.ping}ms` : '--'}
               </span>
             </div>
@@ -542,7 +918,7 @@ export default function DashboardView({
               <span className="text-[7px] font-mono text-zinc-500 w-3">TX</span>
               <div className="flex-1 h-1 bg-black/60 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-emerald-500 shadow-[0_0_8px_#10b981] transition-all duration-300 ease-out"
+                  className="h-full bg-blue-500 shadow-[0_0_8px_rgba(96,165,250,0.8)] transition-all duration-300 ease-out"
                   style={{ width: `${isSystemActive ? networkStats.tx : 0}%` }}
                 />
               </div>
@@ -558,6 +934,8 @@ export default function DashboardView({
             </div>
           </div>
         </div>
+
+        {activityPanel}
 
       </div>
 
@@ -578,44 +956,52 @@ export default function DashboardView({
         </div>
 
         <div
-          className={`w-[52vh] h-[52vh] md:w-[42vh] md:h-[42vh] lg:w-[60vh] lg:h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
+          className={`shell-sphere-shell w-[52vh] h-[52vh] md:w-[42vh] md:h-[42vh] lg:w-[60vh] lg:h-[60vh] max-w-full transition-all duration-700 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 saturate-50'}`}
         >
           <Sphere />
         </div>
 
         <div className="absolute bottom-5 md:bottom-8 lg:bottom-10 z-50">
           <div
-            className={`${glassPanel} px-4 py-2.5 lg:px-6 lg:py-3 rounded-full flex items-center gap-4 lg:gap-6 border border-emerald-500/20 shadow-[0_0_30px_rgba(0,0,0,0.5)]`}
+            className="shell-liquid-dock shell-session-dock flex items-center"
           >
             <button
               aria-label="Toggle vision source"
               onClick={onVisionClick}
-              className={`cursor-pointer p-3 rounded-full transition-all ${isVideoOn ? 'bg-red-500/20 text-red-400' : 'hover:bg-white/10 text-zinc-400'}`}
+              className={`shell-control-button shell-dock-button cursor-pointer ${
+                isVideoOn ? 'shell-dock-button-active' : ''
+              }`}
             >
               {isVideoOn ? <RiSwapBoxLine size={20} /> : <RiCameraLine size={20} />}
             </button>
             <button
               aria-label={isSystemActive ? 'Stop Shell voice' : 'Start Shell voice'}
               onClick={toggleSystem}
-              className="relative group mx-2"
+              className={`shell-control-button shell-dock-button shell-dock-button-main cursor-pointer ${
+                isSystemActive ? 'shell-dock-button-live' : ''
+              }`}
             >
-              <div
-                className={`cursor-pointer p-4 rounded-full border-2 transition-all duration-500 ${isSystemActive ? 'bg-emerald-500 border-emerald-400 text-black shadow-[0_0_20px_#10b981]' : 'bg-red-500/10 border-red-500/50 text-red-500'}`}
-              >
-                <RiPhoneFill size={24} className={isSystemActive ? 'animate-pulse' : ''} />
-              </div>
+              <RiPhoneFill size={24} />
             </button>
             <button
               aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
               onClick={toggleMic}
-              className={`cursor-pointer p-3 rounded-full transition-all ${isMicMuted ? 'bg-red-500/20 text-red-400' : 'bg-emerald-500/10 text-emerald-400'}`}
+              className={`shell-control-button shell-dock-button cursor-pointer ${
+                isMicMuted ? 'shell-dock-button-danger' : 'shell-dock-button-active'
+              }`}
             >
               {isMicMuted ? <RiMicOffLine size={20} /> : <RiMicLine size={20} />}
             </button>
             <button
               aria-label="Test Shell voice"
               onClick={() => speakShell('Shell AI real Gemini voice ready hai. Main natural voice mein bol raha hoon.')}
-              className={`cursor-pointer p-3 rounded-full transition-all ${speechState === 'SPEAKING' ? 'bg-cyan-500/20 text-cyan-300 shadow-[0_0_14px_rgba(34,211,238,0.35)]' : speechState === 'VOICE ERR' ? 'bg-red-500/20 text-red-300' : 'bg-white/5 text-zinc-400 hover:bg-cyan-500/10 hover:text-cyan-300'}`}
+              className={`shell-control-button shell-dock-button cursor-pointer ${
+                speechState === 'SPEAKING'
+                  ? 'shell-dock-button-speaking'
+                  : speechState === 'VOICE ERR'
+                    ? 'shell-dock-button-danger'
+                    : ''
+              }`}
               title={voiceRuntime === 'gemini' ? 'Gemini Live voice' : speechState}
             >
               <RiVolumeUpLine size={20} />
@@ -625,13 +1011,13 @@ export default function DashboardView({
       </div>
 
       <div className="col-span-12 md:col-span-5 lg:col-span-4 flex flex-col overflow-hidden min-h-[420px] md:min-h-0 md:h-full z-40">
-        <div className={`${glassPanel} h-full p-4 lg:p-5 flex flex-col gap-4 border-emerald-500/10 bg-zinc-950/55`}>
-          <div className="flex items-start justify-between gap-3 border-b border-emerald-500/10 pb-3">
+        <div className={`${glassPanel} h-full p-4 lg:p-5 flex flex-col gap-4 border-blue-500/10 bg-slate-950/55`}>
+          <div className="flex items-start justify-between gap-3 border-b border-blue-500/10 pb-3">
             <div className="min-w-0">
               <span className="flex items-center gap-2 text-[10px] font-bold tracking-widest text-zinc-300">
-                <RiTerminalBoxLine className="text-emerald-400" /> TRANSCRIPT
+                <RiTerminalBoxLine className="text-blue-300" /> TRANSCRIPT
               </span>
-              <div className="mt-1 h-px w-24 bg-linear-to-r from-emerald-400/60 to-transparent" />
+              <div className="mt-1 h-px w-24 bg-linear-to-r from-blue-400/70 to-transparent" />
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -643,61 +1029,17 @@ export default function DashboardView({
                 CLEAR
               </button>
               <span
-                className={`rounded-full border px-2 py-1 text-[8px] font-mono font-bold ${voiceEventState === 'ERROR' ? 'border-red-500/30 bg-red-500/10 text-red-300' : isSystemActive ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/5 text-zinc-500'}`}
+                className={`rounded-full border px-2 py-1 text-[8px] font-mono font-bold ${voiceEventState === 'ERROR' ? 'border-red-500/30 bg-red-500/10 text-red-300' : isSystemActive ? 'border-blue-500/30 bg-blue-500/10 text-blue-300' : 'border-white/10 bg-white/5 text-zinc-500'}`}
               >
                 {voiceDisplayState}
               </span>
             </div>
           </div>
-          {imageGenerationState && (
-            <div
-              className={`shrink-0 overflow-hidden rounded-2xl border p-3 ${
-                imageGenerationState.status === 'error'
-                  ? 'border-red-500/30 bg-red-500/10'
-                  : imageGenerationState.status === 'saved'
-                    ? 'border-emerald-500/30 bg-emerald-500/10'
-                    : 'border-cyan-500/30 bg-cyan-500/10'
-              }`}
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div
-                    className={`text-[9px] font-black tracking-widest ${
-                      imageGenerationState.status === 'error'
-                        ? 'text-red-300'
-                        : imageGenerationState.status === 'saved'
-                          ? 'text-emerald-300'
-                          : 'text-cyan-300'
-                    }`}
-                  >
-                    {imageGenerationState.message}
-                  </div>
-                  <div className="mt-1 truncate text-[10px] font-mono text-zinc-400">
-                    {imageGenerationState.prompt}
-                  </div>
-                </div>
-                {(imageGenerationState.status === 'generating' ||
-                  imageGenerationState.status === 'saving') && (
-                  <div className="flex shrink-0 items-end gap-1" aria-label="Image generation animation">
-                    {[0, 1, 2, 3].map((item) => (
-                      <span
-                        key={item}
-                        className="block h-5 w-1.5 rounded-full bg-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.75)] animate-pulse"
-                        style={{ animationDelay: `${item * 120}ms` }}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-              {(imageGenerationState.status === 'generating' ||
-                imageGenerationState.status === 'saving') && (
-                <div className="mt-3 h-1 overflow-hidden rounded-full bg-black/50">
-                  <div className="h-full w-1/2 animate-[pulse_1.2s_ease-in-out_infinite] rounded-full bg-linear-to-r from-cyan-400 via-emerald-300 to-cyan-400 shadow-[0_0_16px_rgba(16,185,129,0.5)]" />
-                </div>
-              )}
-            </div>
-          )}
-          <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-2 scrollbar-small">
+          <div
+            ref={scrollRef}
+            onScroll={onTranscriptScroll}
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 pr-2 scrollbar-small"
+          >
             {chatHistory.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-700 gap-3 opacity-60">
                 <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
@@ -714,12 +1056,12 @@ export default function DashboardView({
                   className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <span
-                    className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-emerald-500/60' : 'text-zinc-500'}`}
+                    className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-blue-300/70' : 'text-zinc-500'}`}
                   >
                     {msg.role === 'user' ? 'YOU' : 'SHELL'}
                   </span>
                   <div
-                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${msg.role === 'user' ? 'bg-emerald-500/10 border-emerald-400/20 text-emerald-50 rounded-br-md' : 'bg-black/50 border-white/10 text-zinc-300 rounded-bl-md'}`}
+                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
                   >
                     {msg.parts && msg.parts[0] ? msg.parts[0].text : msg.content}
                   </div>
@@ -727,8 +1069,47 @@ export default function DashboardView({
               ))
             )}
           </div>
-          <div className="shrink-0 border-t border-emerald-500/10 pt-3">
-            <div className="flex items-center gap-2 rounded-2xl border border-emerald-500/20 bg-black/70 p-2 shadow-[0_0_28px_rgba(16,185,129,0.08),inset_0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="shrink-0 border-t border-blue-500/10 pt-3">
+            {attachedFiles.length > 0 && (
+              <div className="shell-attachment-tray" aria-label="Attached files">
+                {attachedFiles.map((file) => (
+                  <div
+                    key={file.id}
+                    className={`shell-attachment-chip ${file.error ? 'shell-attachment-error' : ''}`}
+                    title={`${file.name} (${formatBytes(file.size)})${file.error ? ` - ${file.error}` : ''}`}
+                  >
+                    <RiFileTextLine size={13} />
+                    <span>{file.name}</span>
+                    <small>{file.error || formatBytes(file.size)}</small>
+                    <button
+                      type="button"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => removeAttachedFile(file.id)}
+                      className="shell-control-button"
+                    >
+                      <RiCloseLine size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex items-center gap-2 rounded-2xl border border-blue-500/20 bg-black/55 p-2 shadow-[0_0_28px_rgba(96,165,250,0.08),inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => attachFiles(event.target.files)}
+              />
+              <button
+                aria-label="Attach files to Shell"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={attachedFiles.length >= MAX_CHAT_ATTACHMENTS}
+                className="shell-control-button shell-attach-button cursor-pointer h-11 w-11 shrink-0 rounded-xl border disabled:cursor-not-allowed disabled:opacity-40"
+                title="Attach file"
+              >
+                <RiAttachment2 size={16} />
+              </button>
               <input
                 ref={transcriptInputRef}
                 value={transcriptPrompt}
@@ -737,14 +1118,14 @@ export default function DashboardView({
                   if (event.key === 'Enter') sendTranscriptPrompt()
                 }}
                 aria-label="Shell command input"
-                placeholder="Type to Shell command or image request"
+                placeholder={attachedFiles.length ? 'Ask Shell about attached files' : 'Type to Shell command or image request'}
                 className="min-w-0 flex-1 bg-transparent px-3 py-3 text-[12px] font-mono text-zinc-100 outline-none placeholder:text-zinc-600"
               />
               <button
                 aria-label="Send transcript message"
                 onClick={sendTranscriptPrompt}
                 disabled={isSendingPrompt}
-                className="cursor-pointer h-11 shrink-0 rounded-xl border border-emerald-400/40 bg-emerald-400 px-4 text-black hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-40 transition-all flex items-center gap-2 text-[9px] font-black tracking-widest shadow-[0_0_18px_rgba(52,211,153,0.28)]"
+                className="shell-control-button shell-primary-action cursor-pointer h-11 shrink-0 rounded-xl border px-4 text-black disabled:cursor-not-allowed disabled:opacity-40 flex items-center gap-2 text-[9px] font-black tracking-widest"
               >
                 <RiSendPlane2Line size={16} />
                 <span>SEND</span>

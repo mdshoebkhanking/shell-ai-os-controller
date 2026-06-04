@@ -130,3 +130,18 @@ def test_public_release_validation_rejects_generated_web_ui_outputs():
 
     with pytest.raises(RuntimeError, match="shell_web_ui/dist/index.html"):
         module.validate_release_file_set(files)
+
+
+def test_public_release_package_supports_dry_run(monkeypatch, tmp_path):
+    module = load_public_package_module()
+    required_files = [ROOT / rel for rel in module.REQUIRED_PACKAGE_FILES]
+
+    monkeypatch.setattr(module, "DIST_DIR", tmp_path)
+    monkeypatch.setattr(module, "build_report", lambda include_health=True, strict=True: {"status": "pass", "warnings": []})
+    monkeypatch.setattr(module, "iter_release_files", lambda: required_files)
+
+    report = module.build_package(dry_run=True)
+
+    assert report["status"] == "dry-run"
+    assert report["file_count"] == len(required_files) + 1
+    assert not any(tmp_path.iterdir())

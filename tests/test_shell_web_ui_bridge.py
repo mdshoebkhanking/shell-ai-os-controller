@@ -38,6 +38,65 @@ def test_chart_entry_telemetry_prompt_stays_local(monkeypatch, tmp_path):
     assert "AI provider" not in result["reply"]
 
 
+def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+
+    text_result = bridge._chat_message(["Shell tumhe kisne banaya hai?", {"source": "text"}])
+    voice_result = bridge._chat_message(["who made you", {"source": "voice"}])
+    chart_result = bridge._chat_message(["shell tume kisne banaya hai", {"source": "text", "entry": "chart"}])
+    shell_ko_result = bridge._chat_message(["shell ko kisne banaya hai", {"source": "text", "entry": "chart"}])
+    creator_result = bridge._chat_message(["shell ka creator kaun hai?", {"source": "text", "entry": "chart"}])
+
+    assert text_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
+    assert voice_result["reply"] == "Mujhe Md Shoaib King ne banaya hai."
+    assert chart_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
+    assert shell_ko_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
+    assert creator_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
+    assert voice_result["route"] is None
+    assert [payload["voice"] for channel, payload in emitted if channel == "chat-updated"][1] is True
+
+
+def test_deep_research_chat_emits_activity_events(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_agents:research_agent_tool"
+        assert route["args"]["task"] == "AI chips"
+        return {"status": "success", "result": "[ResearchAgent] (success | 7/7 steps | 1.2s) AI chips research summary [Tool Execution: 1.2s]"}
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+
+    result = bridge._chat_message(["AI chips ke bare mein deep recerch karo", {"source": "text"}])
+
+    activity_events = [payload for channel, payload in emitted if channel == "activity-updated"]
+    assert executed_routes
+    assert result["success"] is True
+    assert result["route"]["tool"] == "shell_agents:research_agent_tool"
+    assert result["reply"].startswith("Deep research complete:")
+    assert "shell_agents:research_agent_tool complete" not in result["reply"]
+    assert "[ResearchAgent]" not in result["reply"]
+    assert "Tool Execution" not in result["reply"]
+    assert activity_events[0]["kind"] == "research"
+    assert activity_events[0]["status"] == "running"
+    assert activity_events[-1]["status"] == "done"
+    assert activity_events[-1]["progress"] == 100
+
+
 def test_gallery_save_and_list_roundtrip(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
@@ -75,6 +134,73 @@ def test_image_generation_chat_result_surfaces_gallery_path(monkeypatch, tmp_pat
 
     assert "Gallery mein save ho gayi" in reply
     assert image_path.name in reply
+
+
+def test_image_failure_reply_is_user_friendly():
+    import shell_web_ui.host as host
+
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    bridge.emit_event = lambda channel, payload: emitted.append((channel, payload))
+
+    reply = bridge._format_chat_result(
+        {"tool": "shell_image_ai:generate_image_tool", "args": {"description": "city"}},
+        {
+            "status": "success",
+            "result": (
+                "❌ **Image generation failed.**\n\n"
+                "No provider returned a valid image.\n\n"
+                "**Provider attempts:**\n- skip OpenAI Images: OPENAI_API_KEY missing\n"
+                "- fail Pollinations AI: empty response\n"
+                "[Tool Execution: 0.64s]"
+            ),
+        },
+    )
+
+    assert "Image generate nahi ho payi" in reply
+    assert "Provider attempts" not in reply
+    assert "Tool Execution" not in reply
+    assert [payload for channel, payload in emitted if channel == "image-gen"][-1]["error"] is True
+
+
+def test_chat_message_includes_attached_text_context(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setattr(host, "UPLOADS_DIR", tmp_path / "uploads")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    seen = {}
+
+    def fake_fallback(text, previous_messages):
+        seen["text"] = text
+        return "Attached file context received."
+
+    monkeypatch.setattr(bridge, "_brain_chat_fallback", fake_fallback)
+
+    result = bridge._chat_message([
+        "is file ko summarize karo",
+        {
+            "source": "text",
+            "entry": "chart",
+            "attachments": [
+                {
+                    "name": "notes.txt",
+                    "type": "text/plain",
+                    "size": 12,
+                    "text": "hello shell file",
+                }
+            ],
+        },
+    ])
+    history = bridge._read_history_file()
+
+    assert result["success"] is True
+    assert "Attached files" in seen["text"]
+    assert "hello shell file" in seen["text"]
+    assert "Attached: notes.txt" in history[-2]["parts"][0]["text"]
 
 
 @pytest.mark.parametrize(

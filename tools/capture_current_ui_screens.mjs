@@ -148,6 +148,10 @@ async function main() {
   ]
 
   for (const [name, label] of sequence) {
+    if (label === 'Open Macros view' || label === 'Open PHONE view') {
+      await clickByLabel(client, 'Open more Shell views')
+      await wait(250)
+    }
     const click = await clickByLabel(client, label)
     const file = await capture(client, name)
     const body = await evaluate(client, 'document.body.innerText.slice(0, 1400)')

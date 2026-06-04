@@ -40,6 +40,8 @@ from collections import deque, defaultdict
 import threading
 import re
 import math
+import struct
+import zlib
 from dataclasses import dataclass, field, asdict
 from enum import Enum
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -116,6 +118,7 @@ class Config:
         "openai,stability,replicate,huggingface,pollinations",
     )
     IMAGE_AUTO_OPEN = os.getenv("SHELL_IMAGE_AUTO_OPEN", "1").strip().lower() not in {"0", "false", "no", "off"}
+    IMAGE_LOCAL_FALLBACK = os.getenv("SHELL_IMAGE_LOCAL_FALLBACK", "1").strip().lower() not in {"0", "false", "no", "off"}
     
     # Image Generation Settings
     DEFAULT_WIDTH = 1024
@@ -403,6 +406,113 @@ def _save_image_bytes(data: bytes, filepath: str, final_size: Tuple[int, int]) -
     with open(filepath, "wb") as f:
         f.write(data)
     return filepath, _image_dimensions_from_bytes(data) or final_size, False
+
+
+def _png_chunk(kind: bytes, data: bytes) -> bytes:
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
+
+
+def _local_preview_png_bytes(prompt: str, width: int, height: int) -> bytes:
+    width = max(256, min(1024, int(width or 768)))
+    height = max(256, min(1024, int(height or 768)))
+    seed = int(hashlib.sha256((prompt or "shell").encode("utf-8")).hexdigest()[:8], 16)
+    rows = []
+    for y in range(height):
+        row = bytearray([0])
+        for x in range(width):
+            n = (x * 17 + y * 31 + seed) & 255
+            cx = (x - width / 2) / max(1, width)
+            cy = (y - height / 2) / max(1, height)
+            glow = max(0.0, 1.0 - (cx * cx + cy * cy) * 7.0)
+            row.extend(
+                (
+                    min(255, int(8 + 68 * glow + (n % 24))),
+                    min(255, int(12 + 92 * glow + ((n >> 2) % 32))),
+                    min(255, int(24 + 146 * glow + ((n >> 4) % 44))),
+                )
+            )
+        rows.append(bytes(row))
+    raw = b"".join(rows)
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + _png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+        + _png_chunk(b"IDAT", zlib.compress(raw, 6))
+        + _png_chunk(b"IEND", b"")
+    )
+
+
+def _local_preview_image_bytes(prompt: str, width: int, height: int, *, style: str = "") -> Optional[bytes]:
+    """Create a local fallback visual when all remote image providers are unavailable."""
+    if not PIL_AVAILABLE:
+        return _local_preview_png_bytes(prompt, width, height)
+    width = max(512, min(1536, int(width or 1024)))
+    height = max(512, min(1536, int(height or 1024)))
+    seed = int(hashlib.sha256((prompt or "shell").encode("utf-8")).hexdigest()[:8], 16)
+    rng = random.Random(seed)
+    base = Image.new("RGB", (width, height), "#07090f")
+    draw = ImageDraw.Draw(base)
+    for y in range(height):
+        t = y / max(1, height - 1)
+        r = int(8 + 24 * t)
+        g = int(10 + 34 * t)
+        b = int(16 + 52 * t)
+        draw.line([(0, y), (width, y)], fill=(r, g, b))
+    for _ in range(160):
+        x = rng.randint(-width // 4, width)
+        y = rng.randint(-height // 4, height)
+        radius = rng.randint(max(12, width // 80), max(28, width // 18))
+        color = (
+            rng.randint(60, 150),
+            rng.randint(95, 190),
+            rng.randint(150, 235),
+        )
+        alpha = rng.randint(20, 72)
+        overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        od = ImageDraw.Draw(overlay)
+        od.ellipse((x, y, x + radius, y + radius), fill=(*color, alpha))
+        base = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
+        draw = ImageDraw.Draw(base)
+    margin = max(26, width // 28)
+    panel_h = max(170, height // 4)
+    panel_y = height - panel_h - margin
+    overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    od = ImageDraw.Draw(overlay)
+    od.rounded_rectangle(
+        (margin, panel_y, width - margin, height - margin),
+        radius=max(18, width // 46),
+        fill=(8, 12, 20, 196),
+        outline=(215, 225, 238, 70),
+        width=2,
+    )
+    base = Image.alpha_composite(base.convert("RGBA"), overlay).convert("RGB")
+    draw = ImageDraw.Draw(base)
+    try:
+        title_font = ImageFont.truetype("Arial Bold.ttf", max(24, width // 30))
+        body_font = ImageFont.truetype("Arial.ttf", max(15, width // 58))
+        meta_font = ImageFont.truetype("Arial.ttf", max(12, width // 72))
+    except Exception:
+        title_font = body_font = meta_font = ImageFont.load_default()
+    draw.text((margin + 22, panel_y + 20), "Shell AI local image preview", fill=(244, 247, 251), font=title_font)
+    prompt_text = re.sub(r"\s+", " ", prompt or "image").strip()
+    words = prompt_text.split()
+    lines: list[str] = []
+    line = ""
+    for word in words:
+        candidate = f"{line} {word}".strip()
+        if len(candidate) > 58 and line:
+            lines.append(line)
+            line = word
+        else:
+            line = candidate
+    if line:
+        lines.append(line)
+    for offset, line_text in enumerate(lines[:4]):
+        draw.text((margin + 22, panel_y + 70 + offset * 24), line_text, fill=(185, 201, 238), font=body_font)
+    meta = f"Offline fallback render | {style or 'default'} | provider keys/public image API unavailable"
+    draw.text((margin + 22, height - margin - 28), meta[:120], fill=(140, 152, 168), font=meta_font)
+    output = io.BytesIO()
+    base.save(output, "PNG", quality=Config.OUTPUT_QUALITY)
+    return output.getvalue()
 
 
 def _open_file_if_enabled(filepath: str) -> None:
@@ -1346,23 +1456,50 @@ class PollinationsProvider(ImageProvider):
         try:
             import urllib.parse
             seed = kwargs.get('seed', random.randint(0, 10000))
-            
-            api_url = (
-                f"https://image.pollinations.ai/prompt/{urllib.parse.quote(prompt)}?"
-                f"width={width}&height={height}&model=flux&seed={seed}&nologo=true"
-            )
-            
-            response = await asyncio.to_thread(
-                requests.get, api_url, timeout=Config.POLLINATIONS_TIMEOUT
-            )
-            
-            duration = time.time() - start
-            
-            if response.status_code == 200 and len(response.content) > 0:
-                self._log_success(duration)
-                return response.content
-            
-            self._log_error(f"Status {response.status_code}", duration)
+            encoded_prompt = urllib.parse.quote(prompt, safe="")
+            query = f"width={width}&height={height}&model=flux&seed={seed}&nologo=true"
+            urls = [
+                f"https://gen.pollinations.ai/image/{encoded_prompt}?{query}",
+                f"https://image.pollinations.ai/prompt/{encoded_prompt}?{query}",
+                f"https://pollinations.ai/p/{encoded_prompt}?{query}",
+            ]
+            headers = {"User-Agent": "ShellAI/1.0 image-generation"}
+            errors: list[str] = []
+            for api_url in urls:
+                response = await asyncio.to_thread(
+                    requests.get,
+                    api_url,
+                    headers=headers,
+                    timeout=Config.POLLINATIONS_TIMEOUT,
+                    allow_redirects=True,
+                )
+                duration = time.time() - start
+                ok, check_msg = _valid_image_bytes(response.content)
+                if response.status_code == 200 and ok:
+                    self._log_success(duration)
+                    return response.content
+                errors.append(f"{response.status_code} {check_msg}")
+                if response.headers.get("content-type", "").startswith("application/json"):
+                    try:
+                        payload = response.json()
+                        image_url = payload.get("url") or payload.get("image") or payload.get("media")
+                        if image_url:
+                            img_response = await asyncio.to_thread(
+                                requests.get,
+                                image_url,
+                                headers=headers,
+                                timeout=Config.POLLINATIONS_TIMEOUT,
+                                allow_redirects=True,
+                            )
+                            ok, check_msg = _valid_image_bytes(img_response.content)
+                            if img_response.status_code == 200 and ok:
+                                self._log_success(time.time() - start)
+                                return img_response.content
+                            errors.append(f"media {img_response.status_code} {check_msg}")
+                    except Exception as exc:
+                        errors.append(f"json parse {exc}")
+
+            self._log_error("; ".join(errors[-3:]) or "empty response", time.time() - start)
             return None
             
         except Exception as e:
@@ -1808,6 +1945,17 @@ async def generate_image_tool(description: str,
             except Exception as e:
                 attempts.append(f"fail {provider.name}: {e}")
                 logger.warning("%s failed: %s", provider.name, e)
+
+        if not image_bytes and Config.IMAGE_LOCAL_FALLBACK:
+            raw = _local_preview_image_bytes(original_prompt, base_width, base_height, style=style)
+            ok, check_msg = _valid_image_bytes(raw)
+            if ok:
+                image_bytes = raw
+                used_provider = "Shell Local Preview"
+                provider_width, provider_height = _image_dimensions_from_bytes(raw) or (base_width, base_height)
+                attempts.append("ok Shell Local Preview: cloud providers unavailable")
+            else:
+                attempts.append(f"fail Shell Local Preview: {check_msg}")
 
         if not image_bytes:
             details = "\n".join(f"- {line}" for line in attempts[-8:]) or "- no providers configured"

@@ -129,7 +129,13 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "PYTHONUTF8=1" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
+    assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in start
+    assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in one_click
+    assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
+    assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
+    assert "exit /b %SHELL_RC%" in repair
     assert "SHELL_LEGACY_UI=0" in start
+    assert "SHELL_LEGACY_UI=0" in acceptance
     for script in (start, one_click, repair, acceptance):
         assert "call :refresh_path" in script
         assert ":refresh_path" in script
@@ -151,8 +157,52 @@ def test_mac_launchers_use_bootstrap_directly():
     assert "shell_web_ui" in install
     assert "Python 3.10+" in install
     assert "SHELL_LEGACY_UI" in start
+    assert "SHELL_IMAGE_LOCAL_FALLBACK" in install
+    assert "SHELL_IMAGE_LOCAL_FALLBACK" in start
     assert "installer/bootstrap.py launch --repair-if-needed" in start
     assert "exec ./start_shellai.command" not in start
+
+
+def test_linux_launchers_enforce_python_policy_and_image_fallback():
+    install = open("installer/install_linux.sh", encoding="utf-8").read()
+    start = open("start_shellai.sh", encoding="utf-8").read()
+    repair = open("repair_shellai.sh", encoding="utf-8").read()
+
+    for script in (install, start, repair):
+        assert "SHELL_IMAGE_LOCAL_FALLBACK" in script
+    assert "sys.version_info >= (3, 10)" in install
+    assert "sys.version_info >= (3, 10)" in start
+
+
+def test_image_provider_readiness_warns_with_local_fallback(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("SHELL_IMAGE_LOCAL_FALLBACK=1\n", encoding="utf-8")
+
+    for key in ("OPENAI_API_KEY", "STABILITY_API_KEY", "REPLICATE_API_KEY", "HUGGINGFACE_API_KEY", "HF_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(bootstrap, "ROOT", tmp_path)
+
+    result = bootstrap.image_provider_readiness()
+
+    assert result.ok is True
+    assert result.status == "WARN"
+    assert "local preview fallback" in result.message
+
+
+def test_image_provider_readiness_reports_configured_provider(monkeypatch, tmp_path):
+    env_path = tmp_path / ".env"
+    env_path.write_text("OPENAI_API_KEY=sk-test\nSHELL_IMAGE_LOCAL_FALLBACK=1\n", encoding="utf-8")
+
+    for key in ("OPENAI_API_KEY", "STABILITY_API_KEY", "REPLICATE_API_KEY", "HUGGINGFACE_API_KEY", "HF_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(bootstrap, "ROOT", tmp_path)
+
+    result = bootstrap.image_provider_readiness()
+
+    assert result.ok is True
+    assert result.status == "OK"
+    assert "OpenAI Images" in result.message
+    assert "sk-test" not in result.message
 
 
 def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):

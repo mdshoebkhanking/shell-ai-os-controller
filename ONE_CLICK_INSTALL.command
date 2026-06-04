@@ -14,11 +14,15 @@ echo "  - install all UI requirements from shell_ui/requirements_ui.txt"
 echo "  - install and build the React Shell Web UI in shell_web_ui"
 echo "  - install Playwright Chromium"
 echo "  - install ffmpeg, OCR, and Node.js when Homebrew is available"
+echo "  - keep image generation usable with local fallback if cloud image APIs are not configured"
 echo "  - create .env and runtime folders"
 echo "  - run health checks"
 echo
 
 export SHELL_LEGACY_UI="${SHELL_LEGACY_UI:-0}"
+export SHELL_V2_STREAM="${SHELL_V2_STREAM:-1}"
+export SHELL_TTS_ENGINE="${SHELL_TTS_ENGINE:-fast}"
+export SHELL_IMAGE_LOCAL_FALLBACK="${SHELL_IMAGE_LOCAL_FALLBACK:-1}"
 
 if ! python3 -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)' >/dev/null 2>&1; then
   if command -v brew >/dev/null 2>&1; then
@@ -38,5 +42,6 @@ echo
 echo "============================================================"
 echo " Install complete."
 echo " Now double-click start_shellai.command to open Shell AI."
+echo " Health report: .shell_runtime/install_health.json"
 echo "============================================================"
 read -r -p "Press Enter to close..."

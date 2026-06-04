@@ -209,6 +209,51 @@ def _looks_like_math(expr: str) -> bool:
     return bool(re.search(r"[+\-*/%^()]|\b(sqrt|sin|cos|tan|log|factorial|pow)\b", expr, flags=re.I))
 
 
+def _image_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
+    image_noun = r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)"
+    image_verb = r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
+    speech_generate = r"(?:generate|ganerate|gana\s*re|gane\s*rate)"
+
+    image_match = re.match(
+        rf"^(?:generate|create|make|draw|design|banao|bana|banado|banaao)\s+"
+        rf"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
+        rf"{image_noun}\s*"
+        rf"(?:of|for|ki|ka|ke|:)?\s*(.+)$",
+        raw,
+        flags=re.I | re.S,
+    )
+    if not image_match:
+        image_match = re.match(
+            rf"^(.+?)\s+(?:ki|ka|ke)?\s*"
+            rf"{image_noun}\s+"
+            rf"{image_verb}\s*(?:karo|kar\s+do|karke\s+do)?$",
+            raw,
+            flags=re.I | re.S,
+        )
+    if not image_match:
+        image_match = re.match(
+            rf"^{image_noun}\s+{speech_generate}\s*(?:karo|kar\s+do|karke\s+do)?\s*(.+)$",
+            raw,
+            flags=re.I | re.S,
+        )
+    if not image_match or not re.search(image_noun, lower, flags=re.I):
+        return None
+
+    prompt = _strip_quotes(image_match.group(1))
+    prompt = re.sub(r"\b(?:ok|please|pls|karo|kar\s+do)\b\s*$", "", prompt, flags=re.I).strip()
+    return _route(
+        "shell_image_ai:generate_image_tool",
+        {
+            "description": prompt or _strip_quotes(raw),
+            "device_type": "pc",
+            "style": "photorealistic",
+            "quality": "excellent",
+            "use_ai_enhancement": True,
+        },
+        confidence=0.92,
+    )
+
+
 def _unit_alias(unit: str) -> str:
     normalized = str(unit or "").strip().lower().replace(" ", "_")
     aliases = {
@@ -302,6 +347,115 @@ def _workspace_file_content(raw: str, path_span: tuple[int, int]) -> str:
     if global_marker:
         return _strip_quotes(global_marker.group(1))
     return ""
+
+
+def _user_file_destination(lower: str) -> str:
+    if re.search(r"\b(desktop|desk\s*top|dextop)\b", lower, flags=re.I):
+        return "desktop"
+    if re.search(r"\b(documents?|document folder)\b", lower, flags=re.I):
+        return "documents"
+    if re.search(r"\b(downloads?|download folder)\b", lower, flags=re.I):
+        return "downloads"
+    if re.search(r"\b(workspace|shell workspace)\b", lower, flags=re.I):
+        return "workspace"
+    return ""
+
+
+def _user_file_save_filename(raw: str) -> str:
+    quoted = re.search(r"[\"'`]([^\"'`]+?\.[A-Za-z0-9]{1,16})[\"'`]", raw)
+    if quoted:
+        return _strip_quotes(quoted.group(1))
+    match = re.search(
+        rf"\b(?P<path>{_WORKSPACE_PATH_TOKEN})\b",
+        raw,
+        flags=re.I,
+    )
+    if match:
+        return _strip_quotes(match.group("path")).split("/")[-1].split("\\")[-1]
+    return ""
+
+
+def _user_file_type(raw: str, lower: str, filename: str) -> str:
+    if filename and "." in filename:
+        return filename.rsplit(".", 1)[-1].lower()
+    if re.search(r"\bpdf\b", lower, flags=re.I):
+        return "pdf"
+    if re.search(r"\b(markdown|md)\b", lower, flags=re.I):
+        return "md"
+    if re.search(r"\b(html|webpage)\b", lower, flags=re.I):
+        return "html"
+    if re.search(r"\b(json)\b", lower, flags=re.I):
+        return "json"
+    if re.search(r"\b(csv|spreadsheet)\b", lower, flags=re.I):
+        return "csv"
+    if re.search(r"\b(log)\b", lower, flags=re.I):
+        return "log"
+    if re.search(r"\b(note|notes|text|txt|file|document)\b", lower, flags=re.I):
+        return "txt"
+    return "txt"
+
+
+def _user_file_save_content(raw: str, filename: str) -> str:
+    topic_match = re.search(
+        r"^(.+?)\s+(?:ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main)\s+"
+        r"(?:.+?\b)?(?:pdf|file|document|note|notes|text|txt)\b",
+        raw,
+        flags=re.I | re.S,
+    )
+    if topic_match:
+        return _strip_quotes(topic_match.group(1))
+
+    markers = (
+        r"\b(?:with\s+content|content|with\s+text|text|write|likho|likh\s+do|daalo|dalo)\b\s*[:=-]?\s*(.+)$",
+        r"\b(?:about|on|topic|ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main)\b\s*[:=-]?\s*(.+?)(?:\s+(?:as\s+)?(?:pdf|file|document|note)\b|\s+(?:desktop|dextop|documents?|downloads?|workspace)\b|$)",
+    )
+    for pattern in markers:
+        match = re.search(pattern, raw, flags=re.I | re.S)
+        if match:
+            return _strip_quotes(match.group(1))
+
+    text = raw
+    if filename:
+        text = re.sub(re.escape(filename), " ", text, flags=re.I)
+    text = re.sub(
+        r"\b(?:please|pls|shell|create|make|new|save|write|generate|banao|bana|banado|banaao|"
+        r"bana\s+do|kar\s+do|karke\s+do|file|pdf|document|note|notes|text|txt|as|on|to|in|"
+        r"desktop|desk\s*top|dextop|documents?|downloads?|workspace|pe|par|mein|mai|main|ke|ka|ki|ek|a|an)\b",
+        " ",
+        text,
+        flags=re.I,
+    )
+    text = _clean(text)
+    return text
+
+
+def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
+    destination = _user_file_destination(lower)
+    if not destination:
+        return None
+    if not re.search(
+        r"\b(save|create|make|new|write|generate|banao|bana|banado|banaao|bana\s+do|kar\s+do|karke\s+do)\b",
+        lower,
+        flags=re.I,
+    ):
+        return None
+    if not re.search(r"\b(file|pdf|document|note|notes|text|txt|md|markdown|json|csv|html|report|letter)\b", lower, flags=re.I):
+        return None
+    filename = _user_file_save_filename(raw)
+    file_type = _user_file_type(raw, lower, filename)
+    content = _user_file_save_content(raw, filename)
+    overwrite = bool(re.search(r"\b(overwrite|replace|update|badal|dobara)\b", lower, flags=re.I))
+    return _route(
+        "shell_workspace_tools:create_user_file_tool",
+        {
+            "filename": filename,
+            "content": content,
+            "destination": destination,
+            "file_type": file_type,
+            "overwrite": overwrite,
+        },
+        confidence=0.93,
+    )
 
 
 def _workspace_file_create_route(raw: str, lower: str) -> dict[str, Any] | None:
@@ -578,6 +732,35 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             tool_id, param = _AGENTS[label]
             return _route(tool_id, {param: task}, kind="agent", confidence=0.9)
 
+    if re.search(
+        r"\b(deep\s*(?:research|recerch)|research|recerch|fact\s*check|fact-check|multi\s*source|multi-source)\b",
+        lower,
+    ):
+        task = re.sub(
+            r"^\s*(?:deep\s*)?(?:research|recerch|fact\s*check|fact-check)\s*"
+            r"(?:karo|kar|karna|about|on|for|ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main|:)?\s*",
+            "",
+            raw,
+            flags=re.I | re.S,
+        ).strip()
+        task = re.sub(
+            r"\s+(?:par|pe|ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main)\s+"
+            r"(?:deep\s*)?(?:research|recerch|fact\s*check|fact-check)\s*(?:karo|kar|karna)?\s*$",
+            "",
+            task,
+            flags=re.I | re.S,
+        ).strip()
+        return _route(
+            "shell_agents:research_agent_tool",
+            {"task": _strip_quotes(task) or _strip_quotes(raw)},
+            kind="agent",
+            confidence=0.88,
+        )
+
+    image_route = _image_generation_route(raw, lower)
+    if image_route:
+        return image_route
+
     if re.search(_CREATION_VERB_RE, lower) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
         return _route(
             "shell_code_engine:create_fullstack_app_tool",
@@ -607,6 +790,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             },
             confidence=0.9,
         )
+
+    user_file_save = _user_file_save_route(raw, lower)
+    if user_file_save:
+        return user_file_save
 
     workspace_read = _workspace_file_read_route(raw, lower)
     if workspace_read:
@@ -686,36 +873,6 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     ps_match = re.match(r"^(?:run\s+)?(?:powershell|terminal|shell\s+command|command)\s+(.+)$", raw, flags=re.I | re.S)
     if ps_match:
         return _route("shell_terminal:run_command_tool", {"command": _strip_quotes(ps_match.group(1))}, confidence=0.86)
-
-    image_match = re.match(
-        r"^(?:generate|create|make|draw|design|banao|bana|banado|banaao)\s+"
-        r"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
-        r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)\s*"
-        r"(?:of|for|ki|ka|ke|:)?\s*(.+)$",
-        raw,
-        flags=re.I | re.S,
-    )
-    if not image_match:
-        image_match = re.match(
-            r"^(.+?)\s+(?:ki|ka|ke)?\s*"
-            r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)\s+"
-            r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)$",
-            raw,
-            flags=re.I | re.S,
-        )
-    if image_match:
-        prompt = _strip_quotes(image_match.group(1))
-        return _route(
-            "shell_image_ai:generate_image_tool",
-            {
-                "description": prompt,
-                "device_type": "pc",
-                "style": "photorealistic",
-                "quality": "excellent",
-                "use_ai_enhancement": True,
-            },
-            confidence=0.9,
-        )
 
     convert_match = re.match(
         r"^(?:convert\s+)?(-?\d+(?:\.\d+)?)\s*([a-zA-Z_]+)\s+(?:to|in)\s+([a-zA-Z_]+)$",

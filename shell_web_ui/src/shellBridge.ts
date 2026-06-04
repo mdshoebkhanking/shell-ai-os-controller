@@ -159,6 +159,70 @@ const recallFromHistory = (text: string, messages: any[]) => {
   return `Haan bhai, yaad hai. Tumne pichla kaam bola tha: "${previous[previous.length - 1]}".`
 }
 
+const creatorIdentityReply = (text: string, source = 'text') => {
+  const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!normalized) return ''
+  const subjectIntent = /\b(shell|shell ai|you|your|tum|tumhe|tumko|tujhe|tume|aap|aapko|apko|tere|tera|tu)\b/i.test(
+    normalized
+  )
+  const creatorIntent =
+    /\b(kis\s*ne|kisne|kaun|kon|who|whom|which company|company|creator|maker|founder|owner|developer|made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya)\b/i.test(
+      normalized
+    )
+  const explicitCreatorPhrase =
+    /\b(shell|shell ai|your|tumhara|tera|aapka)\s+(creator|maker|founder|owner|developer)\b/i.test(
+      normalized
+    ) || /\b(creator|maker|founder|owner|developer)\s+(kaun|kon|who|kisne|kis\s*ne)\b/i.test(normalized)
+  if (!((subjectIntent && creatorIntent) || explicitCreatorPhrase)) return ''
+  return source === 'voice'
+    ? 'Mujhe Md Shoaib King ne banaya hai.'
+    : 'Mujhe Md Shoeb King ne banaya hai.'
+}
+
+const researchIntentFromText = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (!/\b(deep\s*(research|recerch)|research|recerch|fact\s*check|fact-check|multi\s*source|multi-source)\b/i.test(raw)) {
+    return ''
+  }
+  return raw
+    .replace(
+      /^\s*(deep\s*)?(research|recerch|fact\s*check|fact-check)\s*(karo|kar|karna|about|on|for|ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main|:)?\s*/i,
+      ''
+    )
+    .replace(
+      /\s+(par|pe|ke\s+bare\s+mein|ke\s+barre\s+main|ke\s+bare\s+main)\s+(deep\s*)?(research|recerch|fact\s*check|fact-check)\s*(karo|kar|karna)?\s*$/i,
+      ''
+    )
+    .trim() || raw
+}
+
+const emitFallbackActivity = (
+  kind: 'research' | 'image' | 'build' | 'search' | 'tool',
+  status: 'running' | 'done' | 'error',
+  prompt: string,
+  message: string,
+  progress: number
+) => {
+  const titleByKind = {
+    research: 'DEEP RESEARCH',
+    image: 'IMAGE GENERATION',
+    build: 'BUILD TASK',
+    search: 'LIVE SEARCH',
+    tool: 'SHELL ACTION'
+  }
+  emit('activity-updated', {
+    id: `${kind}-${Date.now()}`,
+    kind,
+    status,
+    title: titleByKind[kind],
+    prompt,
+    message,
+    progress,
+    source: 'web-fallback'
+  })
+}
+
 const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
   switch (channel) {
     case 'get-system-stats':
@@ -332,6 +396,10 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
       const text = String(args[0] || '')
       const meta = args[1] && typeof args[1] === 'object' ? (args[1] as Record<string, unknown>) : {}
       const source = String(meta.source || 'text').toLowerCase() === 'voice' ? 'voice' : 'text'
+      const attachments = Array.isArray(meta.attachments) ? (meta.attachments as any[]) : []
+      const attachmentNames = attachments
+        .map((item) => String(item?.name || '').trim())
+        .filter(Boolean)
       const imagePrompt = imagePromptFromIntent(text)
       if (imagePrompt) {
         const route = {
@@ -346,19 +414,31 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
         emit('chat-updated', { reply, route, success, source, voice: source === 'voice' })
         return { success, reply, route, source }
       }
+      const researchPrompt = researchIntentFromText(text)
+      if (researchPrompt) {
+        emitFallbackActivity('research', 'running', researchPrompt, 'SEARCHING AND VERIFYING', 24)
+        emitFallbackActivity('research', 'error', researchPrompt, 'RESEARCH BACKEND OFFLINE', 100)
+      }
       const lower = text.toLowerCase()
       let reply = 'Shell backend bridge abhi connected nahi hai. Backend start hone ke baad main full jawab aur OS actions kar paungi.'
+      const identityReply = creatorIdentityReply(text, source)
       const recallReply = recallFromHistory(text, messages)
-      if (recallReply) reply = recallReply
+      if (identityReply) reply = identityReply
+      else if (recallReply) reply = recallReply
       else if (lower.includes('capital of france')) reply = 'France ki capital Paris hai.'
       else if (lower.includes('memory') && lower.includes('python')) {
         reply = 'Python memory heap mein objects rakhta hai; reference counting aur garbage collector unused objects clean karte hain.'
       } else if (lower.includes('network protocol')) {
         reply = 'Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS.'
+      } else if (attachmentNames.length) {
+        reply = `Files attached hain: ${attachmentNames.join(', ')}. Backend connected hoga to main inka content read karke answer de paungi.`
       } else if (/^(hi|hello|hey|salam)\b/i.test(text.trim())) {
         reply = 'Haan bhai, bolo. Main sun rahi hoon.'
       }
-      messages.push({ role: 'user', parts: [{ text }] }, { role: 'model', parts: [{ text: reply }] })
+      const userText = attachmentNames.length
+        ? `${text || 'Attached file'}\n\nAttached: ${attachmentNames.join(', ')}`
+        : text
+      messages.push({ role: 'user', parts: [{ text: userText }] }, { role: 'model', parts: [{ text: reply }] })
       writeHistory(messages)
       emit('chat-updated', { reply, success: false, source, voice: source === 'voice' })
       return { success: false, reply, source }

@@ -72,6 +72,13 @@ OPTIONAL_EXECUTABLES = {
     "npm": "optional Node.js package installer",
 }
 
+IMAGE_PROVIDER_KEYS = {
+    "OpenAI Images": ("OPENAI_API_KEY",),
+    "Stability AI": ("STABILITY_API_KEY",),
+    "Replicate": ("REPLICATE_API_KEY",),
+    "HuggingFace": ("HUGGINGFACE_API_KEY", "HF_API_KEY"),
+}
+
 OPTIONAL_REQUIREMENT_NAMES = {
     "deep-translator",
     "docker",
@@ -393,11 +400,81 @@ def create_env_if_missing() -> StepResult:
             "SHELL_ALLOW_CODE_WRITE=0",
             "SHELL_ALLOW_TERMINAL_EXEC=0",
             "SHELL_TTS_ENGINE=fast",
+            "SHELL_IMAGE_LOCAL_FALLBACK=1",
             "",
         ]),
         encoding="utf-8",
     )
     return StepResult(".env", True, "OK", "Created minimal .env")
+
+
+def _env_file_values() -> dict[str, str]:
+    env_path = ROOT / ".env"
+    if not env_path.exists():
+        return {}
+    values: dict[str, str] = {}
+    for raw in env_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        values[key.strip()] = value.strip().strip("\"'")
+    return values
+
+
+def _is_configured_secret_value(value: str | None) -> bool:
+    cleaned = str(value or "").strip().strip("\"'")
+    if not cleaned:
+        return False
+    lowered = cleaned.lower()
+    return not (
+        lowered.startswith("your_")
+        or lowered in {"changeme", "change_me", "none", "null", "placeholder"}
+    )
+
+
+def _configured_env_key(key: str, file_values: dict[str, str]) -> bool:
+    return _is_configured_secret_value(os.environ.get(key)) or _is_configured_secret_value(file_values.get(key))
+
+
+def _env_flag_enabled(key: str, default: bool, file_values: dict[str, str]) -> bool:
+    raw = os.environ.get(key)
+    if raw is None:
+        raw = file_values.get(key)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
+
+
+def image_provider_readiness() -> StepResult:
+    """Report image-generation provider readiness without exposing secret values."""
+    file_values = _env_file_values()
+    ready = [
+        label
+        for label, keys in IMAGE_PROVIDER_KEYS.items()
+        if any(_configured_env_key(key, file_values) for key in keys)
+    ]
+    local_fallback = _env_flag_enabled("SHELL_IMAGE_LOCAL_FALLBACK", True, file_values)
+    details = {"providers": ready, "local_fallback": local_fallback}
+    if ready:
+        suffix = "; local fallback enabled" if local_fallback else "; local fallback disabled"
+        return StepResult("image providers", True, "OK", f"Cloud image providers configured: {', '.join(ready)}{suffix}", details)
+    if local_fallback:
+        return StepResult(
+            "image providers",
+            True,
+            "WARN",
+            "No cloud image provider key configured; Shell will use local preview fallback. "
+            "Add OPENAI_API_KEY, STABILITY_API_KEY, REPLICATE_API_KEY, or HUGGINGFACE_API_KEY for real AI images.",
+            details,
+        )
+    return StepResult(
+        "image providers",
+        True,
+        "WARN",
+        "No image provider key configured and SHELL_IMAGE_LOCAL_FALLBACK is disabled; image generation will fail until a provider key is added.",
+        details,
+    )
 
 
 def safe_rebuild_venv(path: Path) -> StepResult:
@@ -807,6 +884,7 @@ def health_report(path: Path | None = None) -> dict[str, object]:
         )
     results.append(web_ui_toolchain_readiness())
     results.append(web_ui_build_readiness())
+    results.append(image_provider_readiness())
     for exe, purpose in OPTIONAL_EXECUTABLES.items():
         found = shutil.which(exe) is not None
         if not found and py.exists():

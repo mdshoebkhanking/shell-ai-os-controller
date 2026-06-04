@@ -94,6 +94,7 @@ async def test_generate_image_failure_reports_provider_attempts(monkeypatch, tmp
 
     monkeypatch.setattr(img, "_build_providers", lambda: [Unavailable()])
     monkeypatch.setattr(img, "cache", img.AdvancedCache(str(tmp_path / "cache")))
+    monkeypatch.setattr(img.Config, "IMAGE_LOCAL_FALLBACK", False)
     img.rate_limiter.reset()
 
     result = await img.generate_image_tool.__wrapped__(
@@ -103,3 +104,32 @@ async def test_generate_image_failure_reports_provider_attempts(monkeypatch, tmp
 
     assert "Image generation failed" in result
     assert "skip Unavailable: missing key" in result
+
+
+@pytest.mark.asyncio
+async def test_generate_image_uses_local_preview_when_cloud_providers_fail(monkeypatch, tmp_path):
+    import shell_image_ai as img
+
+    class EmptyProvider(img.ImageProvider):
+        def __init__(self):
+            super().__init__("Empty")
+
+        async def generate(self, prompt, width, height, **kwargs):
+            return b""
+
+    monkeypatch.setattr(img, "_build_providers", lambda: [EmptyProvider()])
+    monkeypatch.setattr(img.Config, "IMAGE_LOCAL_FALLBACK", True)
+    monkeypatch.setattr(img.Config, "IMAGE_AUTO_OPEN", False)
+    monkeypatch.setattr(img.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(img, "cache", img.AdvancedCache(str(tmp_path / "cache")))
+    img.rate_limiter.reset()
+
+    result = await img.generate_image_tool.__wrapped__(
+        "clean product photo",
+        use_ai_enhancement=False,
+    )
+
+    assert "✅ **Image Generated!**" in result
+    assert "Provider:** Shell Local Preview" in result
+    saved = result.split("`")[1]
+    assert img._valid_image_bytes(open(saved, "rb").read())[0] is True

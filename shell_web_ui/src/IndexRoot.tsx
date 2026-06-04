@@ -350,7 +350,7 @@ const IndexRoot = () => {
           stopVision={stopVision}
         />
         {systemNotice && (
-          <div className="absolute right-4 top-4 z-50 w-[min(360px,calc(100vw-24px))] rounded-lg border border-red-500/35 bg-[#120707]/95 p-3 text-red-100 shadow-2xl shadow-red-950/40">
+          <div className="shell-notice absolute right-4 top-4 z-50 w-[min(360px,calc(100vw-24px))] rounded-2xl border p-3 text-red-100 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.2em] text-red-300">
@@ -374,7 +374,7 @@ const IndexRoot = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-black overflow-hidden relative border border-emerald-500/20 rounded-xl">
+    <div className="shell-app-frame flex flex-col h-screen w-screen overflow-hidden relative border rounded-xl">
       <div className="flex-1 relative">
         <ShellAI
           isSystemActive={isSystemActive}
@@ -392,7 +392,7 @@ const IndexRoot = () => {
         />
       </div>
       {systemNotice && (
-        <div className="absolute right-6 top-16 z-50 w-[min(420px,calc(100vw-32px))] rounded-lg border border-red-500/35 bg-[#120707]/95 p-4 text-red-100 shadow-2xl shadow-red-950/40">
+        <div className="shell-notice absolute right-6 top-16 z-50 w-[min(420px,calc(100vw-32px))] rounded-2xl border p-4 text-red-100 shadow-2xl">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-red-300">{systemNotice.title}</div>

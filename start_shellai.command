@@ -7,6 +7,7 @@ export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
 export SHELL_TTS_ENGINE="${SHELL_TTS_ENGINE:-fast}"
 export SHELL_V2_STREAM="${SHELL_V2_STREAM:-1}"
 export SHELL_LEGACY_UI="${SHELL_LEGACY_UI:-0}"
+export SHELL_IMAGE_LOCAL_FALLBACK="${SHELL_IMAGE_LOCAL_FALLBACK:-1}"
 
 echo
 echo "============================================================"

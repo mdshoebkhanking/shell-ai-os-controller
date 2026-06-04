@@ -17,7 +17,18 @@ interface GalleryImage {
   displayName: string
   path: string
   url: string
-  createdAt: Date
+  createdAt: Date | string
+}
+
+const normalizeGalleryImage = (image: any): GalleryImage | null => {
+  if (!image?.filename) return null
+  return {
+    filename: String(image.filename),
+    displayName: String(image.displayName || image.filename),
+    path: String(image.path || ''),
+    url: String(image.url || ''),
+    createdAt: image.createdAt || new Date().toISOString()
+  }
 }
 
 const GalleryView = () => {
@@ -44,24 +55,42 @@ const GalleryView = () => {
     [visibleImages.length, allImages.length]
   )
 
-  const fetchGallery = async () => {
+  const upsertImage = useCallback((image: any) => {
+    const normalized = normalizeGalleryImage(image)
+    if (!normalized) return
+    setAllImages((current) => [
+      normalized,
+      ...current.filter((item) => item.filename !== normalized.filename)
+    ])
+  }, [])
+
+  const removeImage = useCallback((filename: string) => {
+    setAllImages((current) => current.filter((item) => item.filename !== filename))
+    setSelectedImage((current) => (current?.filename === filename ? null : current))
+  }, [])
+
+  const fetchGallery = useCallback(async () => {
     try {
       const data = await window.electron.ipcRenderer.invoke('get-gallery')
       if (Array.isArray(data)) setAllImages(data)
     } catch (e) {
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchGallery()
     const interval = setInterval(fetchGallery, 5000)
-    const refresh = () => fetchGallery()
+    const refresh = (_event: unknown, payload?: any) => {
+      if (payload?.image) upsertImage(payload.image)
+      if (payload?.deleted) removeImage(String(payload.deleted))
+      fetchGallery()
+    }
     window.shellAPI?.on?.('gallery-updated', refresh)
     return () => {
       clearInterval(interval)
       window.shellAPI?.off?.('gallery-updated', refresh)
     }
-  }, [])
+  }, [fetchGallery, removeImage, upsertImage])
 
   useEffect(() => {
     const endIndex = page * ITEMS_PER_PAGE

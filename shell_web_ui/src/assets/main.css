@@ -1,5 +1,29 @@
 @import 'tailwindcss';
 
+:root {
+  --shell-bg-0: #050609;
+  --shell-bg-1: #090b10;
+  --shell-bg-2: #11141b;
+  --shell-surface: rgba(18, 21, 29, 0.76);
+  --shell-surface-soft: rgba(235, 241, 248, 0.055);
+  --shell-surface-strong: rgba(28, 32, 42, 0.86);
+  --shell-glass: rgba(238, 244, 252, 0.065);
+  --shell-glass-strong: rgba(238, 244, 252, 0.11);
+  --shell-border: rgba(215, 225, 238, 0.13);
+  --shell-border-strong: rgba(230, 237, 247, 0.22);
+  --shell-primary: #86a8e7;
+  --shell-primary-soft: #b9c9ee;
+  --shell-primary-glow: rgba(134, 168, 231, 0.20);
+  --shell-ai: #d7e1ee;
+  --shell-data: #9bd4ee;
+  --shell-success: #22c55e;
+  --shell-warning: #f59e0b;
+  --shell-danger: #ef4444;
+  --shell-text: #f4f7fb;
+  --shell-muted: #8c98a8;
+  --shell-liquid-ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 html,
 body {
   height: 100%;
@@ -24,6 +48,71 @@ body {
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes shell-liquid-shimmer {
+  0% {
+    transform: translate3d(-130%, 0, 0) skewX(-18deg);
+  }
+  100% {
+    transform: translate3d(130%, 0, 0) skewX(-18deg);
+  }
+}
+
+@keyframes shell-liquid-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.74;
+  }
+  50% {
+    transform: translate3d(0, -1px, 0) scale(1.015);
+    opacity: 1;
+  }
+}
+
+@keyframes shell-panel-arrive {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.985);
+    filter: blur(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes shell-workstream-rise {
+  from {
+    opacity: 0;
+    transform: translate3d(14px, 10px, 0) scale(0.97);
+    filter: blur(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes shell-workstream-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shell-workstream-pulse {
+  0%,
+  100% {
+    opacity: 0.46;
+    transform: scaleY(0.55);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
   }
 }
 
@@ -83,10 +172,826 @@ body {
   animation-delay: 500ms;
 }
 
+.shell-ui-root {
+  color: var(--shell-text);
+  background:
+    radial-gradient(circle at 14% 8%, rgba(215, 225, 238, 0.07), transparent 33%),
+    radial-gradient(circle at 86% 14%, rgba(134, 168, 231, 0.08), transparent 29%),
+    linear-gradient(135deg, var(--shell-bg-0), var(--shell-bg-1) 48%, var(--shell-bg-2));
+}
+
+.shell-app-frame {
+  background:
+    radial-gradient(circle at 52% 42%, rgba(215, 225, 238, 0.045), transparent 38%),
+    linear-gradient(135deg, var(--shell-bg-0), var(--shell-bg-1));
+  border-color: rgba(215, 225, 238, 0.11) !important;
+}
+
+.shell-topbar {
+  background: rgba(10, 12, 17, 0.78);
+  border-bottom: 1px solid var(--shell-border);
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.075);
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+.shell-logo-glass {
+  background:
+    radial-gradient(circle at 42% 30%, rgba(255, 255, 255, 0.82), rgba(185, 201, 238, 0.18) 42%, rgba(255, 255, 255, 0.035) 70%),
+    rgba(14, 17, 24, 0.84);
+  border-color: rgba(215, 225, 238, 0.24) !important;
+  box-shadow: 0 0 18px rgba(185, 201, 238, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+}
+
+.shell-logo-glass img {
+  filter: drop-shadow(0 0 10px rgba(215, 225, 238, 0.30));
+}
+
+.shell-tabs {
+  position: relative;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid var(--shell-border);
+  background: rgba(255, 255, 255, 0.042);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.095);
+  backdrop-filter: blur(16px) saturate(118%);
+}
+
+.shell-settings-tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.shell-settings-tabs .shell-tab {
+  min-width: max-content;
+}
+
+.shell-tab-indicator {
+  position: absolute;
+  inset-block: 4px;
+  left: 0;
+  z-index: 0;
+  border-radius: 999px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(185, 201, 238, 0.08)),
+    rgba(18, 22, 30, 0.92);
+  border: 1px solid rgba(185, 201, 238, 0.28);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.32),
+    0 0 22px var(--shell-primary-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  transition:
+    transform 460ms var(--shell-liquid-ease),
+    width 460ms var(--shell-liquid-ease);
+}
+
+.shell-tab {
+  position: relative;
+  z-index: 1;
+  color: var(--shell-muted);
+  transform: translate3d(0, 0, 0);
+  transition:
+    color 220ms var(--shell-liquid-ease),
+    transform 220ms var(--shell-liquid-ease),
+    opacity 220ms var(--shell-liquid-ease);
+}
+
+.shell-tab:hover {
+  color: var(--shell-text);
+  transform: translate3d(0, -1px, 0);
+}
+
+.shell-tab-active {
+  color: #f8fbff !important;
+  text-shadow: 0 0 12px rgba(185, 201, 238, 0.22);
+}
+
+.shell-page-surface {
+  background:
+    radial-gradient(circle at 48% 20%, rgba(215, 225, 238, 0.052), transparent 38%),
+    radial-gradient(circle at 86% 78%, rgba(134, 168, 231, 0.045), transparent 30%),
+    linear-gradient(135deg, rgba(5, 6, 9, 0.99), rgba(12, 15, 21, 0.99));
+}
+
+.shell-view-pane {
+  animation: shell-panel-arrive 340ms var(--shell-liquid-ease) both;
+}
+
+.shell-liquid-panel {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.088), rgba(255, 255, 255, 0.036)),
+    rgba(15, 18, 25, 0.66);
+  border: 1px solid var(--shell-border);
+  border-radius: 22px;
+  box-shadow:
+    0 18px 56px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(118%);
+}
+
+.shell-liquid-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.105), transparent 20% 82%, rgba(255, 255, 255, 0.055)),
+    radial-gradient(circle at 18% 0%, rgba(185, 201, 238, 0.09), transparent 30%);
+  opacity: 0.68;
+}
+
+.shell-liquid-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+.shell-liquid-dock {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(215, 225, 238, 0.18);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.095), rgba(255, 255, 255, 0.035)),
+    rgba(8, 10, 14, 0.76);
+  border-color: rgba(215, 225, 238, 0.18) !important;
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.44),
+    0 0 20px rgba(185, 201, 238, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13) !important;
+  backdrop-filter: blur(22px) saturate(112%);
+}
+
+.shell-session-dock {
+  padding: 7px;
+  gap: 7px;
+  border-radius: 999px;
+}
+
+.shell-session-dock::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.10), transparent 28% 74%, rgba(255, 255, 255, 0.045));
+  opacity: 0.5;
+}
+
+.shell-workstream-anchor {
+  position: relative;
+  z-index: 4;
+  display: block;
+  width: 100%;
+  flex-shrink: 0;
+  pointer-events: auto;
+}
+
+.shell-workstream-panel {
+  position: relative;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid rgba(215, 225, 238, 0.20);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 11% 8%, rgba(215, 225, 238, 0.15), transparent 30%),
+    radial-gradient(circle at 88% 18%, rgba(155, 212, 238, 0.08), transparent 34%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.098), rgba(255, 255, 255, 0.030)),
+    rgba(8, 10, 14, 0.78);
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.42),
+    0 0 32px rgba(134, 168, 231, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  backdrop-filter: blur(22px) saturate(122%);
+  animation: shell-workstream-rise 280ms var(--shell-liquid-ease) both;
+}
+
+.shell-workstream-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    linear-gradient(120deg, rgba(255, 255, 255, 0.11), transparent 28% 76%, rgba(255, 255, 255, 0.045)),
+    repeating-linear-gradient(90deg, transparent 0 18px, rgba(215, 225, 238, 0.018) 19px 20px);
+  opacity: 0.54;
+}
+
+.shell-workstream-panel::after {
+  content: "";
+  position: absolute;
+  left: -35%;
+  top: 0;
+  width: 45%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transform: skewX(-18deg);
+  animation: shell-liquid-shimmer 2.2s var(--shell-liquid-ease) infinite;
+  opacity: 0.38;
+}
+
+.shell-workstream-error {
+  border-color: rgba(248, 113, 113, 0.32);
+  box-shadow:
+    0 18px 46px rgba(0, 0, 0, 0.42),
+    0 0 34px rgba(248, 113, 113, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.shell-workstream-done {
+  border-color: rgba(155, 212, 238, 0.25);
+}
+
+.shell-workstream-head,
+.shell-workstream-core,
+.shell-workstream-progress,
+.shell-workstream-steps {
+  position: relative;
+  z-index: 1;
+}
+
+.shell-workstream-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: rgba(215, 225, 238, 0.58);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.11em;
+}
+
+.shell-workstream-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 92px;
+  border: 1px solid rgba(215, 225, 238, 0.18);
+  border-radius: 999px;
+  background: rgba(244, 247, 251, 0.055);
+  padding: 3px 7px;
+  color: rgba(244, 247, 251, 0.86);
+  font-size: 7px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.shell-workstream-badge::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: rgba(155, 212, 238, 0.92);
+  box-shadow: 0 0 10px rgba(155, 212, 238, 0.46);
+}
+
+.shell-workstream-done .shell-workstream-badge::before {
+  background: rgba(215, 225, 238, 0.90);
+}
+
+.shell-workstream-error .shell-workstream-badge {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.26);
+  background: rgba(248, 113, 113, 0.09);
+}
+
+.shell-workstream-error .shell-workstream-badge::before {
+  background: #fca5a5;
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.44);
+}
+
+.shell-workstream-core {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.shell-workstream-orb {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  border: 1px solid rgba(215, 225, 238, 0.16);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(215, 225, 238, 0.32) 0 4px, transparent 5px),
+    radial-gradient(circle at 50% 50%, rgba(134, 168, 231, 0.11), transparent 58%),
+    rgba(5, 6, 9, 0.44);
+  box-shadow:
+    0 0 18px rgba(185, 201, 238, 0.11),
+    inset 0 1px 0 rgba(255, 255, 255, 0.09);
+}
+
+.shell-workstream-orb span {
+  position: absolute;
+  inset: 8px;
+  border: 1px solid transparent;
+  border-top-color: rgba(215, 225, 238, 0.70);
+  border-right-color: rgba(155, 212, 238, 0.28);
+  border-radius: inherit;
+  animation: shell-workstream-orbit 2.4s linear infinite;
+}
+
+.shell-workstream-orb span:nth-child(2) {
+  inset: 14px;
+  animation-duration: 1.55s;
+  animation-direction: reverse;
+  border-top-color: rgba(155, 212, 238, 0.68);
+}
+
+.shell-workstream-orb span:nth-child(3) {
+  inset: 22px;
+  animation-duration: 1.1s;
+  border-top-color: rgba(244, 247, 251, 0.80);
+}
+
+.shell-workstream-done .shell-workstream-orb span,
+.shell-workstream-error .shell-workstream-orb span {
+  animation-duration: 8s;
+  opacity: 0.62;
+}
+
+.shell-workstream-title {
+  overflow: hidden;
+  color: #f8fbff;
+  font-size: 11.5px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-workstream-message {
+  margin-top: 4px;
+  overflow: hidden;
+  color: rgba(215, 225, 238, 0.70);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-workstream-error .shell-workstream-message {
+  color: #fecaca;
+}
+
+.shell-workstream-prompt {
+  margin-top: 6px;
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba(185, 201, 238, 0.82);
+  font-size: 10px;
+  font-weight: 760;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.shell-workstream-progress-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 13px;
+}
+
+.shell-workstream-progress {
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(5, 6, 9, 0.72);
+}
+
+.shell-workstream-progress-row > span {
+  color: rgba(215, 225, 238, 0.54);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.shell-workstream-progress span {
+  display: block;
+  height: 100%;
+  min-width: 8%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, rgba(155, 212, 238, 0.52), rgba(244, 247, 251, 0.84));
+  box-shadow: 0 0 16px rgba(185, 201, 238, 0.24);
+  transition: width 260ms var(--shell-liquid-ease);
+}
+
+.shell-workstream-error .shell-workstream-progress span {
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.58), rgba(254, 202, 202, 0.86));
+}
+
+.shell-workstream-image {
+  border-color: rgba(155, 212, 238, 0.26);
+  background:
+    radial-gradient(circle at 12% 12%, rgba(155, 212, 238, 0.16), transparent 30%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(155, 212, 238, 0.035)),
+    rgba(8, 10, 14, 0.78);
+}
+
+.shell-workstream-image .shell-workstream-orb {
+  border-radius: 16px;
+}
+
+.shell-workstream-image .shell-workstream-orb::before,
+.shell-workstream-build .shell-workstream-orb::before,
+.shell-workstream-file .shell-workstream-orb::before,
+.shell-workstream-search .shell-workstream-orb::before,
+.shell-workstream-tool .shell-workstream-orb::before {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(244, 247, 251, 0.78);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.07em;
+}
+
+.shell-workstream-image .shell-workstream-orb::before {
+  content: "IMG";
+}
+
+.shell-workstream-build .shell-workstream-orb {
+  border-radius: 14px;
+  background:
+    linear-gradient(90deg, transparent 0 44%, rgba(215, 225, 238, 0.11) 45% 55%, transparent 56% 100%),
+    radial-gradient(circle at 50% 50%, rgba(185, 201, 238, 0.12), transparent 62%),
+    rgba(5, 6, 9, 0.48);
+}
+
+.shell-workstream-build .shell-workstream-orb::before {
+  content: "APP";
+}
+
+.shell-workstream-file .shell-workstream-orb {
+  border-radius: 12px;
+  background:
+    linear-gradient(135deg, rgba(244, 247, 251, 0.12), transparent 42%),
+    repeating-linear-gradient(0deg, transparent 0 7px, rgba(215, 225, 238, 0.06) 8px 9px),
+    rgba(5, 6, 9, 0.48);
+}
+
+.shell-workstream-file .shell-workstream-orb::before {
+  content: "FILE";
+  font-size: 8px;
+}
+
+.shell-workstream-search .shell-workstream-orb::before {
+  content: "WEB";
+}
+
+.shell-workstream-tool .shell-workstream-orb::before {
+  content: "ACT";
+}
+
+.shell-workstream-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.shell-workstream-steps span {
+  position: relative;
+  overflow: hidden;
+  min-height: 24px;
+  border: 1px solid rgba(215, 225, 238, 0.07);
+  border-radius: 9px;
+  background: rgba(5, 6, 9, 0.20);
+  padding: 6px 7px 6px 18px;
+  color: rgba(140, 152, 168, 0.72);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-workstream-steps span::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 999px;
+  background: rgba(140, 152, 168, 0.28);
+  transform-origin: 50% 50%;
+}
+
+.shell-workstream-steps span.is-active,
+.shell-workstream-steps span.is-complete {
+  color: rgba(244, 247, 251, 0.88);
+  border-color: rgba(215, 225, 238, 0.13);
+  background: rgba(244, 247, 251, 0.045);
+}
+
+.shell-workstream-steps span.is-active::before {
+  background: rgba(155, 212, 238, 0.92);
+  box-shadow: 0 0 10px rgba(155, 212, 238, 0.52);
+  animation: shell-workstream-pulse 880ms var(--shell-liquid-ease) infinite;
+}
+
+.shell-workstream-steps span.is-complete::before {
+  background: rgba(215, 225, 238, 0.72);
+}
+
+.shell-attachment-tray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.shell-attachment-chip {
+  display: grid;
+  max-width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(215, 225, 238, 0.13);
+  border-radius: 12px;
+  background: rgba(244, 247, 251, 0.045);
+  padding: 6px 7px;
+  color: rgba(215, 225, 238, 0.86);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.shell-attachment-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-attachment-chip small {
+  color: rgba(140, 152, 168, 0.80);
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.shell-attachment-chip button {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border: 1px solid rgba(215, 225, 238, 0.10);
+  border-radius: 999px;
+  color: rgba(215, 225, 238, 0.70);
+  background: rgba(5, 6, 9, 0.28);
+}
+
+.shell-attachment-error {
+  border-color: rgba(248, 113, 113, 0.26);
+  color: #fecaca;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.shell-attach-button {
+  display: grid;
+  place-items: center;
+  border-color: rgba(215, 225, 238, 0.13);
+  color: rgba(215, 225, 238, 0.70);
+  background: rgba(244, 247, 251, 0.045);
+}
+
+.shell-attach-button:hover {
+  border-color: rgba(155, 212, 238, 0.28);
+  color: rgba(244, 247, 251, 0.94);
+  background: rgba(155, 212, 238, 0.09);
+}
+
+.shell-dock-button {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid rgba(215, 225, 238, 0.12);
+  border-radius: 999px;
+  color: rgba(215, 225, 238, 0.66);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.052), rgba(255, 255, 255, 0.018)),
+    rgba(5, 6, 9, 0.36);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.075),
+    0 8px 18px rgba(0, 0, 0, 0.20);
+}
+
+.shell-dock-button:hover {
+  color: var(--shell-text);
+  border-color: rgba(215, 225, 238, 0.24);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.088), rgba(255, 255, 255, 0.032)),
+    rgba(18, 22, 30, 0.62);
+}
+
+.shell-dock-button-active,
+.shell-dock-button-speaking {
+  color: #f8fbff;
+  border-color: rgba(185, 201, 238, 0.26);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(215, 225, 238, 0.12), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.105), rgba(134, 168, 231, 0.055)),
+    rgba(18, 22, 30, 0.72);
+  box-shadow:
+    0 0 18px rgba(185, 201, 238, 0.10),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.shell-dock-button-danger {
+  color: #ffb8bd;
+  border-color: rgba(248, 113, 113, 0.24);
+  background:
+    linear-gradient(135deg, rgba(248, 113, 113, 0.10), rgba(127, 29, 29, 0.045)),
+    rgba(18, 12, 14, 0.54);
+}
+
+.shell-dock-button-main {
+  width: 48px;
+  height: 48px;
+  margin-inline: 2px;
+  color: #f8fbff;
+  border-color: rgba(215, 225, 238, 0.24);
+  background:
+    radial-gradient(circle at 46% 16%, rgba(255, 255, 255, 0.16), transparent 46%),
+    linear-gradient(145deg, rgba(185, 201, 238, 0.11), rgba(18, 22, 30, 0.78));
+}
+
+.shell-dock-button-main.shell-dock-button-live::after,
+.shell-dock-button-speaking::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border: 1px solid rgba(185, 201, 238, 0.20);
+  border-radius: inherit;
+  opacity: 0.85;
+  animation: shell-liquid-breathe 1.8s var(--shell-liquid-ease) infinite;
+}
+
+.shell-control-button {
+  transform: translate3d(0, 0, 0);
+  transition:
+    transform 180ms var(--shell-liquid-ease),
+    background-color 180ms var(--shell-liquid-ease),
+    color 180ms var(--shell-liquid-ease),
+    border-color 180ms var(--shell-liquid-ease),
+    box-shadow 220ms var(--shell-liquid-ease);
+}
+
+.shell-control-button:hover {
+  transform: translate3d(0, -1px, 0) scale(1.035);
+}
+
+.shell-control-button:active {
+  transform: translate3d(0, 1px, 0) scale(0.96);
+}
+
+.shell-primary-action {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.17), rgba(134, 168, 231, 0.16)),
+    rgba(24, 29, 39, 0.92) !important;
+  border-color: rgba(185, 201, 238, 0.34) !important;
+  box-shadow:
+    0 14px 30px var(--shell-primary-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22) !important;
+  color: #f8fbff !important;
+}
+
+.shell-status-ready {
+  color: #dfeee8 !important;
+  border-color: rgba(87, 171, 132, 0.26) !important;
+  background: rgba(34, 197, 94, 0.075) !important;
+}
+
+.shell-notice {
+  background:
+    linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(15, 23, 42, 0.88)),
+    rgba(15, 23, 42, 0.92) !important;
+  border-color: rgba(239, 68, 68, 0.34) !important;
+  box-shadow: 0 22px 56px rgba(0, 0, 0, 0.40), inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(18px) saturate(150%);
+}
+
+.shell-ui-root [class*='text-emerald-'] {
+  color: var(--shell-primary-soft) !important;
+}
+
+.shell-ui-root [class*='text-blue-'],
+.shell-ui-root [class*='text-cyan-'],
+.shell-ui-root [class*='text-violet-'] {
+  color: var(--shell-primary-soft) !important;
+}
+
+.shell-ui-root [class*='border-emerald-'] {
+  border-color: rgba(185, 201, 238, 0.24) !important;
+}
+
+.shell-ui-root [class*='border-blue-'],
+.shell-ui-root [class*='border-cyan-'],
+.shell-ui-root [class*='border-violet-'] {
+  border-color: rgba(185, 201, 238, 0.22) !important;
+}
+
+.shell-ui-root [class*='bg-emerald-'][class*='/'] {
+  background-color: rgba(134, 168, 231, 0.115) !important;
+}
+
+.shell-ui-root [class*='bg-blue-'][class*='/'],
+.shell-ui-root [class*='bg-cyan-'][class*='/'],
+.shell-ui-root [class*='bg-violet-'][class*='/'] {
+  background-color: rgba(134, 168, 231, 0.105) !important;
+}
+
+.shell-ui-root [class~='bg-emerald-400'],
+.shell-ui-root [class~='bg-emerald-500'],
+.shell-ui-root [class~='bg-emerald-600'],
+.shell-ui-root [class~='bg-blue-300'],
+.shell-ui-root [class~='bg-blue-400'],
+.shell-ui-root [class~='bg-blue-500'],
+.shell-ui-root [class~='bg-cyan-300'],
+.shell-ui-root [class~='bg-cyan-400'],
+.shell-ui-root [class~='bg-cyan-500'],
+.shell-ui-root [class~='bg-violet-400'],
+.shell-ui-root [class~='bg-violet-500'] {
+  background-color: var(--shell-primary) !important;
+}
+
+.shell-ui-root [class*='shadow-[0_0'][class*='16,185,129'],
+.shell-ui-root [class*='shadow-[0_0'][class*='52,211,153'],
+.shell-ui-root [class*='shadow-[0_0'][class*='96,165,250'],
+.shell-ui-root [class*='shadow-[0_0'][class*='34,211,238'] {
+  box-shadow: 0 0 22px var(--shell-primary-glow) !important;
+}
+
+.shell-ui-root [class*='bg-black'] {
+  background-color: rgba(6, 7, 10, 0.68);
+}
+
+.shell-ui-root [class*='bg-zinc-950'] {
+  background-color: rgba(14, 17, 23, 0.70);
+}
+
+.shell-ui-root [class*='from-blue-'],
+.shell-ui-root [class*='from-cyan-'],
+.shell-ui-root [class*='from-violet-'],
+.shell-ui-root [class*='via-blue-'],
+.shell-ui-root [class*='via-cyan-'],
+.shell-ui-root [class*='via-violet-'],
+.shell-ui-root [class*='to-blue-'],
+.shell-ui-root [class*='to-cyan-'],
+.shell-ui-root [class*='to-violet-'] {
+  --tw-gradient-from: rgba(185, 201, 238, 0.36) !important;
+  --tw-gradient-via: rgba(134, 168, 231, 0.28) !important;
+  --tw-gradient-to: rgba(215, 225, 238, 0.18) !important;
+}
+
+.shell-ui-root [class*='placeholder:text-zinc-600']::placeholder {
+  color: rgba(148, 163, 184, 0.56) !important;
+}
+
+.shell-sphere-shell {
+  filter: drop-shadow(0 0 24px rgba(185, 201, 238, 0.11));
+}
+
+.shell-shimmer {
+  animation: shell-liquid-shimmer 1.8s var(--shell-liquid-ease) infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-in {
+  .animate-in,
+  .shell-view-pane,
+  .shell-shimmer,
+  .shell-workstream-panel,
+  .shell-workstream-panel::after,
+  .shell-workstream-orb span,
+  .shell-workstream-steps span.is-active::before {
     animation-duration: 1ms;
     animation-delay: 0ms;
+  }
+
+  .shell-tab,
+  .shell-tab-indicator,
+  .shell-control-button {
+    transition-duration: 1ms;
   }
 }
 

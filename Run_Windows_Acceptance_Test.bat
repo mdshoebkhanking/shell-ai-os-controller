@@ -6,6 +6,8 @@ set "PYTHONUTF8=1"
 set "PYTHONIOENCODING=utf-8"
 set "SHELL_TTS_ENGINE=fast"
 set "SHELL_V2_STREAM=1"
+set "SHELL_LEGACY_UI=0"
+set "SHELL_IMAGE_LOCAL_FALLBACK=1"
 set "SHELL_WINDOWS_MIN_VOLUME=65"
 call :refresh_path
 
@@ -17,6 +19,7 @@ echo  This will:
 echo   - create/repair the managed virtual environment
 echo   - install dependencies using the normal one-click bootstrap
 echo   - run health, hub, UI, voice, and Windows-MCP readiness probes
+echo   - verify image-provider/fallback readiness in install health
 echo   - write .shell_runtime\windows_acceptance_report.json
 echo.
 

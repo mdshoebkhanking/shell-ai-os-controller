@@ -260,17 +260,26 @@ def validate_release_file_set(files: list[Path]) -> None:
         raise RuntimeError("Release package includes generated/runtime files: " + preview + extra)
 
 
-def build_package(*, strict: bool = True) -> dict[str, object]:
+def build_package(*, strict: bool = True, dry_run: bool = False) -> dict[str, object]:
     report = build_report(include_health=True, strict=strict)
     if report["status"] != "pass":
         raise RuntimeError("Public release check failed. Run tools/production_release_check.py for details.")
 
-    DIST_DIR.mkdir(parents=True, exist_ok=True)
     name = f"shell-ai-os-controller-{version()}.zip"
     output = DIST_DIR / name
     files = iter_release_files()
     validate_release_file_set(files)
     package_file_count = len(files) + 1  # release_manifest.json is written into the zip.
+    if dry_run:
+        return {
+            "status": "dry-run",
+            "path": str(output),
+            "sha256": "",
+            "file_count": package_file_count,
+            "size_bytes": 0,
+        }
+
+    DIST_DIR.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         for path in files:
             zf.write(path, path.relative_to(ROOT).as_posix())
@@ -303,15 +312,20 @@ def build_package(*, strict: bool = True) -> dict[str, object]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Create a clean Shell AI public release zip.")
     parser.add_argument("--no-strict", action="store_true", help="Do not fail on unsafe local .env dev flags.")
+    parser.add_argument("--dry-run", action="store_true", help="Validate the release file set without writing a zip.")
     args = parser.parse_args(argv)
     try:
-        report = build_package(strict=not args.no_strict)
+        report = build_package(strict=not args.no_strict, dry_run=args.dry_run)
     except Exception as exc:
         print(f"Package failed: {exc}")
         return 2
-    print("Shell AI public release package created")
+    if args.dry_run:
+        print("Shell AI public release package dry-run passed")
+    else:
+        print("Shell AI public release package created")
     print(f"Path: {report['path']}")
-    print(f"SHA256: {report['sha256']}")
+    if report["sha256"]:
+        print(f"SHA256: {report['sha256']}")
     print(f"Files: {report['file_count']}")
     print(f"Size: {report['size_bytes']} bytes")
     return 0
