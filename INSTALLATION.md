@@ -2,7 +2,7 @@
 
 Recommended flow:
 
-1. Windows: double-click `ONE_CLICK_INSTALL.bat`.
+1. Windows: double-click `shell-ai-os-controller-setup-[version].exe` from the release. Source zip fallback: double-click `ONE_CLICK_INSTALL.bat`.
 2. macOS: double-click `ONE_CLICK_INSTALL.command`.
 3. Wait until setup finishes. It creates `.shellai_venv`, installs backend dependencies, UI dependencies from `shell_ui/requirements_ui.txt`, browser runtime, ffmpeg/OCR where possible, and writes `.env`.
 4. Start Shell:

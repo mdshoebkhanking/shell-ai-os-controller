@@ -104,7 +104,10 @@ def test_public_release_package_includes_web_ui_source_and_windows_launchers():
     assert "shell_web_ui/package.json" in rel_paths
     assert "shell_web_ui/src/App.tsx" in rel_paths
     assert "ONE_CLICK_INSTALL.bat" in rel_paths
+    assert "Build_Windows_EXE.bat" in rel_paths
     assert "Run_Windows_Acceptance_Test.bat" in rel_paths
+    assert "tools/build_windows_installer.py" in rel_paths
+    assert "tools/windows_installer/ShellAI_Setup.iss" in rel_paths
     assert "AGENT_FIX.md" not in rel_paths
     assert "SESSION_LOG.md" not in rel_paths
     assert not any(path.startswith("shell_web_ui/dist/") for path in rel_paths)

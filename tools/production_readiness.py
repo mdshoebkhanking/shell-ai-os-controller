@@ -142,7 +142,10 @@ def _verify_package() -> tuple[bool, str]:
                 "THIRD_PARTY_NOTICES.md",
                 "ONE_CLICK_INSTALL.bat",
                 "Start_ShellAI.bat",
+                "Build_Windows_EXE.bat",
                 "Run_Windows_Acceptance_Test.bat",
+                "tools/build_windows_installer.py",
+                "tools/windows_installer/ShellAI_Setup.iss",
                 "tools/windows_acceptance_probe.py",
                 "tools/signing_notarization_check.py",
             }

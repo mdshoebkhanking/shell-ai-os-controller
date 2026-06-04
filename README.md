@@ -385,13 +385,27 @@ User / CLI / Desktop feature flag
 For normal users:
 
 ```text
+1. Download Shell AI Windows setup EXE from the latest release.
+2. Double-click shell-ai-os-controller-setup-[version].exe.
+3. Keep "Install or repair Shell AI dependencies now" selected on first install.
+4. Launch Shell AI from the Start Menu or desktop shortcut.
+```
+
+The setup EXE installs Shell into your user profile, creates Start Menu
+shortcuts, can optionally add a desktop shortcut, and can optionally start
+Shell when Windows starts. During first install it runs the same safe bootstrap
+as `ONE_CLICK_INSTALL.bat`.
+
+Source zip fallback:
+
+```text
 1. Download the release zip.
 2. Extract it.
 3. Double-click ONE_CLICK_INSTALL.bat.
 4. Double-click Start_ShellAI.bat.
 ```
 
-What the installer does:
+What the bootstrap does:
 
 - Detects Python.
 - Creates a virtual environment.
@@ -406,6 +420,16 @@ If something breaks:
 ```text
 Double-click Repair_ShellAI.bat
 ```
+
+Build the Windows setup EXE on a Windows build machine:
+
+```text
+Double-click Build_Windows_EXE.bat
+```
+
+The generated installer is written to `dist\shell-ai-os-controller-setup-[version].exe`.
+The Settings > System tab can check the release feed and show `UPDATE NOW`
+when a newer setup EXE is attached to the latest GitHub release.
 
 The React Shell Web UI build requires Node.js/npm 20.19+ or 22.12+. On Windows,
 the installer and repair flow refresh PATH after winget, resolve `npm.cmd`

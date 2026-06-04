@@ -52,9 +52,18 @@ removed from tracked public media.
 
 Windows:
 
-1. Run `ONE_CLICK_INSTALL.bat`.
-2. Run `Start_ShellAI.bat`.
-3. If anything breaks, run `Repair_ShellAI.bat`.
+1. Download `shell-ai-os-controller-setup-[version].exe` from the release.
+2. Run the setup EXE.
+3. Keep the dependency bootstrap task selected on first install.
+4. Launch Shell AI from Start Menu/Desktop.
+5. If anything breaks, run `Repair_ShellAI.bat` from the install folder.
+
+Source zip fallback:
+
+1. Extract the release zip.
+2. Run `ONE_CLICK_INSTALL.bat`.
+3. Run `Start_ShellAI.bat`.
+4. If anything breaks, run `Repair_ShellAI.bat`.
 
 macOS:
 
@@ -126,6 +135,34 @@ The generated package is written to:
 ```text
 dist/shell-ai-os-controller-1.0.0.zip
 ```
+
+## Build The Windows Setup EXE
+
+On a Windows build machine:
+
+```bat
+Build_Windows_EXE.bat
+```
+
+The generated installer is written to:
+
+```text
+dist/shell-ai-os-controller-setup-1.0.0.exe
+```
+
+The EXE builder stages the same public release file set, excludes local
+secrets/runtime files, compiles `tools/windows_installer/ShellAI_Setup.iss`
+with Inno Setup, and creates Start Menu/Desktop/startup shortcut options.
+GitHub Actions also builds this setup EXE on `windows-latest` for release
+artifacts.
+
+## App Updates
+
+Settings > System uses the release feed configured by `SHELL_UPDATE_REPO` or
+`SHELL_UPDATE_MANIFEST_URL`. When the latest release includes a newer
+`*.exe` setup asset, Shell shows `DOWNLOAD UPDATE` and then `UPDATE NOW`.
+The updater downloads to `.shell_runtime/updates` and only launches the cached
+installer on Windows.
 
 Every public source or zip release must include:
 

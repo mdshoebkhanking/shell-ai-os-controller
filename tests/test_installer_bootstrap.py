@@ -116,6 +116,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     one_click = open("ONE_CLICK_INSTALL.bat", encoding="utf-8").read()
     repair = open("Repair_ShellAI.bat", encoding="utf-8").read()
     acceptance = open("Run_Windows_Acceptance_Test.bat", encoding="utf-8").read()
+    exe_builder = open("Build_Windows_EXE.bat", encoding="utf-8").read()
     installer = open("installer/install_windows.bat", encoding="utf-8").read()
 
     assert "installer\\bootstrap.py launch --repair-if-needed" in start
@@ -133,6 +134,9 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in one_click
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
+    assert "tools\\build_windows_installer.py" in exe_builder
+    assert "JRSoftware.InnoSetup" in exe_builder
+    assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "exit /b %SHELL_RC%" in repair
     assert "SHELL_LEGACY_UI=0" in start
     assert "SHELL_LEGACY_UI=0" in acceptance
@@ -146,6 +150,20 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "ONE_CLICK_INSTALL.bat" in installer
     assert "tools\\windows_acceptance_probe.py --visible-ui-probe" in acceptance
     assert "installer\\bootstrap.py install --yes" in acceptance
+
+
+def test_windows_inno_setup_installer_config_creates_shortcuts_and_startup_option():
+    iss = open("tools/windows_installer/ShellAI_Setup.iss", encoding="utf-8").read()
+    builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+
+    assert "OutputBaseFilename=shell-ai-os-controller-setup-{#AppVersion}" in iss
+    assert "DefaultDirName={localappdata}\\Programs\\ShellAI" in iss
+    assert "ONE_CLICK_INSTALL.bat" in iss
+    assert "Start_ShellAI.bat" in iss
+    assert "{userstartup}\\Shell AI OS Controller" in iss
+    assert "PrivilegesRequired=lowest" in iss
+    assert "validate_release_file_set(files)" in builder
+    assert "Windows .exe installer compilation requires Windows with Inno Setup." in builder
 
 
 def test_mac_launchers_use_bootstrap_directly():

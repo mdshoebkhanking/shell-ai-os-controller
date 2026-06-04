@@ -36,6 +36,7 @@ SECRET_PATTERNS = [
 
 REQUIRED_PACKAGE_FILES = {
     ".env.example",
+    "Build_Windows_EXE.bat",
     "INSTALLATION.md",
     "ONE_CLICK_INSTALL.bat",
     "ONE_CLICK_INSTALL.command",
@@ -58,6 +59,8 @@ REQUIRED_PACKAGE_FILES = {
     "shell_web_ui/src/shellBridge.ts",
     "shell_web_ui/tsconfig.json",
     "shell_web_ui/vite.config.ts",
+    "tools/build_windows_installer.py",
+    "tools/windows_installer/ShellAI_Setup.iss",
 }
 
 FORBIDDEN_PACKAGE_PATH_PREFIXES = {

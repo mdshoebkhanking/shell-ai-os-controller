@@ -2,7 +2,8 @@
 
 Use the one-click installer for your OS:
 
-- Windows: double-click `ONE_CLICK_INSTALL.bat`
+- Windows normal-user setup: double-click `shell-ai-os-controller-setup-[version].exe`
+- Windows source fallback: double-click `ONE_CLICK_INSTALL.bat`
 - macOS: double-click `ONE_CLICK_INSTALL.command`
 - Linux: run `bash installer/install_linux.sh`
 
@@ -55,3 +56,18 @@ Windows validation:
 
 - After install or repair, run `Run_Windows_Acceptance_Test.bat` for the automated health, hub, UI, voice dependency, image-provider/fallback, and Windows-MCP readiness checks.
 - The automated report is written to `.shell_runtime/windows_acceptance_report.json`.
+
+Windows setup EXE build:
+
+- On Windows, double-click `Build_Windows_EXE.bat`.
+- The builder stages a clean public installer tree under `.shell_runtime/windows_installer_staging`.
+- Inno Setup compiles `tools/windows_installer/ShellAI_Setup.iss`.
+- The setup EXE is written to `dist/shell-ai-os-controller-setup-[version].exe`.
+- The installer creates Start Menu shortcuts, optional desktop shortcut, optional Windows-startup shortcut, and can run the dependency bootstrap on first install.
+
+Updates:
+
+- Settings > System calls the desktop updater bridge.
+- `SHELL_UPDATE_REPO` defaults to the public Shell AI GitHub release feed.
+- `SHELL_UPDATE_MANIFEST_URL` can override the feed with custom JSON containing `version`, `releaseNotes`, `installer_url`, and optional `sha256`.
+- `UPDATE NOW` only launches downloaded `.exe` installers from `.shell_runtime/updates` on Windows.

@@ -72,6 +72,7 @@ export class GeminiLiveService {
   public isConnected: boolean = false
   public setupComplete: boolean = false
   public lastError: string = ''
+  public hasMicrophoneInput: boolean = false
   private isMicMuted: boolean = false
   private failureNotified: boolean = false
   private intentionalClose: boolean = false
@@ -167,6 +168,7 @@ export class GeminiLiveService {
     this.isConnected = false
     this.setupComplete = false
     this.lastError = ''
+    this.hasMicrophoneInput = false
     this.failureNotified = false
     this.intentionalClose = false
     this.setupReadyPromise = new Promise((resolve, reject) => {
@@ -1340,11 +1342,19 @@ ${JSON.stringify(history)}
           this.setupComplete = true
           this.isConnected = true
           this.emitVoiceStatus('MIC SETUP', 'Gemini Live ready; opening microphone.')
-          await this.startMicrophone()
+          const microphoneReady = await this.startMicrophone()
           this.resolveSetupReady?.()
           this.resolveSetupReady = null
           this.rejectSetupReady = null
-          this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
+          if (microphoneReady) {
+            this.emitVoiceStatus('LISTENING', 'Gemini Live voice connected.')
+          } else {
+            this.emitVoiceStatus(
+              'MIC MISSING',
+              this.lastError ||
+                'No microphone found. Shell can still start and speak; voice input is disabled.'
+            )
+          }
           this.startAppWatcher()
         }
 
@@ -1764,7 +1774,7 @@ ${JSON.stringify(history)}
     if (audioTracks.length > 0) return stream
     stream.getTracks().forEach((track) => track.stop())
     throw new Error(
-      `${source} returned no audio track. Settings > General me real microphone select karo, Windows input permission/default recording device check karo, phir voice dobara start karo.`
+      `${source} returned no audio track. Settings > General me microphone select karo, OS input permission/default recording device check karo, phir voice dobara start karo.`
     )
   }
 
@@ -1777,18 +1787,18 @@ ${JSON.stringify(history)}
     const detail = detailParts.join(': ')
 
     if (name === 'NotAllowedError' || name === 'SecurityError') {
-      return `Microphone permission denied. Windows Settings > Privacy > Microphone me desktop apps access ON karo, phir Shell restart karo. (${detail})`
+      return `Microphone permission denied. OS microphone privacy settings me Shell/desktop app access allow karo. Shell can still start and speak; voice input is disabled. (${detail})`
     }
     if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-      return `No microphone device found by Shell's embedded browser. DroidCam ko Windows default recording device banao, phir Shell restart karo. (${detail})`
+      return `No microphone device found by Shell's embedded browser. Shell can still start and speak; connect/select a microphone in your OS settings when you want voice input. (${detail})`
     }
     if (name === 'NotReadableError' || name === 'TrackStartError') {
-      return `Microphone is visible but busy/unreadable. DroidCam/Zoom/Chrome/Discord close karke DroidCam reconnect karo, phir Shell restart karo. (${detail})`
+      return `Microphone is visible but busy/unreadable. Close other apps using the mic or reconnect the device. Shell can still start and speak; voice input is disabled. (${detail})`
     }
     if (name === 'OverconstrainedError') {
-      return `Microphone rejected the requested audio format. Shell retried with default audio, but Windows still rejected it. (${detail})`
+      return `Microphone rejected the requested audio format. Shell retried with default audio, but the OS still rejected it. Shell can still start and speak; voice input is disabled. (${detail})`
     }
-    return `Microphone access denied or failed to initialize. (${detail})`
+    return `Microphone access denied or failed to initialize. Shell can still start and speak; voice input is disabled. (${detail})`
   }
 
   private microphoneDeviceScore(device: MediaDeviceInfo): number {
@@ -1796,11 +1806,24 @@ ${JSON.stringify(history)}
     let score = 0
     if (!label) return score
     if (label.includes('droidcam')) score += 100
+    if (label.includes('macbook')) score += 45
+    if (label.includes('built-in')) score += 45
+    if (label.includes('built in')) score += 45
+    if (label.includes('microphone array')) score += 45
+    if (label.includes('headset')) score += 40
+    if (label.includes('airpods')) score += 40
+    if (label.includes('bluetooth')) score += 35
+    if (label.includes('usb')) score += 35
+    if (label.includes('webcam')) score += 25
+    if (label.includes('input')) score += 20
+    if (label.includes('analog stereo')) score += 20
     if (label.includes('microphone')) score += 30
     if (label.includes('mic')) score += 15
     if (label.includes('virtual audio')) score += 10
     if (label.includes('communications')) score += 5
     if (label.includes('stereo mix')) score -= 60
+    if (label.includes('speaker')) score -= 60
+    if (label.includes('monitor')) score -= 60
     if (label.includes('midi')) score -= 60
     if (label.includes('output')) score -= 60
     return score
@@ -1874,8 +1897,9 @@ ${JSON.stringify(history)}
     return peak
   }
 
-  async startMicrophone(): Promise<void> {
-    if (!this.audioContext || this.audioContext.state === 'closed') return
+  async startMicrophone(): Promise<boolean> {
+    this.hasMicrophoneInput = false
+    if (!this.audioContext || this.audioContext.state === 'closed') return false
     try {
       const stream = this.requireAudioInputStream(
         await this.choosePreferredMicrophone(await this.openMicrophoneStream()),
@@ -1884,9 +1908,10 @@ ${JSON.stringify(history)}
       const audioContext = this.audioContext
       if (!audioContext || audioContext.state === 'closed') {
         stream.getTracks().forEach((track) => track.stop())
-        return
+        return false
       }
       this.mediaStream = stream
+      this.hasMicrophoneInput = true
       this.outgoingAudioChunks = 0
       this.lastInputLevelStatusAt = 0
 
@@ -1938,7 +1963,7 @@ ${JSON.stringify(history)}
           } else if (this.outgoingAudioChunks === 12 && level <= 0.003) {
             this.emitVoiceStatus(
               'MIC SILENT',
-              'No voice level detected yet. Windows input device/permission check karo.'
+              'No voice level detected yet. OS input device/permission check karo.'
             )
           }
         }
@@ -1946,12 +1971,25 @@ ${JSON.stringify(history)}
 
       source.connect(workletNode)
       workletNode.connect(audioContext.destination)
+      return true
     } catch (err) {
-      console.error('Shell microphone initialization failed', err)
+      console.warn('Shell microphone unavailable; continuing in voice-output-only mode.', err)
       const message = this.microphoneErrorMessage(err)
-      this.notifyVoiceFailure(message, { alertUser: false })
-      this.disconnect()
-      throw new Error(message)
+      this.lastError = message
+      this.hasMicrophoneInput = false
+      this.isMicMuted = true
+      if (this.mediaStream) {
+        this.mediaStream.getTracks().forEach((track) => track.stop())
+        this.mediaStream = null
+      }
+      if (this.workletNode) {
+        this.workletNode.disconnect()
+        this.workletNode = null
+      }
+      this.rawAudioBuffer = []
+      this.rawAudioBufferLength = 0
+      this.emitVoiceStatus('MIC MISSING', message)
+      return false
     }
   }
 
@@ -2002,6 +2040,7 @@ ${JSON.stringify(history)}
 
     this.isConnected = false
     this.setupComplete = false
+    this.hasMicrophoneInput = false
     this.intentionalClose = true
     this.setupReadyPromise = null
     this.resolveSetupReady = null

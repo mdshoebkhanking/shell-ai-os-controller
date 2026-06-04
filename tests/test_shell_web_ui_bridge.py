@@ -276,3 +276,95 @@ def test_code_write_blocked_reply_names_relevant_safety_settings():
     assert "Code creation safety settings se blocked hai" in reply
     assert "SHELL_BLOCK_PROJECT_SCAFFOLD=1" in reply
     assert "SHELL_ALLOW_CODE_WRITE=1" in reply
+
+
+def test_backend_voice_input_unavailable_is_not_reported_as_full_voice_failure():
+    import shell_web_ui.host as host
+
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    bridge.emit_event = lambda channel, payload: emitted.append((channel, payload))
+
+    bridge._on_voice_error("sounddevice not installed")
+    bridge._on_voice_stopped()
+
+    voice_events = [payload for channel, payload in emitted if channel == "voice-status"]
+    assert voice_events[0]["state"] == "mic_missing"
+    assert voice_events[0]["actualRuntime"] is False
+    assert "Shell can still speak" in voice_events[0]["message"]
+    assert voice_events[-1]["state"] == "mic_missing"
+    assert not any(payload["state"] == "error" for payload in voice_events)
+
+
+def test_backend_voice_error_classifier_catches_common_no_mic_failures():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    assert bridge._is_voice_input_unavailable_error("Error querying device -1: no default input device")
+    assert bridge._is_voice_input_unavailable_error("PortAudio could not open microphone")
+    assert bridge._is_voice_input_unavailable_error("SpeechRecognition not installed")
+    assert not bridge._is_voice_input_unavailable_error("LLM provider quota exceeded")
+
+
+def test_update_check_detects_new_windows_setup_asset(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "UPDATES_DIR", tmp_path / "updates")
+    monkeypatch.setattr(host, "UPDATE_STATE_PATH", tmp_path / "updates" / "update_state.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    bridge.emit_event = lambda channel, payload: emitted.append((channel, payload))
+    monkeypatch.setattr(bridge, "_get_app_version", lambda _args=None: "1.0.0")
+    monkeypatch.setattr(bridge, "_update_feed_url", lambda: "https://example.test/releases/latest")
+    monkeypatch.setattr(
+        bridge,
+        "_fetch_update_payload",
+        lambda _url: {
+            "tag_name": "v1.1.0",
+            "body": "New Windows installer build.",
+            "assets": [
+                {"name": "shell-ai-os-controller-1.1.0.zip", "browser_download_url": "https://example.test/app.zip"},
+                {
+                    "name": "shell-ai-os-controller-setup-1.1.0.exe",
+                    "browser_download_url": "https://example.test/ShellAI_Setup_1.1.0.exe",
+                },
+            ],
+        },
+    )
+
+    result = bridge._check_for_updates([])
+
+    assert result["success"] is True
+    assert result["status"] == "available"
+    assert result["version"] == "1.1.0"
+    assert result["downloadUrl"].endswith(".exe")
+    assert host.UPDATE_STATE_PATH.exists()
+    assert [payload["status"] for channel, payload in emitted if channel == "updater-event"] == [
+        "checking",
+        "available",
+    ]
+
+
+def test_update_install_refuses_to_launch_exe_off_windows(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    updates = tmp_path / "updates"
+    updates.mkdir()
+    installer = updates / "ShellAI_Setup_1.1.0.exe"
+    installer.write_bytes(b"MZ")
+    monkeypatch.setattr(host, "UPDATES_DIR", updates)
+    monkeypatch.setattr(host, "UPDATE_STATE_PATH", updates / "update_state.json")
+    host.UPDATE_STATE_PATH.write_text(
+        '{"downloadedPath": "%s"}' % str(installer).replace("\\", "\\\\"),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(host.platform, "system", lambda: "Darwin")
+    bridge = host.ShellBackendBridge()
+
+    result = bridge._install_update([])
+
+    assert result["success"] is False
+    assert "only supported on Windows" in result["message"]

@@ -71,6 +71,15 @@ const IndexRoot = () => {
       const state = String(payload?.state || 'unknown').toUpperCase()
       const message = String(payload?.message || payload?.error || '').trim()
       setBackendVoiceState(message ? `${state}: ${message}` : state)
+      if (state === 'MIC_MISSING' || state === 'MIC MISSING') {
+        showSystemNotice(
+          'Microphone not found',
+          message || 'Shell can still start and speak; voice input is disabled.'
+        )
+        setIsSystemActive(true)
+        setIsMicMuted(true)
+        return
+      }
       if (state === 'ERROR') {
         showSystemNotice('Voice failed', message || 'Backend voice runtime unavailable.')
       }
@@ -107,13 +116,23 @@ const IndexRoot = () => {
       const state = String(payload.state || '').toUpperCase()
       if (!state) return
       setBackendVoiceState(payload.message ? `${state}: ${payload.message}` : state)
+      if (state === 'MIC MISSING') {
+        showSystemNotice(
+          'Microphone not found',
+          payload.message || 'Shell can still start and speak; voice input is disabled.'
+        )
+        setIsSystemActive(true)
+        setIsMicMuted(true)
+        shellService.setMute(true)
+        return
+      }
       if (state === 'ERROR' || state === 'CLOSED') {
         if (state === 'ERROR') showSystemNotice('Gemini Live failed', payload.message || 'Voice connection failed.')
         setIsSystemActive(false)
         setIsMicMuted(true)
         stopVision()
       }
-      if (state === 'LISTENING' || state === 'CONNECTING') {
+      if (state === 'LISTENING' || state === 'CONNECTING' || state === 'MIC READY') {
         clearSystemNotice()
         setIsSystemActive(true)
         setIsMicMuted(false)
@@ -160,11 +179,23 @@ const IndexRoot = () => {
         }
         await shellService.connect()
         await shellService.waitUntilReady()
+        const hasMicrophoneInput = shellService.hasMicrophoneInput
         setIsSystemActive(true)
-        setIsMicMuted(false)
-        setBackendVoiceState('GEMINI LIVE')
-        shellService.setMute(false)
-        clearSystemNotice()
+        setIsMicMuted(!hasMicrophoneInput)
+        setBackendVoiceState(
+          hasMicrophoneInput
+            ? 'GEMINI LIVE'
+            : `MIC MISSING: ${shellService.lastError || 'Shell can still speak; voice input is disabled.'}`
+        )
+        shellService.setMute(!hasMicrophoneInput)
+        if (hasMicrophoneInput) {
+          clearSystemNotice()
+        } else {
+          showSystemNotice(
+            'Microphone not found',
+            shellService.lastError || 'Shell can still start and speak; voice input is disabled.'
+          )
+        }
       } catch (err: any) {
         const message =
           err?.message === 'NO_API_KEY'
@@ -193,6 +224,21 @@ const IndexRoot = () => {
   }
 
   const toggleMic = async () => {
+    if (usesShellBackend && isSystemActive && isMicMuted && backendVoiceState.toUpperCase().includes('MIC_MISSING')) {
+      showSystemNotice(
+        'Microphone not found',
+        'Shell can still start and speak; voice input is disabled.'
+      )
+      return
+    }
+    if (!usesShellBackend && isSystemActive && !shellService.hasMicrophoneInput && isMicMuted) {
+      shellService.setMute(true)
+      showSystemNotice(
+        'Microphone not found',
+        shellService.lastError || 'Shell can still start and speak; voice input is disabled.'
+      )
+      return
+    }
     const s = !isMicMuted
     setIsMicMuted(s)
     if (usesShellBackend && window.shellAPI) {
@@ -208,11 +254,23 @@ const IndexRoot = () => {
       if (!shellService.isConnected) {
         await shellService.connect()
         await shellService.waitUntilReady()
+        const hasMicrophoneInput = shellService.hasMicrophoneInput
         setIsSystemActive(true)
-        setIsMicMuted(false)
-        shellService.setMute(false)
-        setBackendVoiceState('GEMINI LIVE')
-        clearSystemNotice()
+        setIsMicMuted(!hasMicrophoneInput)
+        shellService.setMute(!hasMicrophoneInput)
+        setBackendVoiceState(
+          hasMicrophoneInput
+            ? 'GEMINI LIVE'
+            : `MIC MISSING: ${shellService.lastError || 'Shell can still speak; voice input is disabled.'}`
+        )
+        if (hasMicrophoneInput) {
+          clearSystemNotice()
+        } else {
+          showSystemNotice(
+            'Microphone not found',
+            shellService.lastError || 'Shell can still start and speak; voice input is disabled.'
+          )
+        }
       }
       await shellService.forceSpeak(
         `Speak this naturally in Shell AI voice. Keep it short and Hinglish-friendly: ${text}`

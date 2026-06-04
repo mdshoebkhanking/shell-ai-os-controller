@@ -11,6 +11,8 @@ import subprocess
 import sys
 import time
 import traceback
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +39,9 @@ GALLERY_DIR = Path.home() / "Pictures" / "Shell_Generated"
 GALLERY_META_PATH = PROJECT_ROOT / ".shell_runtime" / "web_ui_gallery.json"
 GALLERY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
+UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
+UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
+DEFAULT_UPDATE_REPO = "mdshoebking/shell-ai-os-controller"
 
 
 def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> str:
@@ -56,6 +61,7 @@ class ShellBackendBridge(QObject):
         super().__init__(parent)
         HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
         self._voice_listener = None
+        self._voice_input_unavailable_state = False
         self._last_voice_amp_event = 0.0
         self._speech_process: subprocess.Popen[Any] | None = None
 
@@ -87,15 +93,15 @@ class ShellBackendBridge(QObject):
             "get-personality": self._get_personality,
             "save-personality": self._save_personality,
             "set-personality": self._save_personality,
-            "get-app-version": lambda _args: "1.0.0",
+            "get-app-version": self._get_app_version,
             "check-vault-status": lambda _args: {"faceCount": 0, "pinConfigured": False},
             "verify-vault-pin": lambda _args: False,
             "setup-vault-pin": lambda _args: {"success": True},
             "setup-vault-face": lambda _args: {"success": True},
             "verify-vault-face": lambda _args: False,
-            "check-for-updates": lambda _args: {"success": True, "status": "idle", "message": "System is up to date."},
-            "download-update": lambda _args: {"success": False, "message": "Desktop updater is not configured."},
-            "install-update": lambda _args: {"success": False, "message": "Desktop updater is not configured."},
+            "check-for-updates": self._check_for_updates,
+            "download-update": self._download_update,
+            "install-update": self._install_update,
             "open-app": self._open_app,
             "close-app": self._close_app,
             "google-search": self._google_search,
@@ -132,6 +138,251 @@ class ShellBackendBridge(QObject):
         if handler is None:
             return {"success": False, "message": f"Unhandled Shell UI channel: {channel}"}
         return handler(args)
+
+    def _get_app_version(self, _args: list[Any] | None = None) -> str:
+        try:
+            return (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip() or "1.0.0"
+        except Exception:
+            return "1.0.0"
+
+    @staticmethod
+    def _version_parts(value: str) -> tuple[int, ...]:
+        cleaned = str(value or "").strip().lstrip("vV")
+        parts: list[int] = []
+        for chunk in re.split(r"[^0-9]+", cleaned):
+            if chunk == "":
+                continue
+            try:
+                parts.append(int(chunk))
+            except Exception:
+                parts.append(0)
+        return tuple(parts or [0])
+
+    @classmethod
+    def _version_newer(cls, remote: str, current: str) -> bool:
+        left = list(cls._version_parts(remote))
+        right = list(cls._version_parts(current))
+        size = max(len(left), len(right))
+        left.extend([0] * (size - len(left)))
+        right.extend([0] * (size - len(right)))
+        return tuple(left) > tuple(right)
+
+    def _read_update_state(self) -> dict[str, Any]:
+        try:
+            data = json.loads(UPDATE_STATE_PATH.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _write_update_state(self, data: dict[str, Any]) -> None:
+        UPDATES_DIR.mkdir(parents=True, exist_ok=True)
+        UPDATE_STATE_PATH.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    @staticmethod
+    def _asset_download_url(asset: dict[str, Any]) -> str:
+        return str(
+            asset.get("download_url")
+            or asset.get("browser_download_url")
+            or asset.get("url")
+            or ""
+        ).strip()
+
+    @classmethod
+    def _best_windows_installer_asset(cls, assets: list[Any]) -> dict[str, Any]:
+        candidates = [item for item in assets if isinstance(item, dict)]
+
+        def score(asset: dict[str, Any]) -> int:
+            name = str(asset.get("name") or asset.get("filename") or cls._asset_download_url(asset)).lower()
+            value = 0
+            if name.endswith(".exe"):
+                value += 100
+            if "setup" in name or "installer" in name:
+                value += 50
+            if "windows" in name or "win" in name:
+                value += 30
+            if "shell" in name:
+                value += 10
+            if name.endswith(".zip"):
+                value -= 50
+            return value
+
+        scored = sorted(candidates, key=score, reverse=True)
+        return scored[0] if scored and score(scored[0]) > 0 else {}
+
+    @classmethod
+    def _normalize_update_payload(cls, payload: dict[str, Any], source_url: str) -> dict[str, Any]:
+        if "tag_name" in payload or "assets" in payload:
+            asset = cls._best_windows_installer_asset(list(payload.get("assets") or []))
+            version = str(payload.get("tag_name") or payload.get("name") or "").lstrip("vV")
+            return {
+                "version": version,
+                "releaseNotes": str(payload.get("body") or payload.get("releaseNotes") or "").strip(),
+                "downloadUrl": cls._asset_download_url(asset),
+                "assetName": str(asset.get("name") or "").strip(),
+                "sha256": str(asset.get("sha256") or payload.get("sha256") or "").strip(),
+                "sourceUrl": source_url,
+            }
+        return {
+            "version": str(payload.get("version") or payload.get("tag") or "").lstrip("vV"),
+            "releaseNotes": str(payload.get("releaseNotes") or payload.get("notes") or "").strip(),
+            "downloadUrl": str(payload.get("installer_url") or payload.get("downloadUrl") or payload.get("download_url") or "").strip(),
+            "assetName": str(payload.get("assetName") or payload.get("filename") or "").strip(),
+            "sha256": str(payload.get("sha256") or "").strip(),
+            "sourceUrl": source_url,
+        }
+
+    def _update_feed_url(self) -> str:
+        configured = os.environ.get("SHELL_UPDATE_MANIFEST_URL", "").strip()
+        if configured:
+            return configured
+        repo = os.environ.get("SHELL_UPDATE_REPO", DEFAULT_UPDATE_REPO).strip()
+        return f"https://api.github.com/repos/{repo}/releases/latest" if repo else ""
+
+    def _fetch_update_payload(self, url: str) -> dict[str, Any]:
+        if not url:
+            raise RuntimeError("Update feed is not configured.")
+        request = urllib.request.Request(
+            url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "ShellAI-Updater/1.0",
+            },
+        )
+        with urllib.request.urlopen(request, timeout=12) as response:
+            raw = response.read(2 * 1024 * 1024)
+        data = json.loads(raw.decode("utf-8", errors="replace"))
+        if not isinstance(data, dict):
+            raise RuntimeError("Update feed returned invalid JSON.")
+        return data
+
+    def _check_for_updates(self, _args: list[Any]) -> dict[str, Any]:
+        self.emit_event("updater-event", {"status": "checking", "data": {}})
+        current = self._get_app_version()
+        url = self._update_feed_url()
+        try:
+            payload = self._fetch_update_payload(url)
+            update = self._normalize_update_payload(payload, url)
+            latest = str(update.get("version") or "").strip()
+            if latest and self._version_newer(latest, current):
+                update.update(
+                    {
+                        "currentVersion": current,
+                        "status": "available",
+                        "canDownload": bool(update.get("downloadUrl")),
+                    }
+                )
+                self._write_update_state(update)
+                self.emit_event("updater-event", {"status": "available", "data": update})
+                return {"success": True, **update}
+            state = {
+                "status": "idle",
+                "currentVersion": current,
+                "version": latest or current,
+                "message": "System is up to date.",
+                "sourceUrl": url,
+            }
+            self._write_update_state(state)
+            self.emit_event("updater-event", {"status": "not-available", "data": state})
+            return {"success": True, **state}
+        except Exception as exc:
+            message = f"Update check failed: {exc}"
+            self.emit_event("updater-event", {"status": "error", "error": message})
+            return {"success": False, "status": "error", "message": message, "currentVersion": current}
+
+    @staticmethod
+    def _safe_update_filename(url: str, version: str) -> str:
+        name = Path(urllib.parse.urlparse(url).path).name
+        if not name.lower().endswith(".exe"):
+            name = f"ShellAI_Setup_{version or 'latest'}.exe"
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._") or "ShellAI_Setup_latest.exe"
+        return name
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        import hashlib
+
+        digest = hashlib.sha256()
+        with path.open("rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
+    def _download_update(self, _args: list[Any]) -> dict[str, Any]:
+        state = self._read_update_state()
+        url = str(state.get("downloadUrl") or "").strip()
+        version = str(state.get("version") or "latest").strip()
+        if not url:
+            message = "No update installer URL is available. Check for updates first."
+            self.emit_event("updater-event", {"status": "error", "error": message})
+            return {"success": False, "status": "error", "message": message}
+        if not urllib.parse.urlparse(url).path.lower().endswith(".exe"):
+            message = "Latest release does not include a Windows .exe installer asset yet."
+            self.emit_event("updater-event", {"status": "error", "error": message})
+            return {"success": False, "status": "error", "message": message}
+
+        UPDATES_DIR.mkdir(parents=True, exist_ok=True)
+        target = UPDATES_DIR / self._safe_update_filename(url, version)
+        temp_target = target.with_suffix(target.suffix + ".download")
+        self.emit_event("updater-event", {"status": "downloading", "data": {"percent": 0}})
+        try:
+            request = urllib.request.Request(url, headers={"User-Agent": "ShellAI-Updater/1.0"})
+            with urllib.request.urlopen(request, timeout=60) as response, temp_target.open("wb") as fh:
+                total = int(response.headers.get("Content-Length") or "0")
+                received = 0
+                while True:
+                    chunk = response.read(1024 * 512)
+                    if not chunk:
+                        break
+                    fh.write(chunk)
+                    received += len(chunk)
+                    if total > 0:
+                        percent = max(1, min(99, round((received / total) * 100)))
+                        self.emit_event("updater-event", {"status": "downloading", "data": {"percent": percent}})
+            temp_target.replace(target)
+            expected = str(state.get("sha256") or "").strip().lower()
+            if expected and self._sha256(target).lower() != expected:
+                target.unlink(missing_ok=True)
+                raise RuntimeError("Downloaded installer checksum did not match the update manifest.")
+            state.update({"status": "downloaded", "downloadedPath": str(target), "downloadedAt": time.time()})
+            self._write_update_state(state)
+            self.emit_event("updater-event", {"status": "downloaded", "data": {**state, "percent": 100}})
+            return {"success": True, **state}
+        except Exception as exc:
+            try:
+                temp_target.unlink(missing_ok=True)
+            except Exception:
+                pass
+            message = f"Update download failed: {exc}"
+            self.emit_event("updater-event", {"status": "error", "error": message})
+            return {"success": False, "status": "error", "message": message}
+
+    @staticmethod
+    def _path_inside(child: Path, parent: Path) -> bool:
+        try:
+            child.resolve().relative_to(parent.resolve())
+            return True
+        except Exception:
+            return False
+
+    def _install_update(self, _args: list[Any]) -> dict[str, Any]:
+        state = self._read_update_state()
+        path = Path(str(state.get("downloadedPath") or ""))
+        if not path.exists() or not path.suffix.lower() == ".exe":
+            return {"success": False, "status": "error", "message": "Downloaded update installer was not found."}
+        if not self._path_inside(path, UPDATES_DIR):
+            return {"success": False, "status": "error", "message": "Refusing to launch installer outside Shell update cache."}
+        if platform.system().lower() != "windows":
+            return {
+                "success": False,
+                "status": "error",
+                "message": "Update installer is ready, but launching .exe updates is only supported on Windows.",
+                "downloadedPath": str(path),
+            }
+        try:
+            subprocess.Popen([str(path)], cwd=str(PROJECT_ROOT), close_fds=True)
+            return {"success": True, "status": "installing", "message": "Update installer launched.", "downloadedPath": str(path)}
+        except Exception as exc:
+            return {"success": False, "status": "error", "message": f"Could not launch update installer: {exc}"}
 
     def _system_stats(self, _args: list[Any]) -> dict[str, Any]:
         try:
@@ -1143,6 +1394,7 @@ class ShellBackendBridge(QObject):
             from shell_neural_voice import VOICE_COORDINATOR
             from shell_voice_listener_runtime import VoiceListenerThread
 
+            self._voice_input_unavailable_state = False
             VOICE_COORDINATOR.start("shell-web-ui")
             listener = VoiceListenerThread(parent=self)
             listener.text_recognized.connect(self._on_voice_text)
@@ -1161,6 +1413,7 @@ class ShellBackendBridge(QObject):
             return {"success": False, "message": str(exc), "actualRuntime": False}
 
     def _stop_voice(self, _args: list[Any]) -> dict[str, Any]:
+        self._voice_input_unavailable_state = False
         listener = getattr(self, "_voice_listener", None)
         if listener is not None:
             try:
@@ -1199,13 +1452,52 @@ class ShellBackendBridge(QObject):
         self.emit_event("voice-status", {"state": "listening", "actualRuntime": True})
 
     def _on_voice_stopped(self) -> None:
+        if self._voice_input_unavailable_state:
+            self.emit_event(
+                "voice-status",
+                {
+                    "state": "mic_missing",
+                    "message": "Microphone unavailable. Shell can still speak; voice input is disabled.",
+                    "actualRuntime": False,
+                },
+            )
+            return
         self.emit_event("voice-status", {"state": "stopped", "actualRuntime": True})
 
     def _on_voice_status(self, status: str) -> None:
         self.emit_event("voice-status", {"state": str(status or "listening").lower(), "actualRuntime": True})
 
     def _on_voice_error(self, error: str) -> None:
-        self.emit_event("voice-status", {"state": "error", "error": str(error or "Voice error"), "actualRuntime": True})
+        message = str(error or "Voice error")
+        if self._is_voice_input_unavailable_error(message):
+            self._voice_input_unavailable_state = True
+            self.emit_event(
+                "voice-status",
+                {
+                    "state": "mic_missing",
+                    "error": message,
+                    "message": f"{message}. Shell can still speak; voice input is disabled.",
+                    "actualRuntime": False,
+                },
+            )
+            return
+        self.emit_event("voice-status", {"state": "error", "error": message, "actualRuntime": True})
+
+    @staticmethod
+    def _is_voice_input_unavailable_error(message: str) -> bool:
+        lower = str(message or "").lower()
+        input_markers = (
+            "sounddevice",
+            "microphone",
+            "mic",
+            "input device",
+            "default input",
+            "no input",
+            "portaudio",
+            "speechrecognition",
+            "speech recognition",
+        )
+        return any(marker in lower for marker in input_markers)
 
     def _on_voice_amplitude(self, value: float) -> None:
         now = time.perf_counter()

@@ -163,8 +163,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
         if (status === 'checking') setUpdateStatus('checking')
         if (status === 'available') {
           setUpdateStatus('available')
-          setUpdateVersion(data.version)
-          setUpdateNotes(data.releaseNotes || 'Bug fixes and performance improvements.')
+          setUpdateVersion(data?.version || '')
+          setUpdateNotes(data?.releaseNotes || 'Bug fixes and performance improvements.')
         }
         if (status === 'not-available') {
           setUpdateStatus('idle')
@@ -172,7 +172,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
         }
         if (status === 'downloading') {
           setUpdateStatus('downloading')
-          setDownloadProgress(Math.round(data.percent))
+          setDownloadProgress(Math.round(Number(data?.percent || 0)))
         }
         if (status === 'downloaded') setUpdateStatus('ready')
         if (status === 'error') {
@@ -221,9 +221,70 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     }
   }, [activeTab, updateSettingsTabIndicator])
 
-  const checkForUpdates = () => window.electron.ipcRenderer.invoke('check-for-updates')
-  const downloadUpdate = () => window.electron.ipcRenderer.invoke('download-update')
-  const installUpdate = () => window.electron.ipcRenderer.invoke('install-update')
+  const applyUpdateResult = (result: any) => {
+    if (!result) return
+    if (result.success === false) {
+      setUpdateStatus('error')
+      setUpdateNotes(result.message || result.error || 'Update check failed.')
+      return
+    }
+    if (result.status === 'available') {
+      setUpdateStatus('available')
+      setUpdateVersion(result.version || '')
+      setUpdateNotes(
+        result.releaseNotes ||
+          (result.canDownload === false
+            ? 'Update found, but no Windows .exe installer asset is attached yet.'
+            : 'New Shell AI installer is available.')
+      )
+      return
+    }
+    if (result.status === 'downloaded') {
+      setUpdateStatus('ready')
+      setDownloadProgress(100)
+      setUpdateNotes(`Update downloaded: ${result.downloadedPath || 'ready to install'}`)
+      return
+    }
+    if (result.status === 'installing') {
+      setUpdateStatus('ready')
+      setUpdateNotes(result.message || 'Update installer launched. Follow the setup window.')
+      return
+    }
+    setUpdateStatus('idle')
+    setUpdateNotes(result.message || 'System is up to date.')
+  }
+
+  const checkForUpdates = async () => {
+    setUpdateStatus('checking')
+    setUpdateNotes('Checking GitHub release feed for a newer Windows installer...')
+    try {
+      applyUpdateResult(await window.electron.ipcRenderer.invoke('check-for-updates'))
+    } catch (e: any) {
+      setUpdateStatus('error')
+      setUpdateNotes(`Update check failed: ${e?.message || e}`)
+    }
+  }
+
+  const downloadUpdate = async () => {
+    setUpdateStatus('downloading')
+    setDownloadProgress(0)
+    setUpdateNotes('Downloading Windows installer...')
+    try {
+      applyUpdateResult(await window.electron.ipcRenderer.invoke('download-update'))
+    } catch (e: any) {
+      setUpdateStatus('error')
+      setUpdateNotes(`Update download failed: ${e?.message || e}`)
+    }
+  }
+
+  const installUpdate = async () => {
+    try {
+      applyUpdateResult(await window.electron.ipcRenderer.invoke('install-update'))
+    } catch (e: any) {
+      setUpdateStatus('error')
+      setUpdateNotes(`Update launch failed: ${e?.message || e}`)
+    }
+  }
 
   const handleVoiceChange = (v: 'MALE' | 'FEMALE') => {
     if (isSystemActive) return
@@ -258,7 +319,11 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       }
 
       setMicDevices(inputs)
-      setMicStatus(inputs.length ? `${inputs.length} microphones available.` : 'No microphone found.')
+      setMicStatus(
+        inputs.length
+          ? `${inputs.length} microphones available. Shell auto-selects the best input at voice start.`
+          : 'No microphone found. Shell can still start and speak; voice input is disabled.'
+      )
     } catch (err: any) {
       setMicStatus(`Microphone list failed: ${err?.message || err}`)
     }
@@ -517,7 +582,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                           onClick={downloadUpdate}
                           className="mt-2 w-full py-3 rounded-lg bg-cyan-500/20 hover:bg-cyan-500 text-cyan-400 hover:text-black font-bold tracking-widest text-[11px] flex items-center justify-center gap-2 transition-all border border-cyan-500/50 cursor-pointer"
                         >
-                          <RiDownloadCloud2Line size={16} /> INITIALIZE DOWNLOAD
+                          <RiDownloadCloud2Line size={16} /> DOWNLOAD UPDATE
                         </button>
                       </>
                     ) : updateStatus === 'downloading' ? (
@@ -541,7 +606,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                           onClick={installUpdate}
                           className="mt-2 w-full py-3 rounded-lg bg-emerald-500 text-black font-bold tracking-widest text-[11px] flex items-center justify-center gap-2 transition-all shadow-[0_0_20px_rgba(16,185,129,0.4)] cursor-pointer"
                         >
-                          <RiRocketLine size={16} /> EXECUTE RESTART
+                          <RiRocketLine size={16} /> UPDATE NOW
                         </button>
                       </>
                     )}
@@ -699,7 +764,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                       disabled={isSystemActive}
                       className="w-full rounded-md border border-white/10 bg-black px-3 py-2 text-[11px] font-mono text-zinc-200 outline-none focus:border-emerald-500/50 disabled:cursor-not-allowed"
                     >
-                      <option value="">Default / Auto DroidCam</option>
+                      <option value="">Auto select best microphone</option>
                       {micDevices.map((device, index) => (
                         <option key={device.deviceId || index} value={device.deviceId}>
                           {device.label || `Microphone ${index + 1}`}
