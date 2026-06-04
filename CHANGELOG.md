@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.3 - Release test stability fix
+
+- Updated release tests so patch-level 1.0.x installer releases are accepted
+  instead of hardcoding only 1.0.0.
+- Kept the ecosystem master source audit independent from generated Web UI
+  runtime artifacts during pytest; dedicated release gates still run full
+  runtime/package validation.
+
 ## 1.0.2 - Release CI Qt dependency fix
 
 - Added Linux Qt runtime packages to the release workflow so PyQt tests can

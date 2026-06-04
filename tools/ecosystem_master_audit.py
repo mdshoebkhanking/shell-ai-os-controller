@@ -56,7 +56,10 @@ def prior_reports() -> dict[str, dict[str, Any]]:
         "agent": load_tool("agent_ecosystem_audit").build_report(),
         "launch": load_tool("launch_readiness_audit").build_report(),
         "ui": load_tool("ui_ux_audit").build_report(),
-        "release": load_tool("production_release_check").build_report(strict=True),
+        # Runtime health depends on generated Web UI/build artifacts that are
+        # produced later in release jobs. The master audit should score the
+        # source tree gates here; dedicated release steps run full health checks.
+        "release": load_tool("production_release_check").build_report(include_health=False, strict=True),
         "repo": load_tool("repo_audit").build_report(),
     }
 

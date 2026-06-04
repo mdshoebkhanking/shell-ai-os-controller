@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,8 +9,8 @@ def _read(rel: str) -> str:
     return (ROOT / rel).read_text(encoding="utf-8", errors="replace")
 
 
-def test_visible_version_is_1_0_0():
-    assert _read("VERSION").strip() == "1.0.0"
+def test_visible_version_is_stable_release_semver():
+    assert re.fullmatch(r"1\.0\.\d+", _read("VERSION").strip())
 
     visible_files = [
         "shell_ui/shell_cinematic_full.py",
