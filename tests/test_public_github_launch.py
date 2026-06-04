@@ -96,6 +96,7 @@ def test_public_launch_docs_and_ci_gate_are_linked():
     assert '"codex/**"' in release
     assert "windows-installer-branch-artifact" in release
     assert "shell-ai-os-controller-windows-setup" in release
+    assert "\n    needs: package\n" not in release
 
 
 def test_public_release_package_includes_web_ui_source_and_windows_launchers():

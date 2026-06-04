@@ -41,7 +41,7 @@ GALLERY_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
 UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
 UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
-DEFAULT_UPDATE_REPO = "mdshoebking/shell-ai-os-controller"
+DEFAULT_UPDATE_REPO = "mdshoebkhanking/shell-ai-os-controller"
 
 
 def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> str:

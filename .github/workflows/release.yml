@@ -119,7 +119,6 @@ jobs:
   windows-installer:
     name: Build Windows setup EXE
     runs-on: windows-latest
-    needs: package
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
 
     steps:

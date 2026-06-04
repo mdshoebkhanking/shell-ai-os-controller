@@ -348,6 +348,17 @@ def test_update_check_detects_new_windows_setup_asset(monkeypatch, tmp_path):
     ]
 
 
+def test_update_feed_defaults_to_actual_release_repo(monkeypatch):
+    import shell_web_ui.host as host
+
+    monkeypatch.delenv("SHELL_UPDATE_REPO", raising=False)
+    monkeypatch.delenv("SHELL_UPDATE_MANIFEST_URL", raising=False)
+
+    assert host.ShellBackendBridge()._update_feed_url() == (
+        "https://api.github.com/repos/mdshoebkhanking/shell-ai-os-controller/releases/latest"
+    )
+
+
 def test_update_install_refuses_to_launch_exe_off_windows(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
