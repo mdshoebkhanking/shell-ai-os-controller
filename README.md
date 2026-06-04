@@ -387,14 +387,14 @@ For normal users:
 ```text
 1. Download Shell AI Windows setup EXE from the latest release.
 2. Double-click shell-ai-os-controller-setup-[version].exe.
-3. Keep "Install or repair Shell AI dependencies now" selected on first install.
-4. Launch Shell AI from the Start Menu or desktop shortcut.
+3. Launch Shell AI from the Start Menu or desktop shortcut.
 ```
 
 The setup EXE installs Shell into your user profile, creates Start Menu
 shortcuts, can optionally add a desktop shortcut, and can optionally start
-Shell when Windows starts. During first install it runs the same safe bootstrap
-as `ONE_CLICK_INSTALL.bat`.
+Shell when Windows starts. The normal Windows app shortcut launches the bundled
+`ShellAI.exe`; users do not need Python, Node.js, npm, or a virtual environment
+installed just to run the app.
 
 Source zip fallback:
 
@@ -431,14 +431,15 @@ The generated installer is written to `dist\shell-ai-os-controller-setup-[versio
 The installer is a proper NSIS/Nullsoft desktop app package: it builds the React renderer,
 bundles `ShellAI.exe` with PyInstaller under `ShellAIApp\`, and points Start
 Menu/Desktop/startup shortcuts at that app executable. The batch launchers stay
-in the install folder only as repair/fallback tools.
+in the install folder only as explicit source-mode repair/fallback tools.
 The Settings > System tab can check the release feed and show `UPDATE NOW`
 when a newer setup EXE is attached to the latest GitHub release.
 
 The React Shell Web UI build requires Node.js/npm 20.19+ or 22.12+. On Windows,
-the installer and repair flow refresh PATH after winget, resolve `npm.cmd`
-directly, upgrade old Node LTS installs, and only then run the Web UI
-install/build steps.
+the source bootstrap and repair flow refresh PATH after winget, resolve
+`npm.cmd` directly, upgrade old Node LTS installs, and only then run the Web UI
+install/build steps. The setup EXE already contains the built runtime for
+normal users.
 
 ### macOS
 

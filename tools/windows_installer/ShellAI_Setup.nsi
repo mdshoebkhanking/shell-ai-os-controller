@@ -96,10 +96,6 @@ Section /o "Start Shell AI when Windows starts" SecStartup
   CreateShortCut "$SMSTARTUP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppExeName}" 0
 SectionEnd
 
-Section /o "Install or repair Shell AI dependencies now" SecBootstrap
-  ExecWait "$\"$INSTDIR\ONE_CLICK_INSTALL.bat$\""
-SectionEnd
-
 Section "Uninstall"
   Delete "$DESKTOP\Shell AI OS Controller.lnk"
   Delete "$SMSTARTUP\Shell AI OS Controller.lnk"

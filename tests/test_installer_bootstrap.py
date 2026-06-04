@@ -162,16 +162,23 @@ def test_windows_launchers_use_modern_diagnostic_path():
 
 def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     nsi = open("tools/windows_installer/ShellAI_Setup.nsi", encoding="utf-8").read()
+    iss = open("tools/windows_installer/ShellAI_Setup.iss", encoding="utf-8").read()
     builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+    desktop_entry = open("tools/windows_app/shellai_desktop_entry.py", encoding="utf-8").read()
 
     assert 'OutFile "${OutputDir}\\shell-ai-os-controller-setup-${AppVersion}.exe"' in nsi
     assert 'InstallDir "$LOCALAPPDATA\\Programs\\ShellAI"' in nsi
     assert '!define AppExeName "ShellAIApp\\ShellAI.exe"' in nsi
-    assert "ONE_CLICK_INSTALL.bat" in nsi
+    assert "ONE_CLICK_INSTALL.bat" not in nsi
+    assert "ONE_CLICK_INSTALL.bat" not in iss
     assert "Start_ShellAI.bat" not in nsi
     assert "ShellAIApp\\ShellAI.exe" in builder
     assert "build_bundled_desktop_app" in builder
     assert "PyInstaller" in builder
+    assert "--windowed" in builder
+    assert "shell_hub" in builder
+    assert "aiohttp_cors" in builder
+    assert "engineio.async_drivers.aiohttp" in builder
     assert "copy_web_ui_dist_to_stage" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert "RequestExecutionLevel user" in nsi
@@ -183,6 +190,23 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "validate_release_file_set(files)" in builder
     assert "Windows .exe installer compilation requires Windows with" in builder
     assert "NSIS compiler not found" in builder
+    assert "--shell-ai-hub" in desktop_entry
+    assert "SHELL_HUB_URL" in desktop_entry
+    assert "CREATE_NO_WINDOW" in desktop_entry
+    assert "installer/bootstrap.py launch" not in desktop_entry
+
+
+def test_shell_brand_logo_is_used_across_windows_app_surfaces():
+    launch = open("launch.py", encoding="utf-8").read()
+    host = open("shell_web_ui/host.py", encoding="utf-8").read()
+    index = open("shell_web_ui/index.html", encoding="utf-8").read()
+    builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+
+    for content in (launch, host, index, builder):
+        assert "shell-logo.png" in content
+    assert "setWindowIcon" in launch
+    assert "setWindowIcon" in host
+    assert 'rel="icon"' in index
 
 
 def test_mac_launchers_use_bootstrap_directly():

@@ -2,11 +2,11 @@
 
 Recommended flow:
 
-1. Windows: double-click `shell-ai-os-controller-setup-[version].exe` from the release. Source zip fallback: double-click `ONE_CLICK_INSTALL.bat`.
+1. Windows normal users: double-click `shell-ai-os-controller-setup-[version].exe` from the release, then launch Shell AI from Start Menu/Desktop. This path does not require Python or Node.js to be installed separately.
 2. macOS: double-click `ONE_CLICK_INSTALL.command`.
-3. Wait until setup finishes. It creates `.shellai_venv`, installs backend dependencies, UI dependencies from `shell_ui/requirements_ui.txt`, browser runtime, ffmpeg/OCR where possible, and writes `.env`.
-4. Start Shell:
-   - Windows: double-click `Start_ShellAI.bat`
+3. Source zip fallback: run the one-click bootstrap. It creates `.shellai_venv`, installs backend dependencies, UI dependencies from `shell_ui/requirements_ui.txt`, browser runtime, ffmpeg/OCR where possible, and writes `.env`.
+4. Start source-mode Shell:
+   - Windows source fallback: double-click `Start_ShellAI.bat`
    - macOS: double-click `start_shellai.command`
 5. If something breaks, run:
    - Windows: `Repair_ShellAI.bat`

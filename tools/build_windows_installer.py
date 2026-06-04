@@ -34,6 +34,36 @@ APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
 ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
+PYINSTALLER_HIDDEN_IMPORTS = [
+    "aiohttp",
+    "aiohttp.web",
+    "aiohttp_cors",
+    "engineio.async_drivers.aiohttp",
+    "psutil",
+    "requests",
+    "shell_hub",
+    "shell_tool_gateway",
+    "shell_ui.splash_screen",
+    "shell_web_ui.host",
+    "socketio",
+    "PyQt6.QtGui",
+    "PyQt6.QtWebChannel",
+    "PyQt6.QtWebEngineCore",
+    "PyQt6.QtWebEngineWidgets",
+]
+PYINSTALLER_COPY_METADATA = [
+    "aiohttp",
+    "aiohttp-cors",
+    "google-genai",
+    "livekit",
+    "psutil",
+    "PyQt6",
+    "PyQt6-WebEngine",
+    "python-dotenv",
+    "python-engineio",
+    "python-socketio",
+    "requests",
+]
 
 
 def _safe_clear_staging() -> None:
@@ -166,19 +196,13 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
         str(spec_root),
         "--paths",
         str(ROOT),
-        "--hidden-import",
-        "PyQt6.QtWebChannel",
-        "--hidden-import",
-        "PyQt6.QtWebEngineCore",
-        "--hidden-import",
-        "PyQt6.QtWebEngineWidgets",
-        "--hidden-import",
-        "shell_web_ui.host",
-        "--hidden-import",
-        "shell_ui.splash_screen",
         "--collect-all",
         "PyQt6",
     ]
+    for hidden_import in PYINSTALLER_HIDDEN_IMPORTS:
+        cmd.extend(["--hidden-import", hidden_import])
+    for package in PYINSTALLER_COPY_METADATA:
+        cmd.extend(["--copy-metadata", package])
     if app_icon and app_icon.exists():
         cmd.extend(["--icon", str(app_icon)])
     cmd.append(str(WINDOWS_APP_ENTRY))

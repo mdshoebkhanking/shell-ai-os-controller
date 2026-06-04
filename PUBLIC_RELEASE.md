@@ -7,7 +7,7 @@ anything is marked publishable.
 
 ## Release Status
 
-Current version: `1.0.0`
+Current version: `1.0.7`
 
 Project creator: `mdshoebking`
 
@@ -54,9 +54,12 @@ Windows:
 
 1. Download `shell-ai-os-controller-setup-[version].exe` from the release.
 2. Run the setup EXE.
-3. Keep the dependency bootstrap task selected on first install.
-4. Launch Shell AI from Start Menu/Desktop.
-5. If anything breaks, run `Repair_ShellAI.bat` from the install folder.
+3. Launch Shell AI from Start Menu/Desktop.
+4. If anything breaks, run `Repair_ShellAI.bat` from the install folder.
+
+The Windows setup EXE is the normal-user path. It installs a PyInstaller-built
+`ShellAI.exe` bundle and does not require Python, Node.js, npm, or dependency
+downloads when the user opens the app.
 
 Source zip fallback:
 
@@ -133,7 +136,7 @@ Build_Public_Release.bat
 The generated package is written to:
 
 ```text
-dist/shell-ai-os-controller-1.0.0.zip
+dist/shell-ai-os-controller-[version].zip
 ```
 
 ## Build The Windows Setup EXE
@@ -147,7 +150,7 @@ Build_Windows_EXE.bat
 The generated installer is written to:
 
 ```text
-dist/shell-ai-os-controller-setup-1.0.0.exe
+dist/shell-ai-os-controller-setup-[version].exe
 ```
 
 The EXE builder stages the same public release file set, excludes local
@@ -155,6 +158,8 @@ secrets/runtime files, builds the React renderer, bundles a desktop
 `ShellAI.exe` with PyInstaller under `ShellAIApp\`, compiles
 `tools/windows_installer/ShellAI_Setup.nsi` with NSIS / Nullsoft, and creates
 Start Menu/Desktop/startup shortcuts that launch the bundled app executable.
+The source bootstrap and repair batch files remain packaged as explicit
+fallback tools, but the setup wizard does not run them during normal install.
 GitHub Actions also builds this setup EXE on `windows-latest` for release
 artifacts.
 

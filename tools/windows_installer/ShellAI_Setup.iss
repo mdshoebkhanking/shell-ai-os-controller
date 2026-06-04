@@ -48,7 +48,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
 Name: "startup"; Description: "Start Shell AI when Windows starts"; GroupDescription: "Startup:"; Flags: unchecked
-Name: "bootstrap"; Description: "Install or repair Shell AI dependencies now"; GroupDescription: "First run setup:"; Flags: unchecked
 
 [Files]
 Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -61,7 +60,6 @@ Name: "{autodesktop}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; W
 Name: "{userstartup}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: startup
 
 [Run]
-Filename: "{app}\ONE_CLICK_INSTALL.bat"; Description: "Install or repair Shell AI dependencies"; WorkingDir: "{app}"; Flags: postinstall shellexec waituntilterminated skipifsilent; Tasks: bootstrap
 Filename: "{app}\{#AppExeName}"; Description: "Launch Shell AI"; WorkingDir: "{app}"; Flags: postinstall shellexec nowait skipifsilent unchecked
 
 [UninstallDelete]

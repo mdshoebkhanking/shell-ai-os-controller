@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.7 - Standalone Windows runtime installer
+
+- Changed the Windows setup EXE contract so normal installs launch the bundled
+  `ShellAI.exe` directly and do not run dependency bootstrap batch files during
+  setup or app launch.
+- Updated the bundled Windows desktop entry so `ShellAI.exe` starts the Shell
+  Hub as a hidden frozen child process, sets the local hub URLs, then opens the
+  PyQt Web UI without requiring external Python.
+- Expanded PyInstaller hidden imports and package metadata for the bundled
+  desktop runtime, including the Shell Hub, Socket.IO/aiohttp runtime, and Qt
+  WebEngine bridge packages.
+- Added Shell logo coverage for the Qt app/window icon and Web UI favicon.
+
 ## 1.0.6 - NSIS Windows app installer
 
 - Switched the primary Windows setup builder to an NSIS / Nullsoft installer

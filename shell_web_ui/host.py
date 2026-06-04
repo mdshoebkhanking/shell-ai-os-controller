@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
 
 try:
@@ -42,6 +43,18 @@ UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
 UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
 UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
 DEFAULT_UPDATE_REPO = "mdshoebkhanking/shell-ai-os-controller"
+
+
+def _brand_icon_path() -> Path | None:
+    for candidate in (
+        WEB_UI_ROOT / "dist" / "shell-logo.png",
+        WEB_UI_ROOT / "src" / "public" / "shell-logo.png",
+        PROJECT_ROOT / "shell_ui" / "shell_logo.png",
+        PROJECT_ROOT / "assets" / "brand" / "shell-official-logo.png",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> str:
@@ -1753,6 +1766,9 @@ class ShellWebUI(QMainWindow):
 
         super().__init__()
         self.setWindowTitle("Shell AI")
+        icon_path = _brand_icon_path()
+        if icon_path is not None:
+            self.setWindowIcon(QIcon(str(icon_path)))
         self.resize(1280, 760)
 
         self.bridge = ShellBackendBridge(self)
@@ -1822,10 +1838,14 @@ class ShellWebUI(QMainWindow):
         if WEB_DIST_INDEX.exists():
             self.view.load(QUrl.fromLocalFile(str(WEB_DIST_INDEX)))
             return
+        icon_path = _brand_icon_path()
+        icon_src = icon_path.as_uri() if icon_path is not None else ""
         fallback = (
             "<html><body style='margin:0;background:#050505;color:#10b981;"
             "font-family:monospace;display:grid;place-items:center;height:100vh'>"
-            "<div><h2>Shell AI Web UI build missing</h2>"
+            "<div style='text-align:center'>"
+            f"<img src='{icon_src}' alt='Shell AI' style='width:72px;height:72px;object-fit:contain;margin-bottom:18px'/>"
+            "<h2>Shell AI Web UI build missing</h2>"
             "<p>Run <code>npm install</code> and <code>npm run build</code> in shell_web_ui.</p></div>"
             "</body></html>"
         )

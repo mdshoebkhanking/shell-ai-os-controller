@@ -9,7 +9,8 @@ Use the one-click installer for your OS:
 
 After install:
 
-- Windows: double-click `Start_ShellAI.bat`
+- Windows normal-user setup: launch Shell AI from Start Menu/Desktop; the shortcut runs bundled `ShellAIApp\ShellAI.exe`.
+- Windows source fallback: double-click `Start_ShellAI.bat`
 - macOS: double-click `start_shellai.command`
 - Linux: run `./start_shellai.sh`
 
@@ -30,7 +31,7 @@ python3 installer/bootstrap.py launch --repair-if-needed
 
 Health output is saved to `.shell_runtime/install_health.json`.
 
-Installer behavior:
+Source bootstrap behavior:
 
 - Creates and uses a managed `.shellai_venv` virtual environment.
 - Installs `requirements.txt`.
@@ -64,7 +65,8 @@ Windows setup EXE build:
 - The builder creates the React renderer build and bundles `ShellAI.exe` with PyInstaller under `ShellAIApp\`.
 - NSIS / Nullsoft compiles `tools/windows_installer/ShellAI_Setup.nsi`, matching the installer family used by IRIS-style Electron releases. The Inno script remains as a fallback.
 - The setup EXE is written to `dist/shell-ai-os-controller-setup-[version].exe`.
-- The installer creates Start Menu shortcuts, optional desktop shortcut, optional Windows-startup shortcut, and launches the bundled app executable. Dependency bootstrap remains available as an optional repair/fallback task.
+- The installer creates Start Menu shortcuts, optional desktop shortcut, optional Windows-startup shortcut, and launches the bundled app executable.
+- Normal Windows users do not need Python, Node.js, npm, or a virtual environment installed separately. `ONE_CLICK_INSTALL.bat` and `Repair_ShellAI.bat` remain explicit source-mode fallback tools only.
 
 Updates:
 

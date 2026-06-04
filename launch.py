@@ -21,13 +21,27 @@ os.environ.setdefault(
 
 faulthandler.enable()
 
+
+def _brand_icon_path():
+    root = os.path.dirname(os.path.abspath(__file__))
+    for rel in (
+        os.path.join("shell_web_ui", "dist", "shell-logo.png"),
+        os.path.join("shell_web_ui", "src", "public", "shell-logo.png"),
+        os.path.join("shell_ui", "shell_logo.png"),
+        os.path.join("assets", "brand", "shell-official-logo.png"),
+    ):
+        candidate = os.path.join(root, rel)
+        if os.path.exists(candidate):
+            return candidate
+    return ""
+
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shell_ui'))
     print("Importing...", flush=True)
 
     from PyQt6.QtCore import Qt
     from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtGui import QPalette, QColor
+    from PyQt6.QtGui import QPalette, QColor, QIcon
 
     # QtWebEngine (used by the voice-page Three.js orb) requires
     # AA_ShareOpenGLContexts to be set BEFORE QApplication is created,
@@ -56,6 +70,9 @@ try:
     print("Imports OK", flush=True)
 
     app = QApplication(sys.argv)
+    _brand_icon = _brand_icon_path()
+    if _brand_icon:
+        app.setWindowIcon(QIcon(_brand_icon))
     app.setStyle("Fusion")
     try:
         from shell_ui.app_bootstrap import configure_qt_application
@@ -93,6 +110,8 @@ try:
 
     print("Creating UI...", flush=True)
     w = ShellHoloUI() if use_legacy_ui else ShellWebUI()
+    if _brand_icon:
+        w.setWindowIcon(QIcon(_brand_icon))
     # Fit inside the visible desktop work area. This prevents the macOS Dock
     # or Windows taskbar from covering the bottom action rows.
     try:
