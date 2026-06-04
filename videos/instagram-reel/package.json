@@ -8,7 +8,7 @@
     "studio": "remotion studio src/index.ts",
     "still": "npm run still:landscape",
     "render": "npm run render:landscape",
-    "still:landscape": "remotion still src/index.ts ShellCurrentUiLandscape --frame=210 --output=../shell-current-ui-landscape-poster.png",
+    "still:landscape": "remotion still src/index.ts ShellCurrentUiLandscape --frame=42 --output=../shell-current-ui-landscape-poster.png",
     "render:landscape": "remotion render src/index.ts ShellCurrentUiLandscape ../shell-current-ui-landscape-demo.mp4 --codec=h264 --pixel-format=yuv420p"
   },
   "dependencies": {
