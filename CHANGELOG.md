@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.1 - Bundled Windows desktop app installer
+
+- Replaced the Windows setup shortcut target with a bundled
+  `ShellAIApp\ShellAI.exe` desktop executable.
+- Added PyInstaller packaging for the Shell AI desktop entry before Inno Setup
+  compilation.
+- Built and staged the React Shell Web UI renderer inside the Windows installer
+  so first launch does not depend on source-mode bootstrap.
+- Kept one-click install and repair scripts available as optional fallback
+  tools instead of the default app launch path.
+
 ## 1.0.0 - Current repository refresh
 
 - Added a primary English 16:9 landscape Remotion demo for the current Shell
