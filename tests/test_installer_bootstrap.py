@@ -117,6 +117,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     repair = open("Repair_ShellAI.bat", encoding="utf-8").read()
     acceptance = open("Run_Windows_Acceptance_Test.bat", encoding="utf-8").read()
     exe_builder = open("Build_Windows_EXE.bat", encoding="utf-8").read()
+    public_release = open("Build_Public_Release.bat", encoding="utf-8").read()
     installer = open("installer/install_windows.bat", encoding="utf-8").read()
 
     assert "installer\\bootstrap.py launch --repair-if-needed" in start
@@ -137,6 +138,12 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "tools\\build_windows_installer.py" in exe_builder
     assert "JRSoftware.InnoSetup" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
+    assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
+    assert "installer\\bootstrap.py repair --yes --skip-system" in public_release
+    assert "EnableDelayedExpansion" in public_release
+    assert "!ERRORLEVEL!" in public_release
+    assert "SHELLAI_TEST_PYTHON=%CD%\\.shellai_venv\\Scripts\\python.exe" in public_release
+    assert "if %errorlevel%==0" not in public_release
     assert "exit /b %SHELL_RC%" in repair
     assert "SHELL_LEGACY_UI=0" in start
     assert "SHELL_LEGACY_UI=0" in acceptance

@@ -22,7 +22,10 @@ def test_production_readiness_scores_all_automated_gates(monkeypatch, tmp_path):
         zf.writestr("THIRD_PARTY_NOTICES.md", "")
         zf.writestr("ONE_CLICK_INSTALL.bat", "")
         zf.writestr("Start_ShellAI.bat", "")
+        zf.writestr("Build_Windows_EXE.bat", "")
         zf.writestr("Run_Windows_Acceptance_Test.bat", "")
+        zf.writestr("tools/build_windows_installer.py", "")
+        zf.writestr("tools/windows_installer/ShellAI_Setup.iss", "")
         zf.writestr("tools/windows_acceptance_probe.py", "")
         zf.writestr("tools/signing_notarization_check.py", "")
         zf.writestr("PUBLIC_RELEASE.md", "")
@@ -66,7 +69,10 @@ def test_production_readiness_rejects_telegram_runtime_state(monkeypatch, tmp_pa
         zf.writestr("THIRD_PARTY_NOTICES.md", "")
         zf.writestr("ONE_CLICK_INSTALL.bat", "")
         zf.writestr("Start_ShellAI.bat", "")
+        zf.writestr("Build_Windows_EXE.bat", "")
         zf.writestr("Run_Windows_Acceptance_Test.bat", "")
+        zf.writestr("tools/build_windows_installer.py", "")
+        zf.writestr("tools/windows_installer/ShellAI_Setup.iss", "")
         zf.writestr("tools/windows_acceptance_probe.py", "")
         zf.writestr("tools/signing_notarization_check.py", "")
         zf.writestr("PUBLIC_RELEASE.md", "")
@@ -98,7 +104,10 @@ def test_production_readiness_rejects_bundled_external_clones(monkeypatch, tmp_p
         zf.writestr("THIRD_PARTY_NOTICES.md", "")
         zf.writestr("ONE_CLICK_INSTALL.bat", "")
         zf.writestr("Start_ShellAI.bat", "")
+        zf.writestr("Build_Windows_EXE.bat", "")
         zf.writestr("Run_Windows_Acceptance_Test.bat", "")
+        zf.writestr("tools/build_windows_installer.py", "")
+        zf.writestr("tools/windows_installer/ShellAI_Setup.iss", "")
         zf.writestr("tools/windows_acceptance_probe.py", "")
         zf.writestr("tools/signing_notarization_check.py", "")
         zf.writestr("PUBLIC_RELEASE.md", "")
@@ -126,19 +135,39 @@ def test_production_readiness_tests_use_isolated_shellai_config(monkeypatch):
         returncode = 0
         stdout = "ok\n"
 
-    def fake_run(*args, **kwargs):
+    def fake_run(args, **kwargs):
+        captured["args"] = args
         captured["env"] = kwargs.get("env")
         return Result()
 
     monkeypatch.setenv("SHELLAI_CONFIG", "/Users/example/.shellai/config.json")
+    monkeypatch.setattr(readiness, "_test_python", lambda: "/tmp/shellai-test-python")
     monkeypatch.setattr(readiness.subprocess, "run", fake_run)
 
     ok, details = readiness._run_tests()
 
     assert ok is True
     assert details == "ok"
+    assert captured["args"][0] == "/tmp/shellai-test-python"
+    assert captured["args"][1:3] == ["-m", "pytest"]
     assert Path(captured["env"]["SHELLAI_CONFIG"]).parts[-3:] == (
         ".shell_runtime",
         "production_readiness_shellai",
         "config.json",
     )
+
+
+def test_production_readiness_prefers_configured_test_python(monkeypatch, tmp_path):
+    root = Path(__file__).resolve().parents[1]
+    spec = importlib.util.spec_from_file_location("production_readiness_under_test_python", root / "tools" / "production_readiness.py")
+    readiness = importlib.util.module_from_spec(spec)
+    assert spec and spec.loader
+    sys.modules[spec.name] = readiness
+    spec.loader.exec_module(readiness)
+
+    test_python = tmp_path / "python.exe"
+    test_python.write_text("", encoding="utf-8")
+
+    monkeypatch.setenv("SHELLAI_TEST_PYTHON", str(test_python))
+
+    assert readiness._test_python() == str(test_python)

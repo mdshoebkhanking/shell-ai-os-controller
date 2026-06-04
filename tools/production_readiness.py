@@ -40,7 +40,6 @@ PACKAGE_PATH = ROOT / "dist" / f"shell-ai-os-controller-{version()}.zip"
 TEST_CONFIG_PATH = ROOT / ".shell_runtime" / "production_readiness_shellai" / "config.json"
 
 TEST_COMMAND = [
-    sys.executable,
     "-m",
     "pytest",
     "tests/test_evolution_governor.py",
@@ -159,11 +158,40 @@ def _verify_package() -> tuple[bool, str]:
         return False, str(exc)
 
 
+def _configured_test_python() -> Path | None:
+    configured = os.environ.get("SHELLAI_TEST_PYTHON", "").strip()
+    if not configured:
+        return None
+    path = Path(configured)
+    return path if path.is_absolute() else ROOT / path
+
+
+def _managed_venv_python() -> Path | None:
+    try:
+        from installer import bootstrap
+
+        candidate = bootstrap.python_in_venv(bootstrap.venv_dir())
+    except Exception:
+        return None
+    return candidate if candidate.exists() else None
+
+
+def _test_python() -> str:
+    configured = _configured_test_python()
+    if configured and configured.exists():
+        return str(configured)
+    managed = _managed_venv_python()
+    if managed:
+        return str(managed)
+    return sys.executable
+
+
 def _run_tests() -> tuple[bool, str]:
     env = os.environ.copy()
     env["SHELLAI_CONFIG"] = str(TEST_CONFIG_PATH)
+    test_python = _test_python()
     proc = subprocess.run(
-        TEST_COMMAND,
+        [test_python, *TEST_COMMAND],
         cwd=str(ROOT),
         env=env,
         stdout=subprocess.PIPE,
@@ -172,8 +200,14 @@ def _run_tests() -> tuple[bool, str]:
         timeout=180,
         check=False,
     )
-    output = (proc.stdout or "").strip().splitlines()
+    raw_output = proc.stdout or ""
+    output = raw_output.strip().splitlines()
     tail = "\n".join(output[-8:])
+    if proc.returncode != 0 and "No module named pytest" in raw_output:
+        tail = (
+            f"pytest is unavailable in {test_python}. "
+            "Run Repair_ShellAI.bat or `python installer/bootstrap.py repair --yes --skip-system`, then rerun Build_Public_Release.bat."
+        )
     return proc.returncode == 0, tail
 
 

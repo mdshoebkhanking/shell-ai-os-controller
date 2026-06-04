@@ -58,21 +58,32 @@ echo Using Python command: !PY_CMD!
 if defined INNO_SETUP_COMPILER echo Using Inno compiler: !INNO_SETUP_COMPILER!
 echo.
 
+echo Preparing installer build environment...
+%PY_CMD% installer\bootstrap.py repair --yes --skip-system
+set "SHELL_RC=!ERRORLEVEL!"
+if not "!SHELL_RC!"=="0" goto failed
+
 %PY_CMD% tools\build_windows_installer.py --no-strict
-set "SHELL_RC=%ERRORLEVEL%"
+set "SHELL_RC=!ERRORLEVEL!"
 
 echo.
-if "%SHELL_RC%"=="0" (
+if "!SHELL_RC!"=="0" (
   echo ============================================================
   echo  Windows setup EXE created in dist.
   echo  Upload the setup EXE as the release asset for Settings updates.
   echo ============================================================
 ) else (
-  echo ============================================================
-  echo  EXE build failed. Exit code: %SHELL_RC%
-  echo  Report: dist\windows_installer_package.json
-  echo ============================================================
+  goto failed
 )
+pause
+endlocal & exit /b 0
+
+:failed
+echo.
+echo ============================================================
+echo  EXE build failed. Exit code: !SHELL_RC!
+echo  Report: dist\windows_installer_package.json
+echo ============================================================
 pause
 endlocal & exit /b %SHELL_RC%
 
