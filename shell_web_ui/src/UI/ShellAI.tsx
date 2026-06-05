@@ -45,9 +45,21 @@ const shellTabViewLoaders = [
   loadPhoneView
 ]
 
+const PRELOAD_TAB_GAP_MS = 120
+
+const waitForPreloadGap = () =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, PRELOAD_TAB_GAP_MS)
+  })
+
 const preloadShellTabViews = async (isCancelled: () => boolean) => {
   if (isCancelled()) return
-  await Promise.all(shellTabViewLoaders.map((loadView) => loadView()))
+  for (const loadView of shellTabViewLoaders) {
+    if (isCancelled()) return
+    await loadView()
+    if (isCancelled()) return
+    await waitForPreloadGap()
+  }
 }
 
 type ShellIdleWindow = Window & {
