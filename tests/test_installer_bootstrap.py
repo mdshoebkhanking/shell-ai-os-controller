@@ -155,7 +155,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
     assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
-    assert "tools\\stage_qwen_offline_llm_assets.py --variant q8_official" in exe_builder
+    assert "tools\\stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml" in exe_builder
     assert "llama-cpp-python" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in public_release
     assert "EnableDelayedExpansion" in public_release
@@ -275,7 +275,7 @@ def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_
 
     qwen = llm_root / "qwen3"
     qwen.mkdir(parents=True)
-    (qwen / "Qwen3-1.7B-Q8_0.gguf").write_bytes(b"model")
+    (qwen / "Qwen3-1.7B-Q4_K_M.gguf").write_bytes(b"model")
 
     ready = build_windows_installer.offline_llm_stage_report()
     assert ready["status"] == "ready"
@@ -302,14 +302,14 @@ def test_kokoro_asset_staging_helper_dry_run(tmp_path):
 def test_qwen_offline_llm_asset_staging_helper_dry_run(tmp_path):
     stage_qwen = load_tool_module("stage_qwen_offline_llm_assets")
 
-    report = stage_qwen.stage_assets(output_dir=tmp_path, variant="q8_official", dry_run=True, force=False)
+    report = stage_qwen.stage_assets(output_dir=tmp_path, variant="q4_k_m_ggml", dry_run=True, force=False)
 
     assert report["status"] == "dry-run"
     assert report["model_family"] == "Qwen3-1.7B-GGUF"
-    assert report["model_repo"] == "Qwen/Qwen3-1.7B-GGUF"
-    assert report["variant"] == "q8_official"
-    assert [asset["name"] for asset in report["assets"]] == ["Qwen3-1.7B-Q8_0.gguf"]
-    assert not (tmp_path / "Qwen3-1.7B-Q8_0.gguf").exists()
+    assert report["model_repo"] == "ggml-org/Qwen3-1.7B-GGUF"
+    assert report["variant"] == "q4_k_m_ggml"
+    assert [asset["name"] for asset in report["assets"]] == ["Qwen3-1.7B-Q4_K_M.gguf"]
+    assert not (tmp_path / "Qwen3-1.7B-Q4_K_M.gguf").exists()
 
 
 def test_release_workflow_stages_kokoro_assets_for_windows_installer():
@@ -319,7 +319,7 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "tools/stage_kokoro_tts_assets.py --variant int8" in workflow
     assert "models/tts/kokoro" in workflow
     assert "llama-cpp-python" in workflow
-    assert "tools/stage_qwen_offline_llm_assets.py --variant q8_official" in workflow
+    assert "tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml" in workflow
     assert "models/llm/qwen3" in workflow
 
 

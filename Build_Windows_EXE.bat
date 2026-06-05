@@ -76,7 +76,7 @@ set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
 echo Staging offline LLM assets...
-%PY_CMD% tools\stage_qwen_offline_llm_assets.py --variant q8_official
+%PY_CMD% tools\stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 

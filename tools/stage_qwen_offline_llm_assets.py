@@ -20,6 +20,11 @@ class LLMAsset(NamedTuple):
 
 
 MODEL_VARIANTS = {
+    "q4_k_m_ggml": LLMAsset(
+        "Qwen3-1.7B-Q4_K_M.gguf",
+        "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
+        1_200_000_000,
+    ),
     "q8_official": LLMAsset(
         "Qwen3-1.7B-Q8_0.gguf",
         "https://huggingface.co/Qwen/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q8_0.gguf?download=true",
@@ -94,7 +99,7 @@ def stage_assets(*, output_dir: Path, variant: str, dry_run: bool, force: bool) 
     report = {
         "status": "dry-run" if dry_run else "ready",
         "model_family": "Qwen3-1.7B-GGUF",
-        "model_repo": "Qwen/Qwen3-1.7B-GGUF",
+        "model_repo": "ggml-org/Qwen3-1.7B-GGUF" if variant == "q4_k_m_ggml" else "Qwen/Qwen3-1.7B-GGUF",
         "runtime": "llama-cpp-python",
         "variant": variant,
         "output_dir": str(output_dir),
@@ -113,7 +118,7 @@ def stage_assets(*, output_dir: Path, variant: str, dry_run: bool, force: bool) 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Stage Qwen3 offline LLM GGUF assets for installer builds.")
     parser.add_argument("--output-dir", type=Path, default=DEFAULT_OUTPUT_DIR)
-    parser.add_argument("--variant", choices=sorted(MODEL_VARIANTS), default="q8_official")
+    parser.add_argument("--variant", choices=sorted(MODEL_VARIANTS), default="q4_k_m_ggml")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)

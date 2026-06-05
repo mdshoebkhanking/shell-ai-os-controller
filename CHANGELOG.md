@@ -4,6 +4,8 @@
 
 - Added offline Qwen LLM packaging support with build-time staging, installer
   metadata, and runtime fallback reporting without hidden app-start downloads.
+- Switched the bundled Windows offline LLM asset to Qwen3 1.7B Q4_K_M so the
+  setup EXE can stay under NSIS and GitHub release asset size limits.
 - Added Shell identity guardrails so offline/provider replies identify as Shell
   AI and answer creator questions with `mdshoebking`.
 - Added real rendered UI proof tooling for the dashboard voice-reactive orb,

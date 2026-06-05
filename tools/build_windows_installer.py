@@ -264,13 +264,13 @@ def offline_llm_stage_report() -> dict[str, object]:
         "total_size_bytes": total_bytes,
         "recommended_engine": "llama-cpp-python",
         "model_family": "Qwen3-1.7B-GGUF",
-        "model_repo": "Qwen/Qwen3-1.7B-GGUF",
+        "model_repo": "ggml-org/Qwen3-1.7B-GGUF",
         "language_support": ["english", "hinglish", "hindi"],
         "runtime_downloads": False,
         "engines": {
             "llama_cpp_python": {
                 "ready": qwen_ready,
-                "expected_files": ["Qwen3-1.7B-Q8_0.gguf"],
+                "expected_files": ["Qwen3-1.7B-Q4_K_M.gguf"],
                 "model_family": "Qwen3-1.7B-GGUF",
             },
         },
@@ -319,8 +319,6 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
         str(spec_root),
         "--paths",
         str(ROOT),
-        "--collect-all",
-        "PyQt6",
     ]
     for hidden_import in PYINSTALLER_HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", hidden_import])

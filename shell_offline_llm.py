@@ -19,8 +19,8 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL_FAMILY = "Qwen3-1.7B-GGUF"
-DEFAULT_MODEL_REPO = "Qwen/Qwen3-1.7B-GGUF"
-DEFAULT_MODEL_FILE = "Qwen3-1.7B-Q8_0.gguf"
+DEFAULT_MODEL_REPO = "ggml-org/Qwen3-1.7B-GGUF"
+DEFAULT_MODEL_FILE = "Qwen3-1.7B-Q4_K_M.gguf"
 DEFAULT_ENGINE = "llama-cpp-python"
 SUPPORTED_SHELL_LANGUAGE_ORDER = ("hinglish", "english", "hindi")
 

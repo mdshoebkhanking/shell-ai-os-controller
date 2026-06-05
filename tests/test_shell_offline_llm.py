@@ -37,7 +37,7 @@ def test_offline_llm_status_requires_runtime(monkeypatch, tmp_path):
     shell_offline_llm._reset_cached_model_for_tests()
     model_dir = tmp_path / "models" / "llm" / "qwen3"
     model_dir.mkdir(parents=True)
-    (model_dir / "Qwen3-1.7B-Q8_0.gguf").write_bytes(b"gguf-probe")
+    (model_dir / "Qwen3-1.7B-Q4_K_M.gguf").write_bytes(b"gguf-probe")
     monkeypatch.setattr(shell_offline_llm, "PROJECT_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(shell_offline_llm, "_load_llama_class", lambda: (None, "runtime missing"))
@@ -45,7 +45,7 @@ def test_offline_llm_status_requires_runtime(monkeypatch, tmp_path):
     status = shell_offline_llm.offline_llm_status()
 
     assert status["available"] is False
-    assert status["modelFile"] == "Qwen3-1.7B-Q8_0.gguf"
+    assert status["modelFile"] == "Qwen3-1.7B-Q4_K_M.gguf"
     assert status["reason"] == "runtime missing"
 
 
@@ -55,7 +55,7 @@ def test_generate_offline_reply_uses_packaged_llama_runtime(monkeypatch, tmp_pat
     shell_offline_llm._reset_cached_model_for_tests()
     model_dir = tmp_path / "models" / "llm" / "qwen3"
     model_dir.mkdir(parents=True)
-    model = model_dir / "Qwen3-1.7B-Q8_0.gguf"
+    model = model_dir / "Qwen3-1.7B-Q4_K_M.gguf"
     model.write_bytes(b"gguf-probe")
     monkeypatch.setattr(shell_offline_llm, "PROJECT_ROOT", tmp_path)
     monkeypatch.chdir(tmp_path)

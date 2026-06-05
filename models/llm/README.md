@@ -7,8 +7,8 @@ installer workflow.
 Default model:
 
 - Family: `Qwen3-1.7B-GGUF`
-- Source repo: `Qwen/Qwen3-1.7B-GGUF`
-- File: `Qwen3-1.7B-Q8_0.gguf`
+- Source repo: `ggml-org/Qwen3-1.7B-GGUF`
+- File: `Qwen3-1.7B-Q4_K_M.gguf`
 - Runtime: `llama-cpp-python`
 - Languages: English, Hinglish, Hindi
 
@@ -16,14 +16,14 @@ Expected release layout:
 
 ```text
 models/llm/qwen3/
-  Qwen3-1.7B-Q8_0.gguf
+  Qwen3-1.7B-Q4_K_M.gguf
   qwen-offline-llm-assets.json
 ```
 
 Build-time staging:
 
 ```bash
-python tools/stage_qwen_offline_llm_assets.py --variant q8_official
+python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 ```
 
 Runtime overrides:

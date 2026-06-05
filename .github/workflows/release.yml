@@ -176,10 +176,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: models/llm/qwen3
-          key: qwen3-1-7b-gguf-q8-assets
+          key: qwen3-1-7b-gguf-q4-k-m-assets
 
       - name: Stage Qwen offline LLM assets
-        run: python tools/stage_qwen_offline_llm_assets.py --variant q8_official
+        run: python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
@@ -284,10 +284,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: models/llm/qwen3
-          key: qwen3-1-7b-gguf-q8-assets
+          key: qwen3-1-7b-gguf-q4-k-m-assets
 
       - name: Stage Qwen offline LLM assets
-        run: python tools/stage_qwen_offline_llm_assets.py --variant q8_official
+        run: python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
