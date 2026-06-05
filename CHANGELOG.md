@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.9 - Offline voice readiness and UI performance
+
+- Restored the original voice-reactive dashboard orb behavior while moving
+  particle expansion onto a GPU shader path to reduce per-frame CPU uploads.
+- Reduced Shell Web UI idle churn with deduped history updates, memoized
+  dashboard rendering, lazy Phone view loading, staggered tab preloading, and
+  tab indicator update dedupe.
+- Added three-language Shell reply controls for Hinglish, English, and Hindi
+  across Settings, browser fallback replies, Gemini prompts, and local speech
+  locale selection.
+- Added packaged offline TTS readiness detection, Settings status visibility,
+  backend/browser fallback reporting, Windows acceptance checks, and installer
+  package metadata for offline TTS readiness.
+
 ## 1.0.8 - Stable tab switching and refreshed setup icons
 
 - Preloads lazy Shell Web UI tab chunks after launch so first tab switches do
