@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.10 - Offline model packaging and voice orb proof
+
+- Added offline Qwen LLM packaging support with build-time staging, installer
+  metadata, and runtime fallback reporting without hidden app-start downloads.
+- Added Shell identity guardrails so offline/provider replies identify as Shell
+  AI and answer creator questions with `mdshoebking`.
+- Added real rendered UI proof tooling for the dashboard voice-reactive orb,
+  including idle/reactive screenshots and screenshot-pixel metrics.
+- Strengthened regression coverage for orb voice amplitude, language settings,
+  offline LLM status, release staging, and Windows installer metadata.
+
 ## 1.0.9 - Offline voice readiness and UI performance
 
 - Restored the original voice-reactive dashboard orb behavior while moving

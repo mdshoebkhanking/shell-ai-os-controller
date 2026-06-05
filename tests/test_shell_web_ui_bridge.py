@@ -38,6 +38,65 @@ def test_chart_entry_telemetry_prompt_stays_local(monkeypatch, tmp_path):
     assert "AI provider" not in result["reply"]
 
 
+def test_chat_message_uses_offline_llm_after_provider_failure(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Offline model se jawab aa gaya.")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text"}])
+
+    assert result["success"] is True
+    assert result["reply"] == "Offline model se jawab aa gaya."
+    assert "AI provider" not in result["reply"]
+    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["voice"] is False
+
+
+def test_chart_text_prompt_can_use_offline_llm_without_voice(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Offline chart answer.")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text", "entry": "chart"}])
+
+    assert result["success"] is True
+    assert result["reply"] == "Offline chart answer."
+    assert result["route"] is None
+    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["voice"] is False
+
+
+def test_voice_prompt_uses_offline_llm_and_stays_voice_originated(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Offline voice answer.")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "voice"}])
+
+    assert result["success"] is True
+    assert result["reply"] == "Offline voice answer."
+    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["voice"] is True
+
+
 def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
@@ -54,11 +113,11 @@ def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch,
     shell_ko_result = bridge._chat_message(["shell ko kisne banaya hai", {"source": "text", "entry": "chart"}])
     creator_result = bridge._chat_message(["shell ka creator kaun hai?", {"source": "text", "entry": "chart"}])
 
-    assert text_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
-    assert voice_result["reply"] == "Mujhe Md Shoaib King ne banaya hai."
-    assert chart_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
-    assert shell_ko_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
-    assert creator_result["reply"] == "Mujhe Md Shoeb King ne banaya hai."
+    assert text_result["reply"] == "Mujhe mdshoebking ne banaya hai."
+    assert voice_result["reply"] == "Mujhe mdshoebking ne banaya hai."
+    assert chart_result["reply"] == "Mujhe mdshoebking ne banaya hai."
+    assert shell_ko_result["reply"] == "Mujhe mdshoebking ne banaya hai."
+    assert creator_result["reply"] == "Mujhe mdshoebking ne banaya hai."
     assert voice_result["route"] is None
     assert [payload["voice"] for channel, payload in emitted if channel == "chat-updated"][1] is True
 

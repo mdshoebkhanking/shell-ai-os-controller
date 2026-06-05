@@ -27,6 +27,35 @@ def test_dashboard_orb_listens_to_backend_voice_amplitude():
     assert "idlePulse" in sphere
 
 
+def test_backend_probe_voice_amplitude_channel_is_env_gated(monkeypatch):
+    from PyQt6.QtCore import QCoreApplication
+    import shell_web_ui.host as host
+
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+
+    monkeypatch.delenv("SHELL_UI_PROBE_ENABLED", raising=False)
+    disabled = bridge._dispatch("probe-voice-amplitude", [{"value": 0.9}])
+    assert disabled["success"] is False
+    assert emitted == []
+
+    monkeypatch.setenv("SHELL_UI_PROBE_ENABLED", "1")
+    enabled = bridge._dispatch("probe-voice-amplitude", [{"value": 0.9, "speaking": True}])
+    assert enabled["success"] is True
+    assert ("voice-amplitude", {"value": 0.9, "probe": True}) in emitted
+    assert any(channel == "speech-status" and payload["state"] == "speaking" for channel, payload in emitted)
+
+
+def test_browser_probe_emitter_is_query_param_gated():
+    bridge = (ROOT / "shell_web_ui" / "src" / "shellBridge.ts").read_text(encoding="utf-8")
+
+    assert "shell-ui-probe" in bridge
+    assert "__shellProbeEmit" in bridge
+    assert "window.location.search" in bridge
+
+
 def test_primary_tabs_can_scroll_inside_tight_windows():
     shell_ai = (ROOT / "shell_web_ui" / "src" / "UI" / "ShellAI.tsx").read_text(encoding="utf-8")
     css = (ROOT / "shell_web_ui" / "src" / "assets" / "main.css").read_text(encoding="utf-8")

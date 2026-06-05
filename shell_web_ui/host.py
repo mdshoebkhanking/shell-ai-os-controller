@@ -50,6 +50,30 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
             "message": "Offline TTS service could not be imported.",
         }
 
+try:
+    from shell_offline_llm import generate_offline_reply, offline_llm_status
+except Exception:  # pragma: no cover - fallback keeps the host importable
+    def offline_llm_status() -> dict[str, Any]:
+        return {
+            "success": True,
+            "available": False,
+            "status": "fallback",
+            "engine": "fallback",
+            "reason": "Offline LLM service could not be imported.",
+            "candidates": [],
+        }
+
+    def generate_offline_reply(_text: str, **_kwargs: Any) -> Any:
+        class _FallbackResult:
+            success = False
+            reply = ""
+            reason = "Offline LLM service could not be imported."
+
+            def as_dict(self) -> dict[str, Any]:
+                return {"success": False, "reply": "", "reason": self.reason}
+
+        return _FallbackResult()
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEB_UI_ROOT = Path(__file__).resolve().parent
@@ -170,6 +194,8 @@ class ShellBackendBridge(QObject):
             "execute-command": self._execute_command,
             "chat-message": self._chat_message,
             "offline-tts-status": self._offline_tts_status,
+            "offline-llm-status": self._offline_llm_status,
+            "probe-voice-amplitude": self._probe_voice_amplitude,
             "speak-text": self._speak_text,
             "stop-speech": self._stop_speech,
             "start-voice": self._start_voice,
@@ -1191,9 +1217,7 @@ class ShellBackendBridge(QObject):
         if not ((subject_intent and creator_intent) or explicit_creator_phrase):
             return ""
 
-        if source == "voice":
-            return "Mujhe Md Shoaib King ne banaya hai."
-        return "Mujhe Md Shoeb King ne banaya hai."
+        return "Mujhe mdshoebking ne banaya hai."
 
     def _history_context_snippet(self, previous_messages: list[Any], *, limit: int = 6) -> str:
         rows: list[str] = []
@@ -1204,18 +1228,7 @@ class ShellBackendBridge(QObject):
                 rows.append(f"{role}: {text[:220]}")
         return "\n".join(rows)
 
-    def _brain_chat_fallback(self, text: str, *, previous_messages: list[Any] | None = None) -> str:
-        context = self._history_context_snippet(previous_messages or [])
-        system_prompt = (
-            "You are Shell AI, a concise desktop OS assistant. "
-            f"{_shell_language_instruction()} "
-            "If the user asks who made, created, built, developed, owns, or created Shell AI, "
-            "answer exactly: Mujhe Md Shoeb King ne banaya hai. Never say Meta, Google, OpenAI, Gemini, or any provider made you. "
-            "Answer the user's normal text question directly in 1-3 short lines. "
-            "Do not claim you executed tools in this text-only fallback. "
-            "Use recent conversation context if the user asks what they said or what task they gave."
-        )
-        prompt = text if not context else f"Recent conversation:\n{context}\n\nUser: {text}"
+    def _provider_chat_reply(self, prompt: str, system_prompt: str) -> str:
         try:
             import concurrent.futures
 
@@ -1239,6 +1252,45 @@ class ShellBackendBridge(QObject):
                 return self._compact_chat_reply(reply)
         except Exception:
             pass
+        return ""
+
+    def _offline_chat_reply(
+        self,
+        prompt: str,
+        system_prompt: str,
+        previous_messages: list[Any] | None = None,
+    ) -> str:
+        try:
+            result = generate_offline_reply(
+                prompt,
+                system_prompt=system_prompt,
+                previous_messages=previous_messages or [],
+            )
+            if getattr(result, "success", False) and getattr(result, "reply", ""):
+                return self._compact_chat_reply(str(result.reply), limit=700)
+        except Exception:
+            pass
+        return ""
+
+    def _brain_chat_fallback(self, text: str, *, previous_messages: list[Any] | None = None) -> str:
+        context = self._history_context_snippet(previous_messages or [])
+        system_prompt = (
+            "You are Shell AI, a concise desktop OS assistant. "
+            f"{_shell_language_instruction()} "
+            "If the user asks who made, created, built, developed, owns, or created Shell AI, "
+            "answer exactly: Mujhe mdshoebking ne banaya hai. Never say Meta, Google, OpenAI, Gemini, Qwen, llama.cpp, or any provider/model made you. "
+            "Answer the user's normal text question directly in 1-3 short lines. "
+            "Do not claim you executed tools in this text-only fallback. "
+            "Use recent conversation context if the user asks what they said or what task they gave."
+        )
+        prompt = text if not context else f"Recent conversation:\n{context}\n\nUser: {text}"
+        provider_reply = self._provider_chat_reply(prompt, system_prompt)
+        if provider_reply:
+            return provider_reply
+
+        offline_reply = self._offline_chat_reply(prompt, system_prompt, previous_messages)
+        if offline_reply:
+            return offline_reply
 
         return self._local_chat_answer(text)
 
@@ -1448,6 +1500,21 @@ class ShellBackendBridge(QObject):
 
     def _offline_tts_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
         return offline_tts_status()
+
+    def _offline_llm_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        return offline_llm_status()
+
+    def _probe_voice_amplitude(self, args: list[Any]) -> dict[str, Any]:
+        if os.environ.get("SHELL_UI_PROBE_ENABLED", "").strip().lower() not in {"1", "true", "yes", "on"}:
+            return {"success": False, "message": "UI probe channel is disabled."}
+        payload = args[0] if args and isinstance(args[0], dict) else {}
+        value = max(0.0, min(1.0, float(payload.get("value", 0.95) or 0.0)))
+        speaking = bool(payload.get("speaking", True))
+        self.emit_event("voice-status", {"state": "listening", "actualRuntime": False, "probe": True})
+        if speaking:
+            self.emit_event("speech-status", {"state": "speaking", "engine": "probe"})
+        self.emit_event("voice-amplitude", {"value": value, "probe": True})
+        return {"success": True, "value": value, "speaking": speaking}
 
     def _speak_text(self, args: list[Any]) -> dict[str, Any]:
         text = " ".join(str(args[0] if args else "").strip().split())

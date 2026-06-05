@@ -51,6 +51,7 @@ APP_BUNDLE_DIR = APP_STAGE / "ShellAIApp"
 APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 TTS_MODEL_STAGE = APP_STAGE / "models" / "tts"
+LLM_MODEL_STAGE = APP_STAGE / "models" / "llm"
 ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
 ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
@@ -64,10 +65,12 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "psutil",
     "requests",
     "shell_hub",
+    "shell_offline_llm",
     "shell_tool_gateway",
     "shell_ui.splash_screen",
     "shell_web_ui.host",
     "socketio",
+    "llama_cpp",
     "PyQt6.QtGui",
     "PyQt6.QtWebChannel",
     "PyQt6.QtWebEngineCore",
@@ -78,6 +81,7 @@ PYINSTALLER_COPY_METADATA = [
     "aiohttp-cors",
     "google-genai",
     "livekit",
+    "llama-cpp-python",
     "psutil",
     "PyQt6",
     "PyQt6-WebEngine",
@@ -238,6 +242,37 @@ def offline_tts_stage_report() -> dict[str, object]:
                 "language_support": ["english", "hinglish", "hindi"],
             },
             "piper": {"ready": piper_ready},
+        },
+    }
+
+
+def offline_llm_stage_report() -> dict[str, object]:
+    model_files = [path for path in LLM_MODEL_STAGE.rglob("*.gguf") if path.is_file()] if LLM_MODEL_STAGE.exists() else []
+    total_bytes = sum(path.stat().st_size for path in model_files)
+    qwen_ready = any(path.name.lower().startswith("qwen3-1.7b") for path in model_files)
+    status = "ready" if qwen_ready else "fallback"
+    reason = (
+        "Packaged offline LLM model assets detected."
+        if status == "ready"
+        else "No packaged GGUF offline LLM model assets detected; Shell will use provider/local deterministic fallback."
+    )
+    return {
+        "status": status,
+        "reason": reason,
+        "model_dir": str(LLM_MODEL_STAGE),
+        "model_file_count": len(model_files),
+        "total_size_bytes": total_bytes,
+        "recommended_engine": "llama-cpp-python",
+        "model_family": "Qwen3-1.7B-GGUF",
+        "model_repo": "Qwen/Qwen3-1.7B-GGUF",
+        "language_support": ["english", "hinglish", "hindi"],
+        "runtime_downloads": False,
+        "engines": {
+            "llama_cpp_python": {
+                "ready": qwen_ready,
+                "expected_files": ["Qwen3-1.7B-Q8_0.gguf"],
+                "model_family": "Qwen3-1.7B-GGUF",
+            },
         },
     }
 
@@ -416,6 +451,7 @@ def build_windows_installer(
         raise RuntimeError(f"Unsupported installer engine: {installer_engine}")
     marker = stage_release_files()
     offline_tts_report = offline_tts_stage_report()
+    offline_llm_report = offline_llm_stage_report()
     if not dry_run:
         copy_web_ui_dist_to_stage()
     icon_report = prepare_windows_icon(dry_run=dry_run)
@@ -443,6 +479,7 @@ def build_windows_installer(
         "source_file_count": marker["source_file_count"],
         "bundled_app": app_report,
         "offline_tts": offline_tts_report,
+        "offline_llm": offline_llm_report,
         "expected_output": str(DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"),
     }
     if dry_run:

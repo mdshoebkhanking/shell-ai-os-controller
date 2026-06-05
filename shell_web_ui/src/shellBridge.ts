@@ -217,9 +217,7 @@ const creatorIdentityReply = (text: string, source = 'text') => {
       normalized
     ) || /\b(creator|maker|founder|owner|developer)\s+(kaun|kon|who|kisne|kis\s*ne)\b/i.test(normalized)
   if (!((subjectIntent && creatorIntent) || explicitCreatorPhrase)) return ''
-  return source === 'voice'
-    ? 'Mujhe Md Shoaib King ne banaya hai.'
-    : 'Mujhe Md Shoeb King ne banaya hai.'
+  return 'Mujhe mdshoebking ne banaya hai.'
 }
 
 const researchIntentFromText = (value: string) => {
@@ -527,6 +525,19 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
           : 'Backend bridge is offline and browser speech synthesis is unavailable.',
         candidates: []
       }
+    case 'offline-llm-status':
+      return {
+        success: true,
+        available: false,
+        status: 'fallback',
+        engine: 'browser',
+        label: 'Packaged offline chat brain',
+        modelFamily: 'Qwen3-1.7B-GGUF',
+        language: readShellLanguage(),
+        reason: 'Backend bridge is offline; packaged local LLM status is only available from the Python host.',
+        runtimeDownloads: false,
+        candidates: []
+      }
     case 'stop-speech':
       window.speechSynthesis?.cancel()
       return { success: true, source: 'web-speech' }
@@ -682,6 +693,9 @@ const shellAPI = {
 }
 
 ;(window as any).shellAPI = shellAPI
+if (new URLSearchParams(window.location.search).get('shell-ui-probe') === '1') {
+  ;(window as any).__shellProbeEmit = (channel: string, payload?: unknown) => emit(channel, payload)
+}
 ;(window as any).electron = (window as any).electron || {
   process: { platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'browser' },
   ipcRenderer: {

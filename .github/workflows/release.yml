@@ -161,6 +161,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
           python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sounddevice SpeechRecognition pynput keyboard pillow
+          python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
 
       - name: Cache Kokoro offline TTS assets
         uses: actions/cache@v4
@@ -170,6 +171,15 @@ jobs:
 
       - name: Stage Kokoro offline TTS assets
         run: python tools/stage_kokoro_tts_assets.py --variant int8
+
+      - name: Cache Qwen offline LLM assets
+        uses: actions/cache@v4
+        with:
+          path: models/llm/qwen3
+          key: qwen3-1-7b-gguf-q8-assets
+
+      - name: Stage Qwen offline LLM assets
+        run: python tools/stage_qwen_offline_llm_assets.py --variant q8_official
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y
@@ -259,6 +269,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
           python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sounddevice SpeechRecognition pynput keyboard pillow
+          python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
 
       - name: Cache Kokoro offline TTS assets
         uses: actions/cache@v4
@@ -268,6 +279,15 @@ jobs:
 
       - name: Stage Kokoro offline TTS assets
         run: python tools/stage_kokoro_tts_assets.py --variant int8
+
+      - name: Cache Qwen offline LLM assets
+        uses: actions/cache@v4
+        with:
+          path: models/llm/qwen3
+          key: qwen3-1-7b-gguf-q8-assets
+
+      - name: Stage Qwen offline LLM assets
+        run: python tools/stage_qwen_offline_llm_assets.py --variant q8_official
 
       - name: Install NSIS
         run: choco install nsis --no-progress -y

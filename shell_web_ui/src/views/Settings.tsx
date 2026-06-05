@@ -52,6 +52,25 @@ type OfflineTtsStatus = {
   }>
 }
 
+type OfflineLlmStatus = {
+  success?: boolean
+  available?: boolean
+  status?: string
+  engine?: string
+  label?: string
+  modelFamily?: string
+  modelRepo?: string
+  modelFile?: string
+  language?: string
+  reason?: string
+  runtimeDownloads?: boolean
+  candidates?: Array<{
+    engine?: string
+    available?: boolean
+    reason?: string
+  }>
+}
+
 const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
   const runtime = String(value || '').trim().toLowerCase()
   return runtime === 'auto' || runtime === 'gemini' || runtime === 'backend' ? runtime : 'auto'
@@ -99,6 +118,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [offlineTtsStatus, setOfflineTtsStatus] = useState<OfflineTtsStatus | null>(null)
   const [offlineTtsMessage, setOfflineTtsMessage] = useState('Offline TTS status not checked yet.')
   const [offlineTtsBusy, setOfflineTtsBusy] = useState(false)
+  const [offlineLlmStatus, setOfflineLlmStatus] = useState<OfflineLlmStatus | null>(null)
+  const [offlineLlmMessage, setOfflineLlmMessage] = useState('Offline brain status not checked yet.')
+  const [offlineLlmBusy, setOfflineLlmBusy] = useState(false)
 
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('shell_custom_api_key') || '')
   const [groqKey, setGroqKey] = useState(localStorage.getItem('shell_groq_api_key') || '')
@@ -169,6 +191,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       }).catch(() => {})
       window.electron.ipcRenderer.invoke('offline-tts-status').then((status) => {
         applyOfflineTtsStatus(status)
+      }).catch(() => {})
+      window.electron.ipcRenderer.invoke('offline-llm-status').then((status) => {
+        applyOfflineLlmStatus(status)
       }).catch(() => {})
       window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
         if (!keys || typeof keys !== 'object') return
@@ -398,6 +423,34 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     }
   }
 
+  const applyOfflineLlmStatus = (status: OfflineLlmStatus | null | undefined) => {
+    if (!status || typeof status !== 'object') {
+      setOfflineLlmStatus(null)
+      setOfflineLlmMessage('Offline brain status unavailable.')
+      return
+    }
+
+    setOfflineLlmStatus(status)
+    if (status.available) {
+      setOfflineLlmMessage(`${status.modelFamily || status.label || 'Offline brain'} ready for chat and voice replies.`)
+      return
+    }
+    setOfflineLlmMessage(status.reason || 'No packaged offline LLM model is ready; Shell will use local fallback answers.')
+  }
+
+  const refreshOfflineLlmStatus = async () => {
+    setOfflineLlmBusy(true)
+    try {
+      const status = await window.electron?.ipcRenderer.invoke('offline-llm-status')
+      applyOfflineLlmStatus(status)
+    } catch (error: any) {
+      setOfflineLlmStatus(null)
+      setOfflineLlmMessage(`Offline brain check failed: ${error?.message || error}`)
+    } finally {
+      setOfflineLlmBusy(false)
+    }
+  }
+
   const refreshMicrophones = async () => {
     if (!navigator.mediaDevices?.enumerateDevices) {
       setMicStatus('Microphone device list unavailable.')
@@ -578,6 +631,13 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const offlineTtsBadge = offlineTtsBusy ? 'CHECKING' : offlineTtsReady ? 'READY' : 'FALLBACK'
   const offlineTtsEngine = String(offlineTtsStatus?.engine || 'fallback').toUpperCase()
   const offlineTtsCandidateSummary = (offlineTtsStatus?.candidates || [])
+    .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
+    .filter(Boolean)
+    .join('  ')
+  const offlineLlmReady = Boolean(offlineLlmStatus?.available)
+  const offlineLlmBadge = offlineLlmBusy ? 'CHECKING' : offlineLlmReady ? 'READY' : 'FALLBACK'
+  const offlineLlmEngine = String(offlineLlmStatus?.engine || 'fallback').toUpperCase()
+  const offlineLlmCandidateSummary = (offlineLlmStatus?.candidates || [])
     .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
     .filter(Boolean)
     .join('  ')
@@ -919,6 +979,51 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                     {offlineTtsCandidateSummary && (
                       <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
                         {offlineTtsCandidateSummary}
+                      </div>
+                    )}
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-[#050505] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 text-[10px] font-black tracking-widest text-zinc-500">
+                          <RiBrainLine size={12} /> OFFLINE BRAIN
+                        </span>
+                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
+                          {offlineLlmEngine}
+                          {offlineLlmStatus?.modelFamily ? ` / ${String(offlineLlmStatus.modelFamily).toUpperCase()}` : ''}
+                          {offlineLlmStatus?.language ? ` / ${String(offlineLlmStatus.language).toUpperCase()}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
+                            offlineLlmReady
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {offlineLlmBadge}
+                        </span>
+                        <button
+                          onClick={refreshOfflineLlmStatus}
+                          disabled={offlineLlmBusy}
+                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {offlineLlmBusy ? '...' : 'REFRESH'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
+                      {offlineLlmMessage}
+                    </div>
+                    {offlineLlmStatus?.modelFile && (
+                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineLlmStatus.modelFile}
+                      </div>
+                    )}
+                    {offlineLlmCandidateSummary && (
+                      <div className="mt-1 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineLlmCandidateSummary}
                       </div>
                     )}
                   </div>

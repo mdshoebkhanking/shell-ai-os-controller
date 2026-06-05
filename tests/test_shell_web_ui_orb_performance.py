@@ -11,12 +11,17 @@ def read_project_file(relative_path: str) -> str:
 def test_sphere_matches_original_voice_reactive_orb():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
 
-    assert "const CustomParticleSphere = ({ count = 3000 })" in sphere
+    assert "const CustomParticleSphere = ({" in sphere
+    assert "count = 3000" in sphere
+    assert "voiceLevel = 0" in sphere
+    assert "speaking = false" in sphere
     assert "const ORB_AUDIO_COLOR = '#33db12'" in sphere
     assert "const ORB_PEAK_COLOR = '#FFFFFF'" in sphere
     assert "const ORB_BASE_COLOR = '#00F0FF'" in sphere
     assert "shellService.analyser.getByteFrequencyData" in sphere
-    assert "volume = sum / len / 128" in sphere
+    assert "liveVolume = sum / len / 128" in sphere
+    assert "const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))" in sphere
+    assert "const speechPulse = speaking ?" in sphere
 
 
 def test_sphere_preserves_original_particle_expansion_on_gpu():

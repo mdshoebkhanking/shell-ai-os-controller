@@ -65,6 +65,21 @@ echo Preparing installer build environment...
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
+echo Installing bundled offline LLM runtime...
+%PY_CMD% -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+set "SHELL_RC=!ERRORLEVEL!"
+if not "!SHELL_RC!"=="0" goto failed
+
+echo Staging offline TTS assets...
+%PY_CMD% tools\stage_kokoro_tts_assets.py --variant int8
+set "SHELL_RC=!ERRORLEVEL!"
+if not "!SHELL_RC!"=="0" goto failed
+
+echo Staging offline LLM assets...
+%PY_CMD% tools\stage_qwen_offline_llm_assets.py --variant q8_official
+set "SHELL_RC=!ERRORLEVEL!"
+if not "!SHELL_RC!"=="0" goto failed
+
 %PY_CMD% tools\build_windows_installer.py --no-strict
 set "SHELL_RC=!ERRORLEVEL!"
 

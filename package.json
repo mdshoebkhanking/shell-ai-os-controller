@@ -1,6 +1,6 @@
 {
   "name": "shell-ai-os-controller",
-  "version": "1.0.0",
+  "version": "1.0.10",
   "description": "AI-native desktop control layer for voice, tools, automation, agents, and local workflows.",
   "private": true,
   "license": "Apache-2.0",

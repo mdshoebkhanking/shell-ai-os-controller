@@ -51,14 +51,21 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     bridge = read_project_file("shell_web_ui/src/shellBridge.ts")
 
     assert "offline-tts-status" in settings
+    assert "offline-llm-status" in settings
     assert "applyOfflineTtsStatus" in settings
+    assert "applyOfflineLlmStatus" in settings
     assert "refreshOfflineTtsStatus" in settings
+    assert "refreshOfflineLlmStatus" in settings
     assert "OFFLINE TTS" in settings
+    assert "OFFLINE BRAIN" in settings
     assert "offlineTtsCandidateSummary" in settings
+    assert "offlineLlmCandidateSummary" in settings
     assert "Browser speech fallback" in bridge
     assert "case 'offline-tts-status'" in bridge
+    assert "case 'offline-llm-status'" in bridge
     assert "settingsTabs = [" in settings
     assert "OFFLINE TTS" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
+    assert "OFFLINE BRAIN" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
 
 
 def test_webengine_host_exposes_settings_channels_and_language_prompt():
@@ -66,6 +73,7 @@ def test_webengine_host_exposes_settings_channels_and_language_prompt():
 
     assert '"get-settings": self._get_settings' in host
     assert '"set-settings": self._set_settings' in host
+    assert '"offline-llm-status": self._offline_llm_status' in host
     assert "from shell_settings_manager import get_settings" in host
     assert "from shell_settings_manager import set_settings" in host
     assert "ALLOWED_SHELL_LANGUAGES = {\"hinglish\", \"english\", \"hindi\"}" in host

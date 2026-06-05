@@ -154,6 +154,9 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "NSIS.NSIS" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
+    assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
+    assert "tools\\stage_qwen_offline_llm_assets.py --variant q8_official" in exe_builder
+    assert "llama-cpp-python" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in public_release
     assert "EnableDelayedExpansion" in public_release
     assert "!ERRORLEVEL!" in public_release
@@ -203,7 +206,10 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "copy_web_ui_dist_to_stage" in builder
     assert "offline_tts_stage_report" in builder
     assert '"offline_tts": offline_tts_report' in builder
+    assert "offline_llm_stage_report" in builder
+    assert '"offline_llm": offline_llm_report' in builder
     assert "No packaged natural offline TTS model assets detected" in builder
+    assert "No packaged GGUF offline LLM model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert '!define AppIconName "shell-ai.ico"' in nsi
     assert 'CreateShortCut "$DESKTOP\\Shell AI OS Controller.lnk" "$INSTDIR\\${AppExeName}" "" "$INSTDIR\\${AppIconName}" 0' in nsi
@@ -257,6 +263,30 @@ def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_
     assert ready["engines"]["kokoro"]["model_family"] == "Kokoro-82M"
 
 
+def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_path):
+    build_windows_installer = load_tool_module("build_windows_installer")
+
+    llm_root = tmp_path / "models" / "llm"
+    monkeypatch.setattr(build_windows_installer, "LLM_MODEL_STAGE", llm_root)
+
+    fallback = build_windows_installer.offline_llm_stage_report()
+    assert fallback["status"] == "fallback"
+    assert fallback["model_file_count"] == 0
+
+    qwen = llm_root / "qwen3"
+    qwen.mkdir(parents=True)
+    (qwen / "Qwen3-1.7B-Q8_0.gguf").write_bytes(b"model")
+
+    ready = build_windows_installer.offline_llm_stage_report()
+    assert ready["status"] == "ready"
+    assert ready["model_file_count"] == 1
+    assert ready["recommended_engine"] == "llama-cpp-python"
+    assert ready["model_family"] == "Qwen3-1.7B-GGUF"
+    assert ready["language_support"] == ["english", "hinglish", "hindi"]
+    assert ready["runtime_downloads"] is False
+    assert ready["engines"]["llama_cpp_python"]["ready"] is True
+
+
 def test_kokoro_asset_staging_helper_dry_run(tmp_path):
     stage_kokoro = load_tool_module("stage_kokoro_tts_assets")
 
@@ -269,12 +299,28 @@ def test_kokoro_asset_staging_helper_dry_run(tmp_path):
     assert not (tmp_path / "kokoro-v1.0.int8.onnx").exists()
 
 
+def test_qwen_offline_llm_asset_staging_helper_dry_run(tmp_path):
+    stage_qwen = load_tool_module("stage_qwen_offline_llm_assets")
+
+    report = stage_qwen.stage_assets(output_dir=tmp_path, variant="q8_official", dry_run=True, force=False)
+
+    assert report["status"] == "dry-run"
+    assert report["model_family"] == "Qwen3-1.7B-GGUF"
+    assert report["model_repo"] == "Qwen/Qwen3-1.7B-GGUF"
+    assert report["variant"] == "q8_official"
+    assert [asset["name"] for asset in report["assets"]] == ["Qwen3-1.7B-Q8_0.gguf"]
+    assert not (tmp_path / "Qwen3-1.7B-Q8_0.gguf").exists()
+
+
 def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
     assert "kokoro-onnx" in workflow
     assert "tools/stage_kokoro_tts_assets.py --variant int8" in workflow
     assert "models/tts/kokoro" in workflow
+    assert "llama-cpp-python" in workflow
+    assert "tools/stage_qwen_offline_llm_assets.py --variant q8_official" in workflow
+    assert "models/llm/qwen3" in workflow
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():
