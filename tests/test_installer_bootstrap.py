@@ -192,8 +192,10 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert 'CreateShortCut "$DESKTOP\\Shell AI OS Controller.lnk" "$INSTDIR\\${AppExeName}" "" "$INSTDIR\\${AppIconName}" 0' in nsi
     assert 'CreateShortCut "$SMPROGRAMS\\Shell AI OS Controller\\Repair Shell AI.lnk" "$INSTDIR\\Repair_ShellAI.bat" "" "$INSTDIR\\${AppIconName}" 0' in nsi
     assert "Function RefreshShellIcons" in nsi
+    assert "Function un.RefreshShellIcons" in nsi
     assert "SHChangeNotify" in nsi
     assert "Call RefreshShellIcons" in nsi
+    assert "Call un.RefreshShellIcons" in nsi
     assert '#define AppIconName "shell-ai.ico"' in iss
     assert 'IconFilename: "{app}\\{#AppIconName}"' in iss
     assert "procedure RefreshShellIcons" in iss

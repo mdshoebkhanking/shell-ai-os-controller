@@ -79,6 +79,10 @@ Function RefreshShellIcons
   System::Call 'shell32::SHChangeNotify(i ${SHCNE_ASSOCCHANGED}, i ${SHCNF_IDLIST}, i 0, i 0)'
 FunctionEnd
 
+Function un.RefreshShellIcons
+  System::Call 'shell32::SHChangeNotify(i ${SHCNE_ASSOCCHANGED}, i ${SHCNF_IDLIST}, i 0, i 0)'
+FunctionEnd
+
 Section "Shell AI OS Controller" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
@@ -124,5 +128,5 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\.shell_runtime\windows_installer_staging"
   RMDir /r "$INSTDIR\ShellAIApp"
   RMDir /r "$INSTDIR"
-  Call RefreshShellIcons
+  Call un.RefreshShellIcons
 SectionEnd
