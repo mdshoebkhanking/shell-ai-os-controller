@@ -22,7 +22,7 @@ echo   - validate the release package inputs
 echo   - build the React renderer
 echo   - bundle ShellAI.exe with PyInstaller
 echo   - stage a clean installer tree without secrets/runtime files
-echo   - compile a Windows setup EXE with NSIS / Nullsoft
+echo   - compile a Windows setup EXE with Inno Setup
 echo.
 
 set "PY_CMD="
@@ -41,23 +41,23 @@ if not defined PY_CMD (
   exit /b 1
 )
 
-where makensis.exe >nul 2>nul
+where ISCC.exe >nul 2>nul
 if errorlevel 1 (
-  echo NSIS compiler was not found. Trying winget install...
-  winget install --id NSIS.NSIS -e --accept-source-agreements --accept-package-agreements
+  echo Inno Setup compiler was not found. Trying winget install...
+  winget install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements
   call :refresh_path
 )
 
-where makensis.exe >nul 2>nul
+where ISCC.exe >nul 2>nul
 if errorlevel 1 (
-  if exist "%ProgramFiles(x86)%\NSIS\makensis.exe" set "NSIS_COMPILER=%ProgramFiles(x86)%\NSIS\makensis.exe"
+  if exist "%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe" set "INNO_SETUP_COMPILER=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 )
-if not defined NSIS_COMPILER (
-  if exist "%ProgramFiles%\NSIS\makensis.exe" set "NSIS_COMPILER=%ProgramFiles%\NSIS\makensis.exe"
+if not defined INNO_SETUP_COMPILER (
+  if exist "%ProgramFiles%\Inno Setup 6\ISCC.exe" set "INNO_SETUP_COMPILER=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 )
 
 echo Using Python command: !PY_CMD!
-if defined NSIS_COMPILER echo Using NSIS compiler: !NSIS_COMPILER!
+if defined INNO_SETUP_COMPILER echo Using Inno Setup compiler: !INNO_SETUP_COMPILER!
 echo.
 
 echo Preparing installer build environment...
@@ -80,7 +80,7 @@ echo Staging offline LLM assets...
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
-%PY_CMD% tools\build_windows_installer.py --no-strict
+%PY_CMD% tools\build_windows_installer.py --no-strict --installer-engine inno
 set "SHELL_RC=!ERRORLEVEL!"
 
 echo.

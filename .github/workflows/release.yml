@@ -181,8 +181,8 @@ jobs:
       - name: Stage Qwen offline LLM assets
         run: python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 
-      - name: Install NSIS
-        run: choco install nsis --no-progress -y
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
 
       - name: Validate version input
         if: ${{ inputs.version != '' }}
@@ -195,7 +195,7 @@ jobs:
           }
 
       - name: Build Windows setup EXE
-        run: python tools/build_windows_installer.py --skip-release-check
+        run: python tools/build_windows_installer.py --skip-release-check --installer-engine inno
 
       - name: Create Windows installer checksum
         shell: pwsh
@@ -289,11 +289,11 @@ jobs:
       - name: Stage Qwen offline LLM assets
         run: python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
 
-      - name: Install NSIS
-        run: choco install nsis --no-progress -y
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
 
       - name: Build Windows setup EXE
-        run: python tools/build_windows_installer.py --skip-release-check
+        run: python tools/build_windows_installer.py --skip-release-check --installer-engine inno
 
       - name: Create Windows installer checksum
         shell: pwsh

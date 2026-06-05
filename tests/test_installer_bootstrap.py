@@ -151,7 +151,8 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
     assert "tools\\build_windows_installer.py" in exe_builder
     assert "bundle ShellAI.exe with PyInstaller" in exe_builder
-    assert "NSIS.NSIS" in exe_builder
+    assert "JRSoftware.InnoSetup" in exe_builder
+    assert "--installer-engine inno" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
     assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
@@ -228,10 +229,12 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "prepare_windows_icon" in builder
     assert "--icon" in builder
     assert "NSIS_SCRIPT" in builder
-    assert 'installer_engine: str = "nsis"' in builder
+    assert 'installer_engine: str = "inno"' in builder
     assert "validate_release_file_set(files)" in builder
     assert "Windows .exe installer compilation requires Windows with" in builder
     assert "NSIS compiler not found" in builder
+    assert "Inno Setup compiler not found" in builder
+    assert "SolidCompression=no" in iss
     assert "--shell-ai-hub" in desktop_entry
     assert "SHELL_HUB_URL" in desktop_entry
     assert "CREATE_NO_WINDOW" in desktop_entry
@@ -321,6 +324,8 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "llama-cpp-python" in workflow
     assert "tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml" in workflow
     assert "models/llm/qwen3" in workflow
+    assert "choco install innosetup" in workflow
+    assert "--installer-engine inno" in workflow
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():

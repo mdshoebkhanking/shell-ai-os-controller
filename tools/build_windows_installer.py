@@ -128,7 +128,7 @@ def stage_release_files() -> dict[str, object]:
         "version": version(),
         "created_at": time.time(),
         "source_file_count": len(files),
-        "installer": "NSIS",
+        "installer": "Windows setup",
     }
     (APP_STAGE / "windows_installer_build.json").write_text(
         json.dumps(marker, indent=2, sort_keys=True),
@@ -441,7 +441,7 @@ def build_windows_installer(
     skip_release_check: bool,
     strict: bool,
     skip_app_build: bool = False,
-    installer_engine: str = "nsis",
+    installer_engine: str = "inno",
 ) -> dict[str, object]:
     if not skip_release_check:
         run_release_check(strict=strict)
@@ -521,8 +521,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--installer-engine",
         choices=("nsis", "inno"),
-        default="nsis",
-        help="Windows setup compiler to use. NSIS matches the IRIS/electron-builder setup style.",
+        default="inno",
+        help="Windows setup compiler to use. Inno Setup is the default for large offline-model bundles; NSIS remains available for smaller fallback builds.",
     )
     args = parser.parse_args(argv)
     try:
