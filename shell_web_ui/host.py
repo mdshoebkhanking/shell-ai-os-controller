@@ -30,6 +30,26 @@ except Exception:  # pragma: no cover - handled by the launcher
     QWebEngineSettings = None  # type: ignore
     QWebEngineView = None  # type: ignore
 
+try:
+    from shell_offline_tts import offline_tts_status, speak_offline_tts
+except Exception:  # pragma: no cover - fallback keeps the host importable
+    def offline_tts_status() -> dict[str, Any]:
+        return {
+            "success": True,
+            "available": False,
+            "engine": "fallback",
+            "reason": "Offline TTS service could not be imported.",
+            "candidates": [],
+        }
+
+    def speak_offline_tts(_text: str) -> dict[str, Any]:
+        return {
+            "success": False,
+            "available": False,
+            "engine": "fallback",
+            "message": "Offline TTS service could not be imported.",
+        }
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 WEB_UI_ROOT = Path(__file__).resolve().parent
@@ -43,6 +63,33 @@ UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
 UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
 UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
 DEFAULT_UPDATE_REPO = "mdshoebkhanking/shell-ai-os-controller"
+ALLOWED_SHELL_LANGUAGES = {"hinglish", "english", "hindi"}
+
+
+def _shell_language() -> str:
+    language = os.environ.get("SHELL_LANGUAGE", "").strip().lower()
+    if language in ALLOWED_SHELL_LANGUAGES:
+        return language
+    try:
+        from shell_settings_manager import get_settings
+
+        stored = str(
+            get_settings().get("shell_language") or get_settings().get("language") or ""
+        ).strip().lower()
+        if stored in ALLOWED_SHELL_LANGUAGES:
+            return stored
+    except Exception:
+        pass
+    return "hinglish"
+
+
+def _shell_language_instruction() -> str:
+    language = _shell_language()
+    if language == "english":
+        return "Reply in clear English only."
+    if language == "hindi":
+        return "Reply in simple Hindi. Use readable Hindi and keep it concise."
+    return "Reply in natural Hinglish: Hindi and English mixed casually."
 
 
 def _brand_icon_path() -> Path | None:
@@ -103,6 +150,8 @@ class ShellBackendBridge(QObject):
             "secure-get-keys": self._secure_keys,
             "secure-save-keys": self._secure_save_keys,
             "list-api-keys": self._list_api_keys,
+            "get-settings": self._get_settings,
+            "set-settings": self._set_settings,
             "get-personality": self._get_personality,
             "save-personality": self._save_personality,
             "set-personality": self._save_personality,
@@ -120,6 +169,7 @@ class ShellBackendBridge(QObject):
             "google-search": self._google_search,
             "execute-command": self._execute_command,
             "chat-message": self._chat_message,
+            "offline-tts-status": self._offline_tts_status,
             "speak-text": self._speak_text,
             "stop-speech": self._stop_speech,
             "start-voice": self._start_voice,
@@ -571,6 +621,24 @@ class ShellBackendBridge(QObject):
             return {"success": True, "keys": list_api_keys()}
         except Exception as exc:
             return {"success": False, "keys": [], "error": str(exc)}
+
+    def _get_settings(self, _args: list[Any]) -> dict[str, Any]:
+        try:
+            from shell_settings_manager import get_settings
+
+            return get_settings()
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    def _set_settings(self, args: list[Any]) -> dict[str, Any]:
+        try:
+            from shell_settings_manager import set_settings
+
+            payload = args[0] if args and isinstance(args[0], dict) else {}
+            ok, message, applied = set_settings(payload)
+            return {"success": ok, "message": message, "applied": applied}
+        except Exception as exc:
+            return {"success": False, "message": str(exc), "applied": {}}
 
     def _get_personality(self, _args: list[Any]) -> str:
         return os.environ.get("SHELL_PERSONALITY", "")
@@ -1139,7 +1207,8 @@ class ShellBackendBridge(QObject):
     def _brain_chat_fallback(self, text: str, *, previous_messages: list[Any] | None = None) -> str:
         context = self._history_context_snippet(previous_messages or [])
         system_prompt = (
-            "You are Shell AI, a concise Hinglish desktop OS assistant. "
+            "You are Shell AI, a concise desktop OS assistant. "
+            f"{_shell_language_instruction()} "
             "If the user asks who made, created, built, developed, owns, or created Shell AI, "
             "answer exactly: Mujhe Md Shoeb King ne banaya hai. Never say Meta, Google, OpenAI, Gemini, or any provider made you. "
             "Answer the user's normal text question directly in 1-3 short lines. "
@@ -1174,14 +1243,31 @@ class ShellBackendBridge(QObject):
         return self._local_chat_answer(text)
 
     def _local_chat_answer(self, text: str) -> str:
+        language = _shell_language()
         query = " ".join(str(text or "").lower().split())
         if "capital of france" in query:
+            if language == "english":
+                return "The capital of France is Paris."
+            if language == "hindi":
+                return "France की राजधानी Paris है."
             return "France ki capital Paris hai."
         if "memory" in query and "python" in query:
+            if language == "english":
+                return "Python stores objects on the heap; reference counting and garbage collection clean up unused objects."
+            if language == "hindi":
+                return "Python objects को heap में रखता है; reference counting और garbage collector unused objects clean करते हैं."
             return "Python memory objects ko heap mein manage karta hai; reference counting aur garbage collector unused objects clean karte hain."
         if "network protocol" in query:
+            if language == "english":
+                return "A network protocol is a set of rules devices use to exchange data, such as TCP/IP, HTTP, and DNS."
+            if language == "hindi":
+                return "Network protocol rules का set होता है जिससे devices data exchange करते हैं, जैसे TCP/IP, HTTP और DNS."
             return "Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS."
         if "who are you" in query or "tum kaun" in query:
+            if language == "english":
+                return "I am Shell AI, your desktop OS controller and assistant."
+            if language == "hindi":
+                return "मैं Shell AI हूँ, आपका desktop OS controller और assistant."
             return "Main Shell AI hoon, tumhara desktop OS controller aur assistant."
         if query in {"hi", "hello", "hey", "salam", "assalamualaikum"}:
             return "Haan bhai, bolo. Main sun rahi hoon."
@@ -1360,6 +1446,9 @@ class ShellBackendBridge(QObject):
                 return [exe, text]
         return None
 
+    def _offline_tts_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        return offline_tts_status()
+
     def _speak_text(self, args: list[Any]) -> dict[str, Any]:
         text = " ".join(str(args[0] if args else "").strip().split())
         if not text:
@@ -1369,12 +1458,39 @@ class ShellBackendBridge(QObject):
         if len(text) > max_chars:
             text = text[:max_chars].rsplit(" ", 1)[0].strip() + "..."
 
+        self._stop_speech_process()
+        offline_result = speak_offline_tts(text)
+        offline_process = offline_result.pop("_process", None) if isinstance(offline_result, dict) else None
+        if isinstance(offline_result, dict) and offline_result.get("success"):
+            if offline_process is not None:
+                self._speech_process = offline_process
+            payload = {
+                "state": "speaking",
+                "engine": offline_result.get("engine", "offline"),
+                "voice": offline_result.get("voice", ""),
+                "chars": offline_result.get("chars", len(text)),
+            }
+            self.emit_event("speech-status", payload)
+            return {
+                **offline_result,
+                "message": "Offline natural speech started",
+                "source": "offline-tts",
+            }
+        if isinstance(offline_result, dict) and offline_result.get("available"):
+            self.emit_event(
+                "speech-status",
+                {
+                    "state": "fallback",
+                    "engine": offline_result.get("engine", "offline"),
+                    "message": offline_result.get("message", "Offline TTS failed; using OS fallback."),
+                },
+            )
+
         command = self._tts_command(text)
         if not command:
             self.emit_event("speech-status", {"state": "error", "message": "No local TTS engine found"})
             return {"success": False, "message": "No local TTS engine found"}
 
-        self._stop_speech_process()
         try:
             self._speech_process = subprocess.Popen(
                 command,
@@ -1382,8 +1498,8 @@ class ShellBackendBridge(QObject):
                 stderr=subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
             )
-            self.emit_event("speech-status", {"state": "speaking", "chars": len(text)})
-            return {"success": True, "message": "Speech started", "chars": len(text)}
+            self.emit_event("speech-status", {"state": "speaking", "engine": "os", "chars": len(text)})
+            return {"success": True, "message": "Speech started", "chars": len(text), "source": "os-tts"}
         except Exception as exc:
             self.emit_event("speech-status", {"state": "error", "message": str(exc)})
             return {"success": False, "message": str(exc)}

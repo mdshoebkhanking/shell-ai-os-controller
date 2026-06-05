@@ -15,6 +15,7 @@ import OracleWidget from './Widgets/RagOrcaleWidget'
 import ResearchWidget from './Widgets/DeepResearch'
 import SemanticWidget from './Widgets/SematicSearch'
 import SmartDropZonesWidget from './Widgets/SmartZoneWidget'
+import { shellSpeechInstruction } from './services/language-settings'
 
 export type VisionMode = 'camera' | 'screen' | 'none'
 
@@ -23,6 +24,15 @@ type SystemNotice = {
   message: string
 }
 
+type VoiceRuntime = 'auto' | 'gemini' | 'backend'
+
+const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
+  const runtime = String(value || '').trim().toLowerCase()
+  return runtime === 'gemini' || runtime === 'backend' || runtime === 'auto' ? runtime : 'auto'
+}
+
+const desktopBridgeExpected = () => Boolean((window as any).qt?.webChannelTransport)
+
 const IndexRoot = () => {
   const [isOverlay, setIsOverlay] = useState(false)
 
@@ -30,8 +40,8 @@ const IndexRoot = () => {
   const [isMicMuted, setIsMicMuted] = useState(true)
   const [backendVoiceState, setBackendVoiceState] = useState('OFFLINE')
   const [systemNotice, setSystemNotice] = useState<SystemNotice | null>(null)
-  const [voiceRuntime, setVoiceRuntime] = useState<'gemini' | 'backend'>(
-    (localStorage.getItem('shell_voice_runtime') as 'gemini' | 'backend') || 'gemini'
+  const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntime>(() =>
+    normalizeVoiceRuntime(localStorage.getItem('shell_voice_runtime'))
   )
 
   const [isVideoOn, setIsVideoOn] = useState(false)
@@ -41,8 +51,10 @@ const IndexRoot = () => {
   const activeStreamRef = useRef<MediaStream | null>(null)
   const aiIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const lastSystemNoticeRef = useRef('')
-  const usesGeminiVoice = voiceRuntime === 'gemini'
-  const usesShellBackend = Boolean(window.shellAPI && !usesGeminiVoice)
+  const resolvedVoiceRuntime: 'gemini' | 'backend' =
+    voiceRuntime === 'auto' ? (desktopBridgeExpected() ? 'backend' : 'gemini') : voiceRuntime
+  const usesGeminiVoice = resolvedVoiceRuntime === 'gemini'
+  const usesShellBackend = Boolean(window.shellAPI && resolvedVoiceRuntime === 'backend')
 
   const showSystemNotice = (title: string, rawMessage: unknown) => {
     const message = String(rawMessage || '').trim()
@@ -99,8 +111,7 @@ const IndexRoot = () => {
 
   useEffect(() => {
     const onStorage = () => {
-      const stored = localStorage.getItem('shell_voice_runtime')
-      if (stored === 'backend' || stored === 'gemini') setVoiceRuntime(stored)
+      setVoiceRuntime(normalizeVoiceRuntime(localStorage.getItem('shell_voice_runtime')))
     }
     window.addEventListener('storage', onStorage)
     window.addEventListener('shell-voice-runtime-changed', onStorage)
@@ -273,7 +284,7 @@ const IndexRoot = () => {
         }
       }
       await shellService.forceSpeak(
-        `Speak this naturally in Shell AI voice. Keep it short and Hinglish-friendly: ${text}`
+        `Speak this naturally in Shell AI voice. ${shellSpeechInstruction()} Keep it short: ${text}`
       )
       return true
     } catch (err: any) {
@@ -445,7 +456,7 @@ const IndexRoot = () => {
           stopVision={stopVision}
           activeStream={activeStreamRef.current}
           backendVoiceState={backendVoiceState}
-          voiceRuntime={voiceRuntime}
+          voiceRuntime={resolvedVoiceRuntime}
           speakRealVoice={speakRealVoice}
         />
       </div>

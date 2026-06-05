@@ -1,6 +1,20 @@
 from installer import bootstrap
+import importlib.util
 import re
 import uuid
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def load_tool_module(module_name: str):
+    module_path = ROOT / "tools" / f"{module_name}.py"
+    spec = importlib.util.spec_from_file_location(f"_shell_test_{module_name}", module_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_bootstrap_detects_known_os():
@@ -187,6 +201,9 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "PackageNotFoundError" in builder
     assert "Skipping PyInstaller metadata for missing optional package" in builder
     assert "copy_web_ui_dist_to_stage" in builder
+    assert "offline_tts_stage_report" in builder
+    assert '"offline_tts": offline_tts_report' in builder
+    assert "No packaged natural offline TTS model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert '!define AppIconName "shell-ai.ico"' in nsi
     assert 'CreateShortCut "$DESKTOP\\Shell AI OS Controller.lnk" "$INSTDIR\\${AppExeName}" "" "$INSTDIR\\${AppIconName}" 0' in nsi
@@ -213,6 +230,27 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "SHELL_HUB_URL" in desktop_entry
     assert "CREATE_NO_WINDOW" in desktop_entry
     assert "installer/bootstrap.py launch" not in desktop_entry
+
+
+def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_path):
+    build_windows_installer = load_tool_module("build_windows_installer")
+
+    tts_root = tmp_path / "models" / "tts"
+    monkeypatch.setattr(build_windows_installer, "TTS_MODEL_STAGE", tts_root)
+
+    fallback = build_windows_installer.offline_tts_stage_report()
+    assert fallback["status"] == "fallback"
+    assert fallback["model_file_count"] == 0
+
+    kokoro = tts_root / "kokoro" / "english"
+    kokoro.mkdir(parents=True)
+    (kokoro / "kokoro.onnx").write_bytes(b"model")
+    (kokoro / "voices.bin").write_bytes(b"voices")
+
+    ready = build_windows_installer.offline_tts_stage_report()
+    assert ready["status"] == "ready"
+    assert ready["model_file_count"] == 2
+    assert ready["engines"]["kokoro"]["ready"] is True
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():

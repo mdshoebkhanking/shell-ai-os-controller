@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.metadata as importlib_metadata
+import importlib.util
 import json
 import os
 import platform
@@ -15,8 +16,25 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from tools.package_public_release import iter_release_files, validate_release_file_set, version  # noqa: E402
-from tools.production_release_check import build_report  # noqa: E402
+try:
+    from tools.package_public_release import iter_release_files, validate_release_file_set, version  # type: ignore # noqa: E402
+    from tools.production_release_check import build_report  # type: ignore # noqa: E402
+except ModuleNotFoundError:
+    def _load_tool_module(name: str):
+        module_path = ROOT / "tools" / f"{name}.py"
+        spec = importlib.util.spec_from_file_location(f"_shell_{name}", module_path)
+        if spec is None or spec.loader is None:
+            raise
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    _package_public_release = _load_tool_module("package_public_release")
+    _production_release_check = _load_tool_module("production_release_check")
+    iter_release_files = _package_public_release.iter_release_files
+    validate_release_file_set = _package_public_release.validate_release_file_set
+    version = _package_public_release.version
+    build_report = _production_release_check.build_report
 
 
 STAGING_ROOT = ROOT / ".shell_runtime" / "windows_installer_staging"
@@ -32,6 +50,7 @@ WEB_UI_DIST_INDEX = WEB_UI_DIST / "index.html"
 APP_BUNDLE_DIR = APP_STAGE / "ShellAIApp"
 APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
+TTS_MODEL_STAGE = APP_STAGE / "models" / "tts"
 ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
 ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
@@ -175,6 +194,43 @@ def stage_installed_icon(app_icon: Path | None) -> str:
     APP_ICON_STAGE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(app_icon, APP_ICON_STAGE)
     return str(APP_ICON_STAGE)
+
+
+def _has_any_file(path: Path, patterns: tuple[str, ...]) -> bool:
+    if not path.exists():
+        return False
+    for pattern in patterns:
+        if next(path.rglob(pattern), None) is not None:
+            return True
+    return False
+
+
+def offline_tts_stage_report() -> dict[str, object]:
+    kokoro_ready = _has_any_file(TTS_MODEL_STAGE / "kokoro", ("*.onnx",)) and _has_any_file(
+        TTS_MODEL_STAGE / "kokoro",
+        ("voices*.bin", "voices*.json", "*.bin"),
+    )
+    piper_ready = _has_any_file(TTS_MODEL_STAGE / "piper", ("*.onnx",)) and _has_any_file(
+        TTS_MODEL_STAGE / "piper",
+        ("*.onnx.json", "*.json"),
+    )
+    model_files = [path for path in TTS_MODEL_STAGE.rglob("*") if path.is_file()] if TTS_MODEL_STAGE.exists() else []
+    status = "ready" if kokoro_ready or piper_ready else "fallback"
+    reason = (
+        "Packaged offline TTS model assets detected."
+        if status == "ready"
+        else "No packaged natural offline TTS model assets detected; installer will rely on OS/browser speech fallback."
+    )
+    return {
+        "status": status,
+        "reason": reason,
+        "model_dir": str(TTS_MODEL_STAGE),
+        "model_file_count": len(model_files),
+        "engines": {
+            "kokoro": {"ready": kokoro_ready},
+            "piper": {"ready": piper_ready},
+        },
+    }
 
 
 def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]:
@@ -350,6 +406,7 @@ def build_windows_installer(
     if installer_engine not in {"nsis", "inno"}:
         raise RuntimeError(f"Unsupported installer engine: {installer_engine}")
     marker = stage_release_files()
+    offline_tts_report = offline_tts_stage_report()
     if not dry_run:
         copy_web_ui_dist_to_stage()
     icon_report = prepare_windows_icon(dry_run=dry_run)
@@ -376,6 +433,7 @@ def build_windows_installer(
         "inno_compiler": iscc or "",
         "source_file_count": marker["source_file_count"],
         "bundled_app": app_report,
+        "offline_tts": offline_tts_report,
         "expected_output": str(DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"),
     }
     if dry_run:

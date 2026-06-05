@@ -979,10 +979,6 @@ body {
   color: rgba(148, 163, 184, 0.56) !important;
 }
 
-.shell-sphere-shell {
-  filter: drop-shadow(0 0 24px rgba(185, 201, 238, 0.11));
-}
-
 .shell-shimmer {
   animation: shell-liquid-shimmer 1.8s var(--shell-liquid-ease) infinite;
 }

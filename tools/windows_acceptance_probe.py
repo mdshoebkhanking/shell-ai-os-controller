@@ -222,13 +222,32 @@ def check_agent_probe(py: Path) -> Check:
 def check_voice_runtime(py: Path) -> Check:
     code = (
         "import importlib.util, json; "
-        "mods=['pyttsx3','edge_tts','sounddevice','speech_recognition']; "
+        "mods=['pyttsx3','edge_tts','kokoro_onnx','sounddevice','speech_recognition']; "
         "print(json.dumps({m: bool(importlib.util.find_spec(m)) for m in mods}, sort_keys=True))"
     )
     result = run_cmd([py, "-c", code], name="voice dependency probe", timeout=30)
     if result.ok and "pyttsx3" in result.message:
         return result
     return result
+
+
+def check_offline_tts_status(py: Path) -> Check:
+    code = (
+        "import json; "
+        "from shell_offline_tts import offline_tts_status; "
+        "print(json.dumps(offline_tts_status(), sort_keys=True)); "
+        "raise SystemExit(0)"
+    )
+    result = run_cmd([py, "-c", code], name="offline TTS status probe", timeout=30)
+    if result.ok:
+        return result
+    return Check(
+        "offline TTS status probe",
+        True,
+        "WARN",
+        result.message or "Offline TTS status unavailable; Shell should still use OS TTS fallback.",
+        result.details,
+    )
 
 
 def check_local_tts_command(py: Path) -> Check:
@@ -349,6 +368,7 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(check_hub(py))
         checks.append(check_ui_probe(py, visible=args.visible_ui_probe))
         checks.append(check_voice_runtime(py))
+        checks.append(check_offline_tts_status(py))
         checks.append(check_local_tts_command(py))
         checks.append(check_hard_task_routes(py))
         if args.include_agents:

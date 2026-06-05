@@ -51,12 +51,41 @@ def test_lazy_tab_views_are_preloaded_before_first_switch():
         "loadSettingsView",
         "loadGalleryView",
         "loadControlCenterView",
+        "loadPhoneView",
     ]:
         assert f"const {loader}" in shell_ai
-        assert f"{loader}()" in shell_ai
+        assert loader in shell_ai
 
     assert "const preloadShellTabViews" in shell_ai
-    assert "void preloadShellTabViews().catch(() => undefined)" in shell_ai
+    assert "void preloadShellTabViews(() => cancelled).catch(() => undefined)" in shell_ai
     assert "requestIdleCallback" in shell_ai
     assert "animate-in" not in skeleton
     assert "fade-in" not in skeleton
+
+
+def test_lazy_tab_preload_is_staggered_to_avoid_startup_jank():
+    shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
+
+    assert "const shellTabViewLoaders = [" in shell_ai
+    assert "const PRELOAD_TAB_GAP_MS = 120" in shell_ai
+    assert "await waitForPreloadGap()" in shell_ai
+    assert "for (const loadView of shellTabViewLoaders)" in shell_ai
+    assert "await loadView()" in shell_ai
+    assert "Promise.all([" not in shell_ai
+    assert "let cancelled = false" in shell_ai
+    assert "cancelled = true" in shell_ai
+
+
+def test_shell_root_avoids_idle_render_churn():
+    shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
+    dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
+
+    assert "getSystemStatus" not in shell_ai
+    assert "setStats" not in shell_ai
+    assert "historyRequestInFlightRef" in shell_ai
+    assert "lastHistorySignatureRef" in shell_ai
+    assert "nextSignature === lastHistorySignatureRef.current" in shell_ai
+    assert "current.transform === nextStyle.transform" in shell_ai
+    assert "current.width === nextStyle.width" in shell_ai
+    assert "export default memo(" in dashboard
+    assert "areDashboardShellPropsEqual" in dashboard

@@ -1,4 +1,10 @@
 import { normalizeGeminiApiKey } from './services/api-key-utils'
+import {
+  SHELL_LANGUAGE_STORAGE_KEY,
+  normalizeShellLanguage,
+  readShellLanguage,
+  shellSpeechLocale
+} from './services/language-settings'
 import { handleImageGeneration } from './tools/Image-generator'
 
 type Listener = (event: unknown, payload?: unknown) => void
@@ -70,6 +76,43 @@ const writeFallbackGallery = (images: unknown[]) => {
   try {
     localStorage.setItem(fallbackGalleryKey, JSON.stringify(images.slice(0, 80)))
   } catch {}
+}
+
+const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' | 'pythonMemory' | 'networkProtocol' | 'filesAttached' | 'hello', values: Record<string, string> = {}) => {
+  const language = readShellLanguage()
+  const replies = {
+    hinglish: {
+      backendOffline: 'Shell backend bridge abhi connected nahi hai. Backend start hone ke baad main full jawab aur OS actions kar paungi.',
+      noRecall: 'Haan bhai, lekin is session mein abhi koi pehla chart ya command task saved nahi mila.',
+      recall: `Haan bhai, yaad hai. Tumne pichla kaam bola tha: "${values.task || ''}".`,
+      france: 'France ki capital Paris hai.',
+      pythonMemory: 'Python memory heap mein objects rakhta hai; reference counting aur garbage collector unused objects clean karte hain.',
+      networkProtocol: 'Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS.',
+      filesAttached: `Files attached hain: ${values.files || ''}. Backend connected hoga to main inka content read karke answer de paungi.`,
+      hello: 'Haan bhai, bolo. Main sun rahi hoon.'
+    },
+    english: {
+      backendOffline: 'The Shell backend bridge is not connected yet. Once it starts, I can answer fully and run OS actions.',
+      noRecall: 'I do not have an earlier chart or command task saved in this session yet.',
+      recall: `Yes, I remember. Your previous task was: "${values.task || ''}".`,
+      france: 'The capital of France is Paris.',
+      pythonMemory: 'Python stores objects on the heap; reference counting and the garbage collector clean up unused objects.',
+      networkProtocol: 'A network protocol is a set of rules devices use to exchange data, such as TCP/IP, HTTP, and DNS.',
+      filesAttached: `Files attached: ${values.files || ''}. Once the backend is connected, I can read their content and answer.`,
+      hello: 'Yes, tell me. I am listening.'
+    },
+    hindi: {
+      backendOffline: 'Shell backend bridge अभी connected नहीं है. Backend start होने के बाद मैं पूरा जवाब और OS actions कर पाऊंगी.',
+      noRecall: 'इस session में अभी कोई पिछला chart या command task saved नहीं मिला.',
+      recall: `हाँ, याद है. आपने पिछला काम बोला था: "${values.task || ''}".`,
+      france: 'France की राजधानी Paris है.',
+      pythonMemory: 'Python objects को heap में रखता है; reference counting और garbage collector unused objects clean करते हैं.',
+      networkProtocol: 'Network protocol rules का set होता है जिससे devices data exchange करते हैं, जैसे TCP/IP, HTTP और DNS.',
+      filesAttached: `Files attached हैं: ${values.files || ''}. Backend connected होगा तो मैं उनका content पढ़कर answer दे पाऊंगी.`,
+      hello: 'हाँ, बोलिए. मैं सुन रही हूँ.'
+    }
+  }
+  return replies[language][key]
 }
 
 const messageText = (message: any) => {
@@ -154,9 +197,9 @@ const recallFromHistory = (text: string, messages: any[]) => {
     .filter((value) => value && value.toLowerCase() !== lower)
 
   if (!previous.length) {
-    return 'Haan bhai, lekin is session mein abhi koi pehla chart ya command task saved nahi mila.'
+    return languageReply('noRecall')
   }
-  return `Haan bhai, yaad hai. Tumne pichla kaam bola tha: "${previous[previous.length - 1]}".`
+  return languageReply('recall', { task: previous[previous.length - 1] })
 }
 
 const creatorIdentityReply = (text: string, source = 'text') => {
@@ -288,6 +331,22 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
     case 'save-personality':
       localStorage.setItem('shell_personality', String(args[0] || ''))
       return true
+    case 'get-settings':
+      return {
+        language: readShellLanguage(),
+        shell_language: readShellLanguage()
+      }
+    case 'set-settings': {
+      const payload = (args[0] || {}) as Record<string, unknown>
+      const nextLanguage = normalizeShellLanguage(payload.language || payload.shell_language)
+      localStorage.setItem(SHELL_LANGUAGE_STORAGE_KEY, nextLanguage)
+      window.dispatchEvent(new CustomEvent('shell-language-changed', { detail: { language: nextLanguage } }))
+      return {
+        success: true,
+        message: '1 setting(s) updated',
+        applied: { language: nextLanguage, shell_language: nextLanguage }
+      }
+    }
     case 'get-gallery':
     case 'get-gallery-images':
       return readFallbackGallery()
@@ -420,20 +479,20 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
         emitFallbackActivity('research', 'error', researchPrompt, 'RESEARCH BACKEND OFFLINE', 100)
       }
       const lower = text.toLowerCase()
-      let reply = 'Shell backend bridge abhi connected nahi hai. Backend start hone ke baad main full jawab aur OS actions kar paungi.'
+      let reply = languageReply('backendOffline')
       const identityReply = creatorIdentityReply(text, source)
       const recallReply = recallFromHistory(text, messages)
       if (identityReply) reply = identityReply
       else if (recallReply) reply = recallReply
-      else if (lower.includes('capital of france')) reply = 'France ki capital Paris hai.'
+      else if (lower.includes('capital of france')) reply = languageReply('france')
       else if (lower.includes('memory') && lower.includes('python')) {
-        reply = 'Python memory heap mein objects rakhta hai; reference counting aur garbage collector unused objects clean karte hain.'
+        reply = languageReply('pythonMemory')
       } else if (lower.includes('network protocol')) {
-        reply = 'Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS.'
+        reply = languageReply('networkProtocol')
       } else if (attachmentNames.length) {
-        reply = `Files attached hain: ${attachmentNames.join(', ')}. Backend connected hoga to main inka content read karke answer de paungi.`
+        reply = languageReply('filesAttached', { files: attachmentNames.join(', ') })
       } else if (/^(hi|hello|hey|salam)\b/i.test(text.trim())) {
-        reply = 'Haan bhai, bolo. Main sun rahi hoon.'
+        reply = languageReply('hello')
       }
       const userText = attachmentNames.length
         ? `${text || 'Attached file'}\n\nAttached: ${attachmentNames.join(', ')}`
@@ -449,11 +508,25 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
       if (!text || !synth) return { success: false, error: 'Speech synthesis unavailable.' }
       synth.cancel()
       const utterance = new SpeechSynthesisUtterance(text.slice(0, 320))
+      utterance.lang = shellSpeechLocale()
       utterance.rate = 1
       utterance.pitch = 1
       synth.speak(utterance)
       return { success: true, source: 'web-speech' }
     }
+    case 'offline-tts-status':
+      return {
+        success: true,
+        available: Boolean(window.speechSynthesis),
+        engine: 'web-speech',
+        label: 'Browser speech fallback',
+        language: readShellLanguage(),
+        locale: shellSpeechLocale(),
+        reason: window.speechSynthesis
+          ? 'Backend bridge is offline; browser speech fallback is available.'
+          : 'Backend bridge is offline and browser speech synthesis is unavailable.',
+        candidates: []
+      }
     case 'stop-speech':
       window.speechSynthesis?.cancel()
       return { success: true, source: 'web-speech' }
@@ -561,22 +634,32 @@ const connectPythonBridge = async () => {
   })
 }
 
+const speakWithBrowser = async (speechText: string) => {
+  const synth = window.speechSynthesis
+  if (!speechText || !synth || typeof SpeechSynthesisUtterance === 'undefined') {
+    return { success: false, error: 'Speech synthesis unavailable.' }
+  }
+  synth.cancel()
+  const utterance = new SpeechSynthesisUtterance(speechText.slice(0, 320))
+  utterance.lang = shellSpeechLocale()
+  utterance.rate = 0.92
+  utterance.volume = 1
+  synth.speak(utterance)
+  return { success: true, source: 'browser-speech' }
+}
+
 const shellAPI = {
   call: (channel: string, ...args: unknown[]) => callPython(channel, args),
   startVoice: () => callPython('start-voice', []),
   stopVoice: () => callPython('stop-voice', []),
   speakText: async (text: string) => {
     const speechText = String(text || '').trim()
-    const synth = window.speechSynthesis
-    if (speechText && synth && typeof SpeechSynthesisUtterance !== 'undefined') {
-      synth.cancel()
-      const utterance = new SpeechSynthesisUtterance(speechText.slice(0, 320))
-      utterance.rate = 0.92
-      utterance.volume = 1
-      synth.speak(utterance)
-      return { success: true, source: 'browser-speech' }
+    const desktopBridgeExpected = Boolean(pythonBridge?.call || (window as any).qt?.webChannelTransport)
+    if (desktopBridgeExpected) {
+      const bridgeResult = (await callPython('speak-text', [speechText])) as any
+      if (bridgeResult?.success) return bridgeResult
     }
-    return callPython('speak-text', [text])
+    return speakWithBrowser(speechText)
   },
   stopSpeech: async () => {
     window.speechSynthesis?.cancel()

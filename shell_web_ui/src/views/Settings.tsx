@@ -18,15 +18,44 @@ import {
   RiRefreshLine,
   RiDownloadCloud2Line,
   RiRocketLine,
-  RiTelegramLine
+  RiTelegramLine,
+  RiTranslate2
 } from 'react-icons/ri'
 import { normalizeGeminiApiKey } from '../services/api-key-utils'
+import {
+  SHELL_LANGUAGE_OPTIONS,
+  SHELL_LANGUAGE_STORAGE_KEY,
+  ShellLanguage,
+  normalizeShellLanguage,
+  readShellLanguage
+} from '../services/language-settings'
 
 interface SettingsProps {
   isSystemActive: boolean
 }
 
 type TabType = 'updates' | 'general' | 'keys'
+type VoiceRuntime = 'auto' | 'gemini' | 'backend'
+type OfflineTtsStatus = {
+  success?: boolean
+  available?: boolean
+  engine?: string
+  label?: string
+  language?: string
+  locale?: string
+  modelDir?: string
+  reason?: string
+  candidates?: Array<{
+    engine?: string
+    available?: boolean
+    reason?: string
+  }>
+}
+
+const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
+  const runtime = String(value || '').trim().toLowerCase()
+  return runtime === 'auto' || runtime === 'gemini' || runtime === 'backend' ? runtime : 'auto'
+}
 
 const settingsTabs = [
   {
@@ -55,8 +84,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [voice, setVoice] = useState<'MALE' | 'FEMALE'>(
     (localStorage.getItem('shell_voice_profile') as 'MALE' | 'FEMALE') || 'MALE'
   )
-  const [voiceRuntime, setVoiceRuntime] = useState<'gemini' | 'backend'>(
-    (localStorage.getItem('shell_voice_runtime') as 'gemini' | 'backend') || 'gemini'
+  const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntime>(() =>
+    normalizeVoiceRuntime(localStorage.getItem('shell_voice_runtime'))
   )
   const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([])
   const [selectedMicId, setSelectedMicId] = useState(
@@ -65,6 +94,11 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [micStatus, setMicStatus] = useState('Microphone list not loaded.')
   const [personality, setPersonality] = useState('')
   const [userName, setUserName] = useState(localStorage.getItem('shell_user_name') || '')
+  const [language, setLanguage] = useState<ShellLanguage>(() => readShellLanguage())
+  const [languageStatus, setLanguageStatus] = useState('Shell replies use this language.')
+  const [offlineTtsStatus, setOfflineTtsStatus] = useState<OfflineTtsStatus | null>(null)
+  const [offlineTtsMessage, setOfflineTtsMessage] = useState('Offline TTS status not checked yet.')
+  const [offlineTtsBusy, setOfflineTtsBusy] = useState(false)
 
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('shell_custom_api_key') || '')
   const [groqKey, setGroqKey] = useState(localStorage.getItem('shell_groq_api_key') || '')
@@ -128,6 +162,14 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
         if (res) setPersonality(res)
       })
       window.electron.ipcRenderer.invoke('get-app-version').then((v) => setAppVersion(v))
+      window.electron.ipcRenderer.invoke('get-settings').then((settings) => {
+        const nextLanguage = normalizeShellLanguage(settings?.shell_language || settings?.language)
+        setLanguage(nextLanguage)
+        localStorage.setItem(SHELL_LANGUAGE_STORAGE_KEY, nextLanguage)
+      }).catch(() => {})
+      window.electron.ipcRenderer.invoke('offline-tts-status').then((status) => {
+        applyOfflineTtsStatus(status)
+      }).catch(() => {})
       window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
         if (!keys || typeof keys !== 'object') return
         if (keys.geminiKey) {
@@ -292,11 +334,68 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     localStorage.setItem('shell_voice_profile', v)
   }
 
-  const handleVoiceRuntimeChange = (runtime: 'gemini' | 'backend') => {
+  const handleVoiceRuntimeChange = (runtime: VoiceRuntime) => {
     if (isSystemActive) return
     setVoiceRuntime(runtime)
     localStorage.setItem('shell_voice_runtime', runtime)
     window.dispatchEvent(new CustomEvent('shell-voice-runtime-changed'))
+  }
+
+  const handleLanguageChange = async (nextLanguage: ShellLanguage) => {
+    setLanguage(nextLanguage)
+    localStorage.setItem(SHELL_LANGUAGE_STORAGE_KEY, nextLanguage)
+    window.dispatchEvent(new CustomEvent('shell-language-changed', { detail: { language: nextLanguage } }))
+
+    if (!window.electron?.ipcRenderer) {
+      setLanguageStatus('Saved locally. Shell text replies use this language now.')
+      return
+    }
+
+    try {
+      const result = await window.electron.ipcRenderer.invoke('set-settings', {
+        language: nextLanguage,
+        shell_language: nextLanguage
+      })
+      if (result?.success === false || result?.ok === false) {
+        setLanguageStatus(result?.message || result?.error || 'Language save failed.')
+        return
+      }
+      setLanguageStatus(
+        isSystemActive
+          ? 'Saved. Text replies update now; reconnect voice to refresh Gemini Live.'
+          : 'Saved. Shell replies use this language now.'
+      )
+    } catch (error: any) {
+      setLanguageStatus(`Language save failed: ${error?.message || error}`)
+    }
+  }
+
+  const applyOfflineTtsStatus = (status: OfflineTtsStatus | null | undefined) => {
+    if (!status || typeof status !== 'object') {
+      setOfflineTtsStatus(null)
+      setOfflineTtsMessage('Offline TTS status unavailable.')
+      return
+    }
+
+    setOfflineTtsStatus(status)
+    if (status.available) {
+      setOfflineTtsMessage(`${status.label || status.engine || 'Offline TTS'} ready.`)
+      return
+    }
+    setOfflineTtsMessage(status.reason || 'No packaged offline TTS model is ready; Shell will use local OS voice fallback.')
+  }
+
+  const refreshOfflineTtsStatus = async () => {
+    setOfflineTtsBusy(true)
+    try {
+      const status = await window.electron?.ipcRenderer.invoke('offline-tts-status')
+      applyOfflineTtsStatus(status)
+    } catch (error: any) {
+      setOfflineTtsStatus(null)
+      setOfflineTtsMessage(`Offline TTS check failed: ${error?.message || error}`)
+    } finally {
+      setOfflineTtsBusy(false)
+    }
   }
 
   const refreshMicrophones = async () => {
@@ -475,6 +574,13 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .trim()
     .split(/\s+/)
     .filter((w) => w.length > 0).length
+  const offlineTtsReady = Boolean(offlineTtsStatus?.available)
+  const offlineTtsBadge = offlineTtsBusy ? 'CHECKING' : offlineTtsReady ? 'READY' : 'FALLBACK'
+  const offlineTtsEngine = String(offlineTtsStatus?.engine || 'fallback').toUpperCase()
+  const offlineTtsCandidateSummary = (offlineTtsStatus?.candidates || [])
+    .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
+    .filter(Boolean)
+    .join('  ')
 
   const cardClass =
     'bg-[#0f0f13] border border-white/10 p-6 md:p-8 rounded-2xl flex flex-col gap-5 hover:border-white/20 transition-all shadow-lg'
@@ -688,6 +794,38 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                   </div>
                 </div>
 
+                <div className={`${cardClass} md:col-span-2`}>
+                  <div className="flex flex-col gap-1">
+                    <span className={titleClass}>
+                      <RiTranslate2 className="text-zinc-400" size={18} /> Shell Language
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      Controls Shell text replies and Gemini Live prompt language.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {SHELL_LANGUAGE_OPTIONS.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => handleLanguageChange(item.id)}
+                        className={`cursor-pointer rounded-lg border px-4 py-3 text-left transition-all ${
+                          language === item.id
+                            ? 'bg-white text-black border-white shadow-[0_0_15px_rgba(255,255,255,0.18)]'
+                            : 'bg-[#050505] border-white/10 text-zinc-400 hover:text-white hover:border-white/30'
+                        }`}
+                      >
+                        <span className="block text-[11px] font-black tracking-widest">
+                          {item.label}
+                        </span>
+                        <span className="block text-[9px] font-mono opacity-65 mt-1">
+                          {item.hint}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[9px] font-mono text-zinc-500">{languageStatus}</div>
+                </div>
+
                 <div className={`${cardClass} relative`}>
                   <div className="flex justify-between items-center">
                     <span className={titleClass}>
@@ -718,15 +856,16 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                     ))}
                   </div>
                   <div
-                    className={`grid grid-cols-2 gap-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {[
-                      { id: 'gemini', label: 'GEMINI LIVE', hint: 'Natural AI voice' },
-                      { id: 'backend', label: 'LOCAL FALLBACK', hint: 'OS voice only' }
+                      { id: 'auto', label: 'AUTO LOCAL', hint: 'Desktop first' },
+                      { id: 'backend', label: 'LOCAL ONLY', hint: 'Offline + OS' },
+                      { id: 'gemini', label: 'GEMINI LIVE', hint: 'Cloud voice' }
                     ].map((item) => (
                       <button
                         key={item.id}
-                        onClick={() => handleVoiceRuntimeChange(item.id as 'gemini' | 'backend')}
+                        onClick={() => handleVoiceRuntimeChange(item.id as VoiceRuntime)}
                         disabled={isSystemActive}
                         className={`cursor-pointer rounded-lg border px-3 py-2 text-left transition-all ${
                           voiceRuntime === item.id
@@ -742,6 +881,46 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                         </span>
                       </button>
                     ))}
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-[#050505] p-3">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="block text-[10px] font-black tracking-widest text-zinc-500">
+                          OFFLINE TTS
+                        </span>
+                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
+                          {offlineTtsEngine}
+                          {offlineTtsStatus?.language ? ` / ${String(offlineTtsStatus.language).toUpperCase()}` : ''}
+                          {offlineTtsStatus?.locale ? ` / ${String(offlineTtsStatus.locale).toUpperCase()}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
+                            offlineTtsReady
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {offlineTtsBadge}
+                        </span>
+                        <button
+                          onClick={refreshOfflineTtsStatus}
+                          disabled={offlineTtsBusy}
+                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {offlineTtsBusy ? '...' : 'REFRESH'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
+                      {offlineTtsMessage}
+                    </div>
+                    {offlineTtsCandidateSummary && (
+                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineTtsCandidateSummary}
+                      </div>
+                    )}
                   </div>
                   <div
                     className={`mt-3 rounded-lg border border-white/10 bg-[#050505] p-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}

@@ -13,12 +13,10 @@ import {
   RiToolsLine,
   RiMore2Line
 } from 'react-icons/ri'
-import { getSystemStatus } from '@renderer/services/system-info'
 import { getHistory } from '@renderer/services/shell-ai-brain'
 import ViewSkeleton from '@renderer/components/ViewSkelrton'
 
 import DashboardView from '../views/Dashboard'
-import PhoneView from '../views/Phone'
 import { VisionMode } from '@renderer/IndexRoot'
 
 const loadAppsView = () => import('../views/APP')
@@ -27,6 +25,7 @@ const loadNotesView = () => import('../views/Notes')
 const loadSettingsView = () => import('../views/Settings')
 const loadGalleryView = () => import('../views/Gallery')
 const loadControlCenterView = () => import('../views/ControlCenter')
+const loadPhoneView = () => import('../views/Phone')
 
 const AppsView = lazy(loadAppsView)
 const WorkFlowEditorView = lazy(loadWorkFlowEditorView)
@@ -34,16 +33,31 @@ const NotesView = lazy(loadNotesView)
 const SettingsView = lazy(loadSettingsView)
 const GalleryView = lazy(loadGalleryView)
 const ControlCenter = lazy(loadControlCenterView)
+const PhoneView = lazy(loadPhoneView)
 
-const preloadShellTabViews = () =>
-  Promise.all([
-    loadAppsView(),
-    loadWorkFlowEditorView(),
-    loadNotesView(),
-    loadSettingsView(),
-    loadGalleryView(),
-    loadControlCenterView()
-  ])
+const PRELOAD_TAB_GAP_MS = 120
+const shellTabViewLoaders = [
+  loadAppsView,
+  loadWorkFlowEditorView,
+  loadNotesView,
+  loadSettingsView,
+  loadGalleryView,
+  loadControlCenterView,
+  loadPhoneView
+]
+
+const waitForPreloadGap = () =>
+  new Promise<void>((resolve) => {
+    window.setTimeout(resolve, PRELOAD_TAB_GAP_MS)
+  })
+
+const preloadShellTabViews = async (isCancelled: () => boolean) => {
+  for (const loadView of shellTabViewLoaders) {
+    if (isCancelled()) return
+    await loadView()
+    if (!isCancelled()) await waitForPreloadGap()
+  }
+}
 
 type ShellIdleWindow = Window & {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
@@ -85,11 +99,12 @@ const tabs = [...primaryTabs, ...optionalTabs]
 
 const ShellAI = (props: ShellProps) => {
   const [activeTab, setActiveTab] = useState('DASHBOARD')
-  const [stats, setStats] = useState<any>(null)
   const [chatHistory, setChatHistory] = useState<any[]>([])
   const [showSourceModal, setShowSourceModal] = useState(false)
   const [showMoreTabs, setShowMoreTabs] = useState(false)
   const historyClearVersionRef = useRef(0)
+  const historyRequestInFlightRef = useRef(false)
+  const lastHistorySignatureRef = useRef('')
   const tabRailRef = useRef<HTMLDivElement | null>(null)
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({})
   const [tabIndicatorStyle, setTabIndicatorStyle] = useState({
@@ -100,32 +115,45 @@ const ShellAI = (props: ShellProps) => {
   const isOptionalTabActive = optionalTabs.some((tab) => tab.id === activeTab)
 
   const fetchHistory = useCallback(async () => {
+    if (historyRequestInFlightRef.current) return
+    historyRequestInFlightRef.current = true
     const clearVersion = historyClearVersionRef.current
-    const history = await getHistory()
-    if (clearVersion !== historyClearVersionRef.current) return
-    if (Array.isArray(history)) setChatHistory(history.slice(-15))
+    try {
+      const history = await getHistory()
+      if (clearVersion !== historyClearVersionRef.current) return
+      if (!Array.isArray(history)) return
+
+      const nextHistory = history.slice(-15)
+      const nextSignature = JSON.stringify(nextHistory)
+      if (nextSignature === lastHistorySignatureRef.current) return
+
+      lastHistorySignatureRef.current = nextSignature
+      setChatHistory(nextHistory)
+    } finally {
+      historyRequestInFlightRef.current = false
+    }
   }, [])
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      getSystemStatus().then(setStats)
-    }, 500)
-    return () => clearInterval(timer)
-  }, [])
-
-  useEffect(() => {
+    let cancelled = false
     const preloadTabs = () => {
-      void preloadShellTabViews().catch(() => undefined)
+      void preloadShellTabViews(() => cancelled).catch(() => undefined)
     }
     const idleWindow = window as ShellIdleWindow
 
     if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
       const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 900 })
-      return () => idleWindow.cancelIdleCallback?.(idleHandle)
+      return () => {
+        cancelled = true
+        idleWindow.cancelIdleCallback?.(idleHandle)
+      }
     }
 
     const timer = window.setTimeout(preloadTabs, 150)
-    return () => window.clearTimeout(timer)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
   }, [])
 
   useEffect(() => {
@@ -137,15 +165,23 @@ const ShellAI = (props: ShellProps) => {
   const updateTabIndicator = useCallback(() => {
     const activeButton = tabButtonRefs.current[activeTab]
     if (!activeButton) {
-      setTabIndicatorStyle((current) => ({ ...current, opacity: 0 }))
+      setTabIndicatorStyle((current) => (current.opacity === 0 ? current : { ...current, opacity: 0 }))
       return
     }
 
-    setTabIndicatorStyle({
+    const nextStyle = {
       opacity: 1,
       transform: `translate3d(${activeButton.offsetLeft}px, 0, 0)`,
       width: `${activeButton.offsetWidth}px`
-    })
+    }
+
+    setTabIndicatorStyle((current) =>
+      current.opacity === nextStyle.opacity &&
+      current.transform === nextStyle.transform &&
+      current.width === nextStyle.width
+        ? current
+        : nextStyle
+    )
   }, [activeTab])
 
   useLayoutEffect(() => {
@@ -170,26 +206,25 @@ const ShellAI = (props: ShellProps) => {
 
   const handleTranscriptCleared = useCallback(() => {
     historyClearVersionRef.current += 1
+    lastHistorySignatureRef.current = ''
     setChatHistory([])
   }, [])
 
-  const handleVisionClick = () => {
+  const handleVisionClick = useCallback(() => {
     setShowSourceModal(true)
-  }
+  }, [])
 
   const activeView = () => {
     if (activeTab === 'DASHBOARD') {
       return (
         <DashboardView
           props={props}
-          stats={stats}
           chatHistory={chatHistory}
           onVisionClick={handleVisionClick}
           onTranscriptCleared={handleTranscriptCleared}
         />
       )
     }
-    if (activeTab === 'PHONE') return <PhoneView glassPanel={glassPanel} />
     return (
       <Suspense fallback={<ViewSkeleton />}>
         {activeTab === 'Macros' && <WorkFlowEditorView />}
@@ -198,6 +233,7 @@ const ShellAI = (props: ShellProps) => {
         {activeTab === 'CONTROL' && <ControlCenter />}
         {activeTab === 'SETTINGS' && <SettingsView isSystemActive={props.isSystemActive} />}
         {activeTab === 'GALLERY' && <GalleryView />}
+        {activeTab === 'PHONE' && <PhoneView glassPanel={glassPanel} />}
       </Suspense>
     )
   }

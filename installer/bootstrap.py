@@ -61,6 +61,7 @@ OPTIONAL_IMPORTS = {
     "rank_bm25": "optional BM25 lexical retrieval for Project RAG",
     "docker": "optional container backend for secure sandbox",
     "edge_tts": "optional neural TTS",
+    "kokoro_onnx": "optional natural offline TTS runtime",
     "pyttsx3": "offline low-latency TTS fallback",
 }
 
@@ -85,6 +86,7 @@ OPTIONAL_REQUIREMENT_NAMES = {
     "edge-tts",
     "gtts",
     "instagrapi",
+    "kokoro-onnx",
     "pdf2image",
     "playwright",
     "pyaudio",

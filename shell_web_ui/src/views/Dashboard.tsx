@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, useState } from 'react'
+import { memo, useEffect, useCallback, useRef, useState } from 'react'
 import Sphere from '@renderer/components/Sphere'
 import {
   RiCameraLine,
@@ -20,6 +20,7 @@ import {
   RiFileTextLine
 } from 'react-icons/ri'
 import { VisionMode } from '@renderer/IndexRoot'
+import { shellSpeechLocale } from '@renderer/services/language-settings'
 
 interface ShellProps {
   isSystemActive: boolean
@@ -38,7 +39,6 @@ interface ShellProps {
 
 interface DashboardViewProps {
   props: ShellProps
-  stats: any
   chatHistory: any[]
   onVisionClick: () => void
   onTranscriptCleared?: () => void
@@ -189,6 +189,7 @@ const speakWithBrowser = (text: string) =>
     try {
       window.speechSynthesis.cancel()
       const utterance = new SpeechSynthesisUtterance(text)
+      utterance.lang = shellSpeechLocale()
       utterance.rate = 0.92
       utterance.pitch = 1
       utterance.volume = 1
@@ -210,7 +211,7 @@ const speakWithBrowser = (text: string) =>
     }
   })
 
-export default function DashboardView({
+function DashboardView({
   props,
   chatHistory,
   onVisionClick,
@@ -249,6 +250,10 @@ export default function DashboardView({
   const [speechState, setSpeechState] = useState('VOICE OUT')
   const [activityState, setActivityState] = useState<ActivityState | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
+  const testVoiceText =
+    voiceRuntime === 'gemini'
+      ? 'Shell AI real Gemini voice ready hai. Main natural voice mein bol raha hoon.'
+      : 'Shell AI local voice ready hai. Main offline voice route se bol raha hoon.'
 
   const readTranscriptPrompt = () => (transcriptPrompt || transcriptInputRef.current?.value || '').trim()
 
@@ -956,7 +961,7 @@ export default function DashboardView({
         </div>
 
         <div
-          className={`shell-sphere-shell w-[52vh] h-[52vh] md:w-[42vh] md:h-[42vh] lg:w-[60vh] lg:h-[60vh] max-w-full transition-all duration-700 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 saturate-50'}`}
+          className={`w-[60vh] h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
         >
           <Sphere />
         </div>
@@ -994,7 +999,7 @@ export default function DashboardView({
             </button>
             <button
               aria-label="Test Shell voice"
-              onClick={() => speakShell('Shell AI real Gemini voice ready hai. Main natural voice mein bol raha hoon.')}
+              onClick={() => speakShell(testVoiceText)}
               className={`shell-control-button shell-dock-button cursor-pointer ${
                 speechState === 'SPEAKING'
                   ? 'shell-dock-button-speaking'
@@ -1002,7 +1007,7 @@ export default function DashboardView({
                     ? 'shell-dock-button-danger'
                     : ''
               }`}
-              title={voiceRuntime === 'gemini' ? 'Gemini Live voice' : speechState}
+              title={voiceRuntime === 'gemini' ? 'Gemini Live voice' : 'Local Shell voice'}
             >
               <RiVolumeUpLine size={20} />
             </button>
@@ -1137,3 +1142,26 @@ export default function DashboardView({
     </div>
   )
 }
+
+const areDashboardShellPropsEqual = (previous: ShellProps, next: ShellProps) =>
+  previous.isSystemActive === next.isSystemActive &&
+  previous.isMicMuted === next.isMicMuted &&
+  previous.isVideoOn === next.isVideoOn &&
+  previous.visionMode === next.visionMode &&
+  previous.activeStream === next.activeStream &&
+  previous.backendVoiceState === next.backendVoiceState &&
+  previous.voiceRuntime === next.voiceRuntime &&
+  previous.toggleSystem === next.toggleSystem &&
+  previous.toggleMic === next.toggleMic &&
+  previous.startVision === next.startVision &&
+  previous.stopVision === next.stopVision &&
+  previous.speakRealVoice === next.speakRealVoice
+
+export default memo(
+  DashboardView,
+  (previous, next) =>
+    previous.chatHistory === next.chatHistory &&
+    previous.onVisionClick === next.onVisionClick &&
+    previous.onTranscriptCleared === next.onTranscriptCleared &&
+    areDashboardShellPropsEqual(previous.props, next.props)
+)
