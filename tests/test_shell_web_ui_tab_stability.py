@@ -14,6 +14,11 @@ def test_shell_tab_pane_stays_mounted_and_avoids_surface_animation():
     css = read_project_file("shell_web_ui/src/assets/main.css")
 
     assert "key={activeTab}" not in shell_ai
+    assert "useTransition" in shell_ai
+    assert "startTabTransition" in shell_ai
+    assert "selectShellTab(tab.id)" in shell_ai
+    assert "setActiveTab(tabId)" in shell_ai
+    assert "shell-view-layer" in shell_ai
 
     pane_match = re.search(r"\.shell-view-pane\s*\{(?P<body>.*?)\n\}", css, flags=re.DOTALL)
     assert pane_match is not None
@@ -21,8 +26,30 @@ def test_shell_tab_pane_stays_mounted_and_avoids_surface_animation():
 
     assert "animation:" not in pane_body
     assert "will-change" not in pane_body
+    assert "display: flex" in pane_body
     assert "overflow: hidden" in pane_body
     assert "isolation: isolate" in pane_body
+
+    layer_match = re.search(r"\.shell-view-layer\s*\{(?P<body>.*?)\n\}", css, flags=re.DOTALL)
+    assert layer_match is not None
+    layer_body = layer_match.group("body")
+    assert "display: flex" in layer_body
+    assert "flex-direction: column" in layer_body
+    assert "position: relative" in layer_body
+    assert "width: 100%" in layer_body
+    assert "height: 100%" in layer_body
+    assert "min-height: 0" in layer_body
+    assert "overflow: hidden" in layer_body
+
+    layer_child_match = re.search(
+        r"\.shell-view-layer\s*>\s*\*\s*\{(?P<body>.*?)\n\}", css, flags=re.DOTALL
+    )
+    assert layer_child_match is not None
+    layer_child_body = layer_child_match.group("body")
+    assert "flex: 1 1 auto" in layer_child_body
+    assert "width: 100%" in layer_child_body
+    assert "max-width: 100%" in layer_child_body
+    assert "min-height: 0" in layer_child_body
 
 
 def test_primary_tab_views_do_not_zoom_during_tab_switches():

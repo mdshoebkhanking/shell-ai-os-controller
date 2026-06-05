@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, Suspense, lazy, useCallback, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, Suspense, lazy, useCallback, useRef, useTransition } from 'react'
 import {
   RiWifiLine,
   RiLayoutGridLine,
@@ -105,6 +105,7 @@ const ShellAI = (props: ShellProps) => {
   const [chatHistory, setChatHistory] = useState<any[]>([])
   const [showSourceModal, setShowSourceModal] = useState(false)
   const [showMoreTabs, setShowMoreTabs] = useState(false)
+  const [, startTabTransition] = useTransition()
   const historyClearVersionRef = useRef(0)
   const historyRequestInFlightRef = useRef(false)
   const lastHistorySignatureRef = useRef('')
@@ -217,6 +218,13 @@ const ShellAI = (props: ShellProps) => {
     setShowSourceModal(true)
   }, [])
 
+  const selectShellTab = useCallback((tabId: string) => {
+    startTabTransition(() => {
+      setActiveTab(tabId)
+    })
+    setShowMoreTabs(false)
+  }, [startTabTransition])
+
   const activeView = () => {
     if (activeTab === 'DASHBOARD') {
       return (
@@ -274,10 +282,7 @@ const ShellAI = (props: ShellProps) => {
                   tabButtonRefs.current[tab.id] = element
                 }}
                 aria-label={`Open ${tab.id} view`}
-                onClick={() => {
-                  setActiveTab(tab.id)
-                  setShowMoreTabs(false)
-                }}
+                onClick={() => selectShellTab(tab.id)}
                 className={`shell-tab cursor-pointer px-3 xl:px-4 py-1.5 text-[10px] font-bold tracking-widest rounded-full flex shrink-0 items-center justify-center gap-2 min-w-24 ${
                   activeTab === tab.id ? 'shell-tab-active' : ''
                 }`}
@@ -303,10 +308,7 @@ const ShellAI = (props: ShellProps) => {
                 <button
                   key={tab.id}
                   aria-label={`Open ${tab.id} view`}
-                  onClick={() => {
-                    setActiveTab(tab.id)
-                    setShowMoreTabs(false)
-                  }}
+                  onClick={() => selectShellTab(tab.id)}
                   className={`shell-control-button cursor-pointer rounded-xl border px-3 py-2 text-left text-[10px] font-black tracking-widest flex items-center gap-2 ${
                     activeTab === tab.id
                       ? 'shell-primary-action'
@@ -330,7 +332,9 @@ const ShellAI = (props: ShellProps) => {
 
       <div className="shell-page-surface flex-1 min-h-0 overflow-hidden relative">
         <div className="absolute inset-0 shell-view-pane">
-          {activeView()}
+          <div className="shell-view-layer">
+            {activeView()}
+          </div>
         </div>
       </div>
 
@@ -340,7 +344,7 @@ const ShellAI = (props: ShellProps) => {
             <button
               key={tab.id}
               aria-label={`Open ${tab.id} view`}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => selectShellTab(tab.id)}
               className={`shell-control-button cursor-pointer min-w-20 px-3 py-2 rounded-xl text-[9px] font-black tracking-widest flex flex-col items-center gap-1 border ${
                 activeTab === tab.id
                   ? 'shell-primary-action'
