@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.0.8 - Stable tab switching and refreshed setup icons
+
+- Preloads lazy Shell Web UI tab chunks after launch so first tab switches do
+  not show a blank or cropped Suspense fallback.
+- Removed tab-root fade animations from the main Shell Web UI panes to prevent
+  content disappearing during rapid tab changes.
+- Kept the Windows setup EXE and installed shortcuts on the Shell `.ico` path
+  with shell icon refresh hooks after shortcut changes.
+- Added focused regression coverage for tab stability, tab preloading, and
+  non-animated fallback rendering.
+
 ## 1.0.7 - Standalone Windows runtime installer
 
 - Changed the Windows setup EXE contract so normal installs launch the bundled
