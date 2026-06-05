@@ -1,3 +1,6 @@
+import sys
+import types
+
 from PyQt6.QtCore import QCoreApplication
 
 
@@ -60,6 +63,93 @@ def test_offline_tts_status_tracks_shell_language(monkeypatch, tmp_path):
 
     assert status["language"] == "hindi"
     assert status["locale"] == "hi"
+
+
+def test_offline_tts_status_reports_kokoro_metadata(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    model_dir = tmp_path / "kokoro"
+    model_dir.mkdir()
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    fake_kokoro = types.ModuleType("kokoro_onnx")
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", fake_kokoro)
+    monkeypatch.setenv("SHELL_OFFLINE_TTS", "1")
+    monkeypatch.setenv("SHELL_LANGUAGE", "hindi")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_ENGINE", "kokoro")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+
+    status = shell_offline_tts.offline_tts_status()
+
+    assert status["available"] is True
+    assert status["engine"] == "kokoro"
+    assert status["modelFamily"] == "Kokoro-82M"
+    assert status["runtime"] == "kokoro_onnx"
+    assert status["activeVoice"] == "hf_alpha"
+    assert status["voices"]["english"] == "af_heart"
+    assert status["voices"]["hindi"] == "hf_alpha"
+
+
+def test_kokoro_segments_route_hinglish_clauses(monkeypatch):
+    import shell_offline_tts
+
+    monkeypatch.setenv("SHELL_LANGUAGE", "hinglish")
+    monkeypatch.delenv("SHELL_HINGLISH_TTS_ROUTING", raising=False)
+
+    segments = shell_offline_tts._prepare_kokoro_segments("Open Chrome now. bhai kaise ho?")
+
+    assert [segment.language for segment in segments] == ["english", "hindi"]
+    assert [segment.locale for segment in segments] == ["en-us", "hi"]
+    assert [segment.voice for segment in segments] == ["af_heart", "hf_alpha"]
+    assert segments[0].text == "Open Chrome now."
+    assert segments[1].text == "bhai kaise ho?"
+
+
+def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    model_dir = tmp_path / "kokoro"
+    model_dir.mkdir()
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    calls = []
+    captured_audio = {}
+
+    class FakeKokoro:
+        def __init__(self, model, voices) -> None:
+            self.model = model
+            self.voices = voices
+
+        def create(self, text, voice, speed, lang):
+            calls.append({"text": text, "voice": voice, "speed": speed, "lang": lang})
+            return ([0.1, 0.0] if lang == "en-us" else [0.2, 0.0]), 24000
+
+    fake_kokoro = types.ModuleType("kokoro_onnx")
+    fake_kokoro.Kokoro = FakeKokoro
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", fake_kokoro)
+    monkeypatch.setenv("SHELL_LANGUAGE", "hinglish")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+    monkeypatch.setattr(
+        shell_offline_tts,
+        "_write_float_wav",
+        lambda path, samples, sample_rate: captured_audio.update(
+            {"path": path, "samples": samples, "sample_rate": sample_rate}
+        ),
+    )
+    monkeypatch.setattr(shell_offline_tts, "_play_wav_async", lambda _path: FakeSpeechProcess())
+
+    result = shell_offline_tts._speak_kokoro("Open Chrome now. bhai kaise ho?")
+
+    assert result["success"] is True
+    assert [call["lang"] for call in calls] == ["en-us", "hi"]
+    assert [call["voice"] for call in calls] == ["af_heart", "hf_alpha"]
+    assert result["voices"] == ["af_heart", "hf_alpha"]
+    assert result["segments"][1]["language"] == "hindi"
+    assert captured_audio["sample_rate"] == 24000
 
 
 def test_backend_bridge_prefers_offline_tts(monkeypatch):

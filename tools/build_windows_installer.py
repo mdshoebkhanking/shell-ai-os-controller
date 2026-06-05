@@ -226,8 +226,17 @@ def offline_tts_stage_report() -> dict[str, object]:
         "reason": reason,
         "model_dir": str(TTS_MODEL_STAGE),
         "model_file_count": len(model_files),
+        "recommended_engine": "kokoro",
+        "model_family": "Kokoro-82M",
+        "language_support": ["english", "hinglish", "hindi"],
+        "hinglish_strategy": "Shell routes mixed English/Hindi clauses before Kokoro synthesis.",
         "engines": {
-            "kokoro": {"ready": kokoro_ready},
+            "kokoro": {
+                "ready": kokoro_ready,
+                "model_family": "Kokoro-82M",
+                "expected_files": ["kokoro-v1.0.int8.onnx", "voices-v1.0.bin"],
+                "language_support": ["english", "hinglish", "hindi"],
+            },
             "piper": {"ready": piper_ready},
         },
     }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import platform
+import re
 import shutil
 import subprocess
 import time
@@ -21,7 +22,68 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_TTS_DIR = PROJECT_ROOT / ".shell_runtime" / "tts_audio"
 DEFAULT_ENGINE_ORDER = ("kokoro", "piper")
-SUPPORTED_SHELL_LANGUAGES = {"hinglish", "english", "hindi"}
+SUPPORTED_SHELL_LANGUAGE_ORDER = ("hinglish", "english", "hindi")
+SUPPORTED_SHELL_LANGUAGES = set(SUPPORTED_SHELL_LANGUAGE_ORDER)
+KOKORO_MODEL_FAMILY = "Kokoro-82M"
+KOKORO_LANGUAGE_LOCALES = {
+    "english": "en-us",
+    "hinglish": "en-us",
+    "hindi": "hi",
+}
+KOKORO_DEFAULT_VOICES = {
+    "english": "af_heart",
+    "hinglish": "af_heart",
+    "hindi": "hf_alpha",
+}
+HINGLISH_ROUTING_HINTS = frozenset(
+    {
+        "aap",
+        "abhi",
+        "acha",
+        "achha",
+        "baat",
+        "bhai",
+        "bol",
+        "bolna",
+        "bolra",
+        "chahiye",
+        "dekho",
+        "fir",
+        "hai",
+        "hain",
+        "han",
+        "haan",
+        "hoga",
+        "ho",
+        "horra",
+        "kar",
+        "karna",
+        "karo",
+        "kaise",
+        "kaisa",
+        "kya",
+        "kyun",
+        "main",
+        "mai",
+        "mat",
+        "mujhe",
+        "na",
+        "nahi",
+        "nai",
+        "os",
+        "pahle",
+        "samjhe",
+        "sahi",
+        "sab",
+        "shuru",
+        "theek",
+        "thik",
+        "tum",
+        "tumhe",
+        "yah",
+        "yeh",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -31,14 +93,34 @@ class OfflineTTSCandidate:
     model_dir: Path | None
     available: bool
     reason: str
+    metadata: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        return {
+        payload = {
             "engine": self.engine,
             "label": self.label,
             "modelDir": str(self.model_dir) if self.model_dir else "",
             "available": self.available,
             "reason": self.reason,
+        }
+        if self.metadata:
+            payload.update(self.metadata)
+        return payload
+
+
+@dataclass(frozen=True)
+class KokoroTTSSegment:
+    text: str
+    language: str
+    locale: str
+    voice: str
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "text": self.text,
+            "language": self.language,
+            "locale": self.locale,
+            "voice": self.voice,
         }
 
 
@@ -70,10 +152,46 @@ def _tts_locale() -> str:
     explicit = os.environ.get("SHELL_NATURAL_TTS_LANGUAGE", "").strip().lower()
     if explicit:
         return explicit
+    return _kokoro_locale_for(_shell_language())
+
+
+def _kokoro_locale_for(language: str) -> str:
+    specific = os.environ.get(f"SHELL_NATURAL_TTS_LANGUAGE_{language.upper()}", "").strip().lower()
+    if specific:
+        return specific
+    return KOKORO_LANGUAGE_LOCALES.get(language, "en-us")
+
+
+def _kokoro_voice_for(language: str) -> str:
+    specific = os.environ.get(f"SHELL_NATURAL_TTS_VOICE_{language.upper()}", "").strip()
+    if specific:
+        return specific
+    shared = os.environ.get("SHELL_NATURAL_TTS_VOICE", "").strip()
+    if shared:
+        return shared
+    return KOKORO_DEFAULT_VOICES.get(language, KOKORO_DEFAULT_VOICES["hinglish"])
+
+
+def _kokoro_routing_mode() -> str:
+    mode = os.environ.get("SHELL_HINGLISH_TTS_ROUTING", "balanced").strip().lower()
+    return mode if mode in {"balanced", "aggressive", "english"} else "balanced"
+
+
+def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> dict[str, Any]:
     language = _shell_language()
-    if language == "hindi":
-        return "hi"
-    return "en-us"
+    payload: dict[str, Any] = {
+        "modelFamily": KOKORO_MODEL_FAMILY,
+        "runtime": "kokoro_onnx",
+        "languageSupport": list(SUPPORTED_SHELL_LANGUAGE_ORDER),
+        "routing": _kokoro_routing_mode(),
+        "activeVoice": _kokoro_voice_for(language),
+        "voices": {lang: _kokoro_voice_for(lang) for lang in SUPPORTED_SHELL_LANGUAGE_ORDER},
+    }
+    if model:
+        payload["modelPath"] = str(model)
+    if voices:
+        payload["voicesPath"] = str(voices)
+    return payload
 
 
 def _candidate_model_dirs(engine: str) -> list[Path]:
@@ -130,6 +248,7 @@ def _kokoro_status() -> OfflineTTSCandidate:
             model_dir,
             False,
             "Kokoro model and voices file are not bundled.",
+            _kokoro_metadata(model, voices),
         )
     try:
         import kokoro_onnx  # noqa: F401
@@ -140,6 +259,7 @@ def _kokoro_status() -> OfflineTTSCandidate:
             model_dir,
             False,
             "kokoro_onnx runtime is not installed in the app bundle.",
+            _kokoro_metadata(model, voices),
         )
     return OfflineTTSCandidate(
         "kokoro",
@@ -147,6 +267,7 @@ def _kokoro_status() -> OfflineTTSCandidate:
         model_dir,
         True,
         "ready",
+        _kokoro_metadata(model, voices),
     )
 
 
@@ -209,6 +330,7 @@ def offline_tts_status() -> dict[str, Any]:
 
     available = next((candidate for candidate in candidates if candidate.available), None)
     if available:
+        metadata = available.metadata or {}
         return {
             "success": True,
             "available": True,
@@ -219,6 +341,7 @@ def offline_tts_status() -> dict[str, Any]:
             "modelDir": str(available.model_dir) if available.model_dir else "",
             "reason": "ready",
             "candidates": [candidate.as_dict() for candidate in candidates],
+            **metadata,
         }
 
     return {
@@ -288,6 +411,116 @@ def _write_float_wav(path: Path, samples: Any, sample_rate: int) -> None:
         wav_file.writeframes(pcm)
 
 
+def _contains_devanagari(text: str) -> bool:
+    return any(0x0900 <= ord(char) <= 0x097F for char in text)
+
+
+def _roman_hindi_score(text: str) -> tuple[int, int]:
+    words = re.findall(r"[a-zA-Z]+", text.lower())
+    score = sum(1 for word in words if word in HINGLISH_ROUTING_HINTS)
+    return score, len(words)
+
+
+def _classify_hinglish_clause(text: str) -> str:
+    if _contains_devanagari(text):
+        return "hindi"
+    score, word_count = _roman_hindi_score(text)
+    if score >= 2 or (score > 0 and score == word_count):
+        return "hindi"
+    if _kokoro_routing_mode() == "aggressive" and score > 0:
+        return "hindi"
+    return "english"
+
+
+def _split_speech_clauses(text: str) -> list[str]:
+    parts = re.split(r"([.!?;:,]+)", text)
+    clauses: list[str] = []
+    current = ""
+    for part in parts:
+        if not part:
+            continue
+        if re.fullmatch(r"[.!?;:,]+", part):
+            current = f"{current}{part}".strip()
+            if current:
+                clauses.append(current)
+                current = ""
+            continue
+        if current:
+            clauses.append(current.strip())
+        current = part.strip()
+    if current.strip():
+        clauses.append(current.strip())
+    return [clause for clause in clauses if clause]
+
+
+def _merge_adjacent_segments(segments: list[KokoroTTSSegment]) -> list[KokoroTTSSegment]:
+    merged: list[KokoroTTSSegment] = []
+    for segment in segments:
+        if not merged:
+            merged.append(segment)
+            continue
+        previous = merged[-1]
+        if previous.language == segment.language and previous.locale == segment.locale and previous.voice == segment.voice:
+            merged[-1] = KokoroTTSSegment(
+                text=f"{previous.text} {segment.text}".strip(),
+                language=previous.language,
+                locale=previous.locale,
+                voice=previous.voice,
+            )
+            continue
+        merged.append(segment)
+    return merged
+
+
+def _prepare_kokoro_segments(text: str) -> list[KokoroTTSSegment]:
+    speech_text = " ".join(str(text or "").strip().split())
+    if not speech_text:
+        return []
+
+    shell_language = _shell_language()
+    if shell_language != "hinglish" or _kokoro_routing_mode() == "english":
+        language = "english" if _kokoro_routing_mode() == "english" else shell_language
+        return [
+            KokoroTTSSegment(
+                text=speech_text,
+                language=language,
+                locale=_kokoro_locale_for(language),
+                voice=_kokoro_voice_for(language),
+            )
+        ]
+
+    segments = [
+        KokoroTTSSegment(
+            text=clause,
+            language=(language := _classify_hinglish_clause(clause)),
+            locale=_kokoro_locale_for(language),
+            voice=_kokoro_voice_for(language),
+        )
+        for clause in _split_speech_clauses(speech_text)
+    ]
+    return _merge_adjacent_segments(segments)
+
+
+def _join_kokoro_audio(rendered_segments: list[tuple[Any, int]]) -> tuple[Any, int]:
+    import numpy as np
+
+    if not rendered_segments:
+        return np.asarray([], dtype=np.float32), 24000
+    if len(rendered_segments) == 1:
+        return rendered_segments[0]
+
+    sample_rate = int(rendered_segments[0][1])
+    silence = np.zeros(int(sample_rate * 0.08), dtype=np.float32)
+    pieces = []
+    for index, (samples, segment_rate) in enumerate(rendered_segments):
+        if int(segment_rate) != sample_rate:
+            raise ValueError("Kokoro returned inconsistent sample rates across routed segments.")
+        pieces.append(np.asarray(samples, dtype=np.float32).reshape(-1))
+        if index < len(rendered_segments) - 1:
+            pieces.append(silence)
+    return np.concatenate(pieces), sample_rate
+
+
 def _speak_kokoro(text: str) -> dict[str, Any]:
     model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
     if not model or not voices:
@@ -297,13 +530,15 @@ def _speak_kokoro(text: str) -> dict[str, Any]:
     except Exception as exc:
         return {"success": False, "available": False, "engine": "kokoro", "message": f"kokoro_onnx unavailable: {exc}"}
 
-    voice = os.environ.get("SHELL_NATURAL_TTS_VOICE", "af_heart").strip() or "af_heart"
-    language = _tts_locale()
     speed = float(os.environ.get("SHELL_NATURAL_TTS_SPEED", "1.0") or "1.0")
     wav_path = _tts_audio_path("kokoro")
 
     engine = Kokoro(str(model), str(voices))
-    samples, sample_rate = engine.create(text, voice=voice, speed=speed, lang=language)
+    segments = _prepare_kokoro_segments(text)
+    rendered_segments = [
+        engine.create(segment.text, voice=segment.voice, speed=speed, lang=segment.locale) for segment in segments
+    ]
+    samples, sample_rate = _join_kokoro_audio(rendered_segments)
     _write_float_wav(wav_path, samples, int(sample_rate))
     process = _play_wav_async(wav_path)
     if not process:
@@ -312,7 +547,9 @@ def _speak_kokoro(text: str) -> dict[str, Any]:
         "success": True,
         "available": True,
         "engine": "kokoro",
-        "voice": voice,
+        "voice": segments[0].voice if segments else _kokoro_voice_for(_shell_language()),
+        "voices": sorted({segment.voice for segment in segments}),
+        "segments": [segment.as_dict() for segment in segments],
         "chars": len(text),
         "audioPath": str(wav_path),
         "_process": process,

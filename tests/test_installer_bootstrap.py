@@ -250,7 +250,31 @@ def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_
     ready = build_windows_installer.offline_tts_stage_report()
     assert ready["status"] == "ready"
     assert ready["model_file_count"] == 2
+    assert ready["recommended_engine"] == "kokoro"
+    assert ready["model_family"] == "Kokoro-82M"
+    assert ready["language_support"] == ["english", "hinglish", "hindi"]
     assert ready["engines"]["kokoro"]["ready"] is True
+    assert ready["engines"]["kokoro"]["model_family"] == "Kokoro-82M"
+
+
+def test_kokoro_asset_staging_helper_dry_run(tmp_path):
+    stage_kokoro = load_tool_module("stage_kokoro_tts_assets")
+
+    report = stage_kokoro.stage_assets(output_dir=tmp_path, variant="int8", dry_run=True, force=False)
+
+    assert report["status"] == "dry-run"
+    assert report["model_family"] == "Kokoro-82M"
+    assert report["variant"] == "int8"
+    assert [asset["name"] for asset in report["assets"]] == ["kokoro-v1.0.int8.onnx", "voices-v1.0.bin"]
+    assert not (tmp_path / "kokoro-v1.0.int8.onnx").exists()
+
+
+def test_release_workflow_stages_kokoro_assets_for_windows_installer():
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+
+    assert "kokoro-onnx" in workflow
+    assert "tools/stage_kokoro_tts_assets.py --variant int8" in workflow
+    assert "models/tts/kokoro" in workflow
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():
