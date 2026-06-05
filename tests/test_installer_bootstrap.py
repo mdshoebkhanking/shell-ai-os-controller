@@ -173,6 +173,10 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "ONE_CLICK_INSTALL.bat" not in iss
     assert "Start_ShellAI.bat" not in nsi
     assert "ShellAIApp\\ShellAI.exe" in builder
+    assert "APP_ICON_STAGE" in builder
+    assert "stage_installed_icon(app_icon)" in builder
+    assert "shutil.copy2(app_icon, APP_ICON_STAGE)" in builder
+    assert "/DAppIconName" in builder
     assert "build_bundled_desktop_app" in builder
     assert "PyInstaller" in builder
     assert "--windowed" in builder
@@ -184,6 +188,11 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "Skipping PyInstaller metadata for missing optional package" in builder
     assert "copy_web_ui_dist_to_stage" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
+    assert '!define AppIconName "shell-ai.ico"' in nsi
+    assert 'CreateShortCut "$DESKTOP\\Shell AI OS Controller.lnk" "$INSTDIR\\${AppExeName}" "" "$INSTDIR\\${AppIconName}" 0' in nsi
+    assert 'CreateShortCut "$SMPROGRAMS\\Shell AI OS Controller\\Repair Shell AI.lnk" "$INSTDIR\\Repair_ShellAI.bat" "" "$INSTDIR\\${AppIconName}" 0' in nsi
+    assert '#define AppIconName "shell-ai.ico"' in iss
+    assert 'IconFilename: "{app}\\{#AppIconName}"' in iss
     assert "RequestExecutionLevel user" in nsi
     assert 'Icon "${InstallerIcon}"' in nsi
     assert "prepare_windows_icon" in builder

@@ -179,7 +179,7 @@ const GalleryView = () => {
   }
 
   return (
-    <div className="flex-1 bg-white/8 h-full p-8 animate-in fade-in zoom-in duration-500 flex flex-col overflow-hidden">
+    <div className="flex-1 bg-white/8 h-full p-8 animate-in fade-in duration-150 flex flex-col overflow-hidden">
       <div className="flex items-center justify-between pb-6 border-b border-white/5 mb-6 shrink-0">
         <div className="flex items-center gap-3 text-zinc-100">
           <div className="p-2 bg-green-500/10 rounded-lg border border-green-500/20 shadow-[0_0_15px_rgba(168,85,247,0.15)]">

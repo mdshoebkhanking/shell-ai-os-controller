@@ -275,9 +275,16 @@ body {
 .shell-view-pane {
   backface-visibility: hidden;
   contain: layout paint;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
   transform: translate3d(0, 0, 0);
-  will-change: opacity, transform;
-  animation: shell-panel-arrive 340ms var(--shell-liquid-ease) both;
+  isolation: isolate;
+}
+
+.shell-view-pane > * {
+  min-height: 0;
+  min-width: 0;
 }
 
 .shell-liquid-panel {
@@ -982,7 +989,6 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .animate-in,
-  .shell-view-pane,
   .shell-shimmer,
   .shell-workstream-panel,
   .shell-workstream-panel::after,

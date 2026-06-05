@@ -253,7 +253,7 @@ const ShellAI = (props: ShellProps) => {
       </div>
 
       <div className="shell-page-surface flex-1 min-h-0 overflow-hidden relative">
-        <div key={activeTab} className="absolute inset-0 shell-view-pane">
+        <div className="absolute inset-0 shell-view-pane">
           {activeView()}
         </div>
       </div>

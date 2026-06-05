@@ -35,6 +35,8 @@ APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
 ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
+APP_ICON_NAME = "shell-ai.ico"
+APP_ICON_STAGE = APP_STAGE / APP_ICON_NAME
 PYINSTALLER_HIDDEN_IMPORTS = [
     "aiohttp",
     "aiohttp.web",
@@ -167,6 +169,14 @@ def prepare_windows_icon(*, dry_run: bool) -> dict[str, object]:
     return report
 
 
+def stage_installed_icon(app_icon: Path | None) -> str:
+    if not app_icon or not app_icon.exists():
+        return ""
+    APP_ICON_STAGE.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(app_icon, APP_ICON_STAGE)
+    return str(APP_ICON_STAGE)
+
+
 def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]:
     if platform.system().lower() != "windows":
         raise RuntimeError("Bundled ShellAI.exe compilation requires Windows with PyInstaller.")
@@ -229,6 +239,7 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
         "app_dir": str(APP_BUNDLE_DIR),
         "app_exe": str(APP_BUNDLE_EXE),
         "app_icon": str(app_icon) if app_icon else "",
+        "installed_icon": str(APP_ICON_STAGE) if APP_ICON_STAGE.exists() else "",
         "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
     }
 
@@ -293,6 +304,7 @@ def compile_inno_setup(iscc: str, app_icon: Path | None = None) -> Path:
         f"/DOutputDir={DIST_DIR}",
         f"/DAppVersion={version()}",
         f"/DAppExeName={APP_EXE_RELATIVE}",
+        f"/DAppIconName={APP_ICON_NAME}",
         "/DBundledApp=1",
     ]
     if app_icon and app_icon.exists():
@@ -313,6 +325,7 @@ def compile_nsis_setup(makensis: str, app_icon: Path | None = None) -> Path:
         f"/DOutputDir={DIST_DIR}",
         f"/DAppVersion={version()}",
         f"/DAppExeName={APP_EXE_RELATIVE}",
+        f"/DAppIconName={APP_ICON_NAME}",
         f"/DLicenseFile={ROOT / 'LICENSE'}",
     ]
     if app_icon and app_icon.exists():
@@ -341,6 +354,9 @@ def build_windows_installer(
         copy_web_ui_dist_to_stage()
     icon_report = prepare_windows_icon(dry_run=dry_run)
     app_icon = ICON_ICO if not dry_run else None
+    installed_icon = stage_installed_icon(app_icon)
+    if installed_icon:
+        icon_report["installed_icon"] = installed_icon
     iscc = find_inno_compiler()
     makensis = find_nsis_compiler()
     compiler = makensis if installer_engine == "nsis" else iscc

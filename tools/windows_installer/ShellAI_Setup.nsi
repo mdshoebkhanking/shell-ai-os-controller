@@ -22,6 +22,10 @@ SetCompressorDictSize 64
   !define AppExeName "ShellAIApp\ShellAI.exe"
 !endif
 
+!ifndef AppIconName
+  !define AppIconName "shell-ai.ico"
+!endif
+
 !ifndef LicenseFile
   !define LicenseFile "..\..\LICENSE"
 !endif
@@ -83,17 +87,17 @@ Section "Shell AI OS Controller" SecMain
   WriteUninstaller "$INSTDIR\Uninstall.exe"
 
   CreateDirectory "$SMPROGRAMS\Shell AI OS Controller"
-  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppExeName}" 0
-  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Repair Shell AI.lnk" "$INSTDIR\Repair_ShellAI.bat" "" "$INSTDIR\Repair_ShellAI.bat" 0
-  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Windows Acceptance Test.lnk" "$INSTDIR\Run_Windows_Acceptance_Test.bat" "" "$INSTDIR\Run_Windows_Acceptance_Test.bat" 0
+  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
+  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Repair Shell AI.lnk" "$INSTDIR\Repair_ShellAI.bat" "" "$INSTDIR\${AppIconName}" 0
+  CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Windows Acceptance Test.lnk" "$INSTDIR\Run_Windows_Acceptance_Test.bat" "" "$INSTDIR\${AppIconName}" 0
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
-  CreateShortCut "$DESKTOP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppExeName}" 0
+  CreateShortCut "$DESKTOP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
 SectionEnd
 
 Section /o "Start Shell AI when Windows starts" SecStartup
-  CreateShortCut "$SMSTARTUP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppExeName}" 0
+  CreateShortCut "$SMSTARTUP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
 SectionEnd
 
 Section "Uninstall"

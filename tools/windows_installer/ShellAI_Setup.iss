@@ -14,6 +14,10 @@
   #define AppExeName "ShellAIApp\ShellAI.exe"
 #endif
 
+#ifndef AppIconName
+  #define AppIconName "shell-ai.ico"
+#endif
+
 #define AppPublisher "mdshoebking"
 #define AppName "Shell AI OS Controller"
 
@@ -53,11 +57,11 @@ Name: "startup"; Description: "Start Shell AI when Windows starts"; GroupDescrip
 Source: "{#AppSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"
-Name: "{group}\Repair Shell AI"; Filename: "{app}\Repair_ShellAI.bat"; WorkingDir: "{app}"
-Name: "{group}\Windows Acceptance Test"; Filename: "{app}\Run_Windows_Acceptance_Test.bat"; WorkingDir: "{app}"
-Name: "{autodesktop}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
-Name: "{userstartup}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; Tasks: startup
+Name: "{group}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppIconName}"
+Name: "{group}\Repair Shell AI"; Filename: "{app}\Repair_ShellAI.bat"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppIconName}"
+Name: "{group}\Windows Acceptance Test"; Filename: "{app}\Run_Windows_Acceptance_Test.bat"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppIconName}"
+Name: "{autodesktop}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppIconName}"; Tasks: desktopicon
+Name: "{userstartup}\Shell AI OS Controller"; Filename: "{app}\{#AppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#AppIconName}"; Tasks: startup
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "Launch Shell AI"; WorkingDir: "{app}"; Flags: postinstall shellexec nowait skipifsilent unchecked
