@@ -120,7 +120,7 @@ const ControlCenter = () => {
   const summary = payload.summary || {}
 
   return (
-    <div className="h-full w-full p-4 bg-white/2 grid grid-cols-12 gap-4 overflow-hidden animate-in fade-in duration-150">
+    <div className="h-full w-full p-4 bg-white/2 grid grid-cols-12 gap-4 overflow-hidden">
       <div className="col-span-12 md:col-span-4 flex flex-col gap-4 min-h-0">
         <div className={`${glassPanel} p-4 shrink-0`}>
           <div className="flex items-center justify-between border-b border-white/10 pb-3">

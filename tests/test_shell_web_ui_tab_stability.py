@@ -37,3 +37,26 @@ def test_primary_tab_views_do_not_zoom_during_tab_switches():
     for relative_path in primary_views:
         content = read_project_file(relative_path)
         assert "animate-in fade-in zoom-in" not in content
+        assert "animate-in fade-in duration-150" not in content
+
+
+def test_lazy_tab_views_are_preloaded_before_first_switch():
+    shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
+    skeleton = read_project_file("shell_web_ui/src/components/ViewSkelrton.tsx")
+
+    for loader in [
+        "loadAppsView",
+        "loadWorkFlowEditorView",
+        "loadNotesView",
+        "loadSettingsView",
+        "loadGalleryView",
+        "loadControlCenterView",
+    ]:
+        assert f"const {loader}" in shell_ai
+        assert f"{loader}()" in shell_ai
+
+    assert "const preloadShellTabViews" in shell_ai
+    assert "void preloadShellTabViews().catch(() => undefined)" in shell_ai
+    assert "requestIdleCallback" in shell_ai
+    assert "animate-in" not in skeleton
+    assert "fade-in" not in skeleton

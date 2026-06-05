@@ -21,12 +21,34 @@ import DashboardView from '../views/Dashboard'
 import PhoneView from '../views/Phone'
 import { VisionMode } from '@renderer/IndexRoot'
 
-const AppsView = lazy(() => import('../views/APP'))
-const WorkFlowEditorView = lazy(() => import('../views/WorkFlowEditor'))
-const NotesView = lazy(() => import('../views/Notes'))
-const SettingsView = lazy(() => import('../views/Settings'))
-const GalleryView = lazy(() => import('../views/Gallery'))
-const ControlCenter = lazy(() => import('../views/ControlCenter'))
+const loadAppsView = () => import('../views/APP')
+const loadWorkFlowEditorView = () => import('../views/WorkFlowEditor')
+const loadNotesView = () => import('../views/Notes')
+const loadSettingsView = () => import('../views/Settings')
+const loadGalleryView = () => import('../views/Gallery')
+const loadControlCenterView = () => import('../views/ControlCenter')
+
+const AppsView = lazy(loadAppsView)
+const WorkFlowEditorView = lazy(loadWorkFlowEditorView)
+const NotesView = lazy(loadNotesView)
+const SettingsView = lazy(loadSettingsView)
+const GalleryView = lazy(loadGalleryView)
+const ControlCenter = lazy(loadControlCenterView)
+
+const preloadShellTabViews = () =>
+  Promise.all([
+    loadAppsView(),
+    loadWorkFlowEditorView(),
+    loadNotesView(),
+    loadSettingsView(),
+    loadGalleryView(),
+    loadControlCenterView()
+  ])
+
+type ShellIdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
 
 interface ShellProps {
   isSystemActive: boolean
@@ -89,6 +111,21 @@ const ShellAI = (props: ShellProps) => {
       getSystemStatus().then(setStats)
     }, 500)
     return () => clearInterval(timer)
+  }, [])
+
+  useEffect(() => {
+    const preloadTabs = () => {
+      void preloadShellTabViews().catch(() => undefined)
+    }
+    const idleWindow = window as ShellIdleWindow
+
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 900 })
+      return () => idleWindow.cancelIdleCallback?.(idleHandle)
+    }
+
+    const timer = window.setTimeout(preloadTabs, 150)
+    return () => window.clearTimeout(timer)
   }, [])
 
   useEffect(() => {

@@ -171,7 +171,7 @@ const PhoneView = ({ glassPanel }: { glassPanel?: string }) => {
 
   if (status !== 'connected' && uiMode === 'history') {
     return (
-      <div className="flex-1 flex flex-col items-center justify-start pt-10 p-6 md:p-10 animate-in fade-in duration-300 bg-[#050505] min-h-screen text-emerald-50 relative overflow-y-auto scrollbar-small pb-24">
+      <div className="flex-1 flex flex-col items-center justify-start pt-10 p-6 md:p-10 bg-[#050505] min-h-screen text-emerald-50 relative overflow-y-auto scrollbar-small pb-24">
         <div className="w-full max-w-6xl flex flex-col items-center">
           <div className="flex flex-col items-center text-center mb-10">
             <div className="p-4 bg-emerald-500/10 rounded-2xl border border-emerald-500/30 mb-5 inline-block">
@@ -231,7 +231,7 @@ const PhoneView = ({ glassPanel }: { glassPanel?: string }) => {
 
   if (status !== 'connected' && uiMode === 'manual') {
     return (
-      <div className="flex-1 flex flex-col lg:flex-row items-start justify-center gap-8 p-6 md:p-12 animate-in fade-in duration-300 bg-[#050505] min-h-dvh overflow-y-auto text-emerald-50 pb-24">
+      <div className="flex-1 flex flex-col lg:flex-row items-start justify-center gap-8 p-6 md:p-12 bg-[#050505] min-h-dvh overflow-y-auto text-emerald-50 pb-24">
         <div className="w-full lg:w-1/3 max-w-md flex flex-col gap-6 shrink-0">
           <div className="p-6 bg-black border border-emerald-900/40 rounded-2xl shadow-lg flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -421,7 +421,7 @@ const PhoneView = ({ glassPanel }: { glassPanel?: string }) => {
   }
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10 p-10 animate-in fade-in duration-500 bg-[#0a0a0a] min-h-screen overflow-y-auto">
+    <div className="flex-1 flex flex-col lg:flex-row items-center justify-center gap-10 p-10 bg-[#0a0a0a] min-h-screen overflow-y-auto">
       <div className="w-1/4 flex flex-col">
         <div className="flex items-center gap-4 mb-6">
           <div className="p-3 bg-purple-500/10 rounded-xl border border-purple-500/30">

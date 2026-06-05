@@ -2,7 +2,7 @@ import { RiLoader4Line } from 'react-icons/ri'
 
 const ViewSkeleton = () => {
   return (
-    <div className="w-full h-full p-8 animate-in fade-in duration-500">
+    <div className="w-full h-full min-h-0 p-8">
       <div className="shell-liquid-panel w-full h-full p-6 flex flex-col gap-6 relative overflow-hidden">
         <div className="absolute inset-0 -translate-x-full shell-shimmer bg-linear-to-r from-transparent via-blue-200/10 to-transparent z-10" />
 

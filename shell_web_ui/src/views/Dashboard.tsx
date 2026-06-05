@@ -807,7 +807,7 @@ export default function DashboardView({
   ) : null
 
   return (
-    <div className="flex-1 p-4 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative animate-in fade-in duration-150 w-full scrollbar-small">
+    <div className="flex-1 p-4 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative w-full scrollbar-small">
       <div className="hidden lg:flex col-span-3 flex-col gap-4 h-full z-40 overflow-y-auto pr-1 scrollbar-small">
         <div
           className={`${glassPanel} h-32 shrink-0 flex flex-col p-1 overflow-hidden relative group`}
