@@ -33,6 +33,8 @@ SetCompressorDictSize 64
 !define AppName "Shell AI OS Controller"
 !define AppPublisher "mdshoebking"
 !define AppRegKey "Software\ShellAI"
+!define SHCNE_ASSOCCHANGED 0x08000000
+!define SHCNF_IDLIST 0
 
 Name "${AppName}"
 Caption "${AppName} Setup"
@@ -73,6 +75,10 @@ UninstallIcon "${InstallerIcon}"
 
 !insertmacro MUI_LANGUAGE "English"
 
+Function RefreshShellIcons
+  System::Call 'shell32::SHChangeNotify(i ${SHCNE_ASSOCCHANGED}, i ${SHCNF_IDLIST}, i 0, i 0)'
+FunctionEnd
+
 Section "Shell AI OS Controller" SecMain
   SectionIn RO
   SetOutPath "$INSTDIR"
@@ -90,14 +96,17 @@ Section "Shell AI OS Controller" SecMain
   CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
   CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Repair Shell AI.lnk" "$INSTDIR\Repair_ShellAI.bat" "" "$INSTDIR\${AppIconName}" 0
   CreateShortCut "$SMPROGRAMS\Shell AI OS Controller\Windows Acceptance Test.lnk" "$INSTDIR\Run_Windows_Acceptance_Test.bat" "" "$INSTDIR\${AppIconName}" 0
+  Call RefreshShellIcons
 SectionEnd
 
 Section "Desktop shortcut" SecDesktop
   CreateShortCut "$DESKTOP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
+  Call RefreshShellIcons
 SectionEnd
 
 Section /o "Start Shell AI when Windows starts" SecStartup
   CreateShortCut "$SMSTARTUP\Shell AI OS Controller.lnk" "$INSTDIR\${AppExeName}" "" "$INSTDIR\${AppIconName}" 0
+  Call RefreshShellIcons
 SectionEnd
 
 Section "Uninstall"
@@ -115,4 +124,5 @@ Section "Uninstall"
   RMDir /r "$INSTDIR\.shell_runtime\windows_installer_staging"
   RMDir /r "$INSTDIR\ShellAIApp"
   RMDir /r "$INSTDIR"
+  Call RefreshShellIcons
 SectionEnd

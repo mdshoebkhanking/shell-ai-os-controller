@@ -70,3 +70,28 @@ Filename: "{app}\{#AppExeName}"; Description: "Launch Shell AI"; WorkingDir: "{a
 Type: filesandordirs; Name: "{app}\.shell_runtime\updates"
 Type: filesandordirs; Name: "{app}\.shell_runtime\windows_installer_staging"
 Type: filesandordirs; Name: "{app}\ShellAIApp"
+
+[Code]
+const
+  SHCNE_ASSOCCHANGED = $08000000;
+  SHCNF_IDLIST = $0000;
+
+procedure SHChangeNotify(wEventId: LongWord; uFlags: LongWord; dwItem1: LongWord; dwItem2: LongWord);
+  external 'SHChangeNotify@shell32.dll stdcall';
+
+procedure RefreshShellIcons;
+begin
+  SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, 0, 0);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssPostInstall then
+    RefreshShellIcons;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+begin
+  if CurUninstallStep = usPostUninstall then
+    RefreshShellIcons;
+end;
