@@ -216,6 +216,11 @@ body {
   backdrop-filter: blur(16px) saturate(118%);
 }
 
+.shell-primary-tabs {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
 .shell-settings-tabs {
   overflow-x: auto;
   overflow-y: hidden;

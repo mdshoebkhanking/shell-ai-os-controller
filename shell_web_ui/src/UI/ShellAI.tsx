@@ -35,7 +35,6 @@ const GalleryView = lazy(loadGalleryView)
 const ControlCenter = lazy(loadControlCenterView)
 const PhoneView = lazy(loadPhoneView)
 
-const PRELOAD_TAB_GAP_MS = 120
 const shellTabViewLoaders = [
   loadAppsView,
   loadWorkFlowEditorView,
@@ -46,17 +45,9 @@ const shellTabViewLoaders = [
   loadPhoneView
 ]
 
-const waitForPreloadGap = () =>
-  new Promise<void>((resolve) => {
-    window.setTimeout(resolve, PRELOAD_TAB_GAP_MS)
-  })
-
 const preloadShellTabViews = async (isCancelled: () => boolean) => {
-  for (const loadView of shellTabViewLoaders) {
-    if (isCancelled()) return
-    await loadView()
-    if (!isCancelled()) await waitForPreloadGap()
-  }
+  if (isCancelled()) return
+  await Promise.all(shellTabViewLoaders.map((loadView) => loadView()))
 }
 
 type ShellIdleWindow = Window & {
@@ -240,7 +231,7 @@ const ShellAI = (props: ShellProps) => {
 
   return (
     <div className="shell-ui-root h-full w-full text-zinc-100 font-sans overflow-hidden select-none flex flex-col relative pb-4">
-      <div className="shell-topbar h-14 w-full flex items-center justify-between px-6 z-50">
+      <div className="shell-topbar h-14 w-full flex items-center justify-between gap-4 px-4 lg:px-6 z-50">
         <div className="flex items-center gap-3 min-w-0">
           <div className="shell-logo-glass relative h-9 w-9 shrink-0 rounded-xl border p-1 overflow-hidden">
             <img
@@ -258,8 +249,8 @@ const ShellAI = (props: ShellProps) => {
           </div>
         </div>
 
-        <div className="relative hidden md:flex items-center gap-2">
-          <div ref={tabRailRef} className="shell-tabs flex p-1">
+        <div className="relative hidden md:flex min-w-0 flex-1 items-center justify-center gap-2">
+          <div ref={tabRailRef} className="shell-tabs shell-primary-tabs flex max-w-full overflow-x-auto p-1 scrollbar-none">
             <div
               className="shell-tab-indicator"
               style={tabIndicatorStyle}
@@ -275,7 +266,7 @@ const ShellAI = (props: ShellProps) => {
                   setActiveTab(tab.id)
                   setShowMoreTabs(false)
                 }}
-                className={`shell-tab cursor-pointer px-3 xl:px-4 py-1.5 text-[10px] font-bold tracking-widest rounded-full flex items-center justify-center gap-2 min-w-24 ${
+                className={`shell-tab cursor-pointer px-3 xl:px-4 py-1.5 text-[10px] font-bold tracking-widest rounded-full flex shrink-0 items-center justify-center gap-2 min-w-24 ${
                   activeTab === tab.id ? 'shell-tab-active' : ''
                 }`}
               >

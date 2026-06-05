@@ -10,6 +10,12 @@ const ORB_PARTICLE_SIZE = 0.012
 const ORB_OPACITY = 0.9
 const ORB_EXPANSION_STRENGTH = 0.4
 
+type SphereProps = {
+  voiceLevel?: number
+  active?: boolean
+  speaking?: boolean
+}
+
 const ORB_VERTEX_SHADER = `
   attribute float spreadFactor;
 
@@ -36,9 +42,15 @@ const ORB_FRAGMENT_SHADER = `
   }
 `
 
-const CustomParticleSphere = ({ count = 3000 }) => {
+const CustomParticleSphere = ({
+  count = 3000,
+  voiceLevel = 0,
+  active = false,
+  speaking = false
+}: SphereProps & { count?: number }) => {
   const mesh = useRef<THREE.Points>(null)
   const materialRef = useRef<THREE.ShaderMaterial>(null)
+  const smoothedVolumeRef = useRef(0)
 
   const dataArray = useMemo(() => new Uint8Array(128), [])
 
@@ -85,7 +97,7 @@ const CustomParticleSphere = ({ count = 3000 }) => {
     mesh.current.rotation.y += delta * 0.05
     mesh.current.rotation.z += delta * 0.05
 
-    let volume = 0
+    let liveVolume = 0
     if (shellService.analyser) {
       shellService.analyser.getByteFrequencyData(dataArray)
 
@@ -94,8 +106,15 @@ const CustomParticleSphere = ({ count = 3000 }) => {
       for (let i = 0; i < len; i++) {
         sum += dataArray[i]
       }
-      volume = sum / len / 128
+      liveVolume = sum / len / 128
     }
+
+    const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))
+    const idlePulse = active ? 0.035 + Math.sin(state.clock.elapsedTime * 2.4) * 0.018 : 0
+    const speechPulse = speaking ? 0.18 + Math.sin(state.clock.elapsedTime * 8) * 0.08 : 0
+    const targetVolume = Math.min(1, Math.max(liveVolume, backendLevel, idlePulse, speechPulse))
+    smoothedVolumeRef.current += (targetVolume - smoothedVolumeRef.current) * Math.min(1, delta * 9)
+    const volume = smoothedVolumeRef.current
 
     colorTarget.lerpColors(colorStart, colorEnd, volume)
 
@@ -125,7 +144,7 @@ const CustomParticleSphere = ({ count = 3000 }) => {
   )
 }
 
-const Sphere = () => {
+const Sphere = (props: SphereProps) => {
   return (
     <Canvas
       camera={{ position: [0, 0, 4.5] }}
@@ -134,7 +153,7 @@ const Sphere = () => {
       gl={{ antialias: false, powerPreference: 'high-performance' }}
     >
       <ambientLight intensity={0.6} />
-      <CustomParticleSphere />
+      <CustomParticleSphere {...props} />
     </Canvas>
   )
 }

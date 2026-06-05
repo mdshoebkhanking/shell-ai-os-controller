@@ -247,6 +247,7 @@ function DashboardView({
   const [transcriptPrompt, setTranscriptPrompt] = useState('')
   const [isSendingPrompt, setIsSendingPrompt] = useState(false)
   const [voiceEventState, setVoiceEventState] = useState(backendVoiceState || 'OFFLINE')
+  const [voiceAmplitude, setVoiceAmplitude] = useState(0)
   const [speechState, setSpeechState] = useState('VOICE OUT')
   const [activityState, setActivityState] = useState<ActivityState | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
@@ -303,6 +304,13 @@ function DashboardView({
     const onVoiceStatus = (_event: unknown, payload?: any) => {
       setVoiceEventState(String(payload?.state || 'unknown').toUpperCase())
     }
+    let amplitudeDecayTimer: number | undefined
+    const onVoiceAmplitude = (_event: unknown, payload?: any) => {
+      const value = Math.max(0, Math.min(1, Number(payload?.value || 0)))
+      setVoiceAmplitude(value)
+      if (amplitudeDecayTimer) window.clearTimeout(amplitudeDecayTimer)
+      amplitudeDecayTimer = window.setTimeout(() => setVoiceAmplitude(0), 240)
+    }
     const onSpeechStatus = (_event: unknown, payload?: any) => {
       const state = String(payload?.state || 'ready').toUpperCase()
       setSpeechState(state === 'SPEAKING' ? 'SPEAKING' : state === 'ERROR' ? 'VOICE ERR' : 'VOICE OUT')
@@ -315,10 +323,13 @@ function DashboardView({
       speakShell(reply)
     }
     window.shellAPI.on('voice-status', onVoiceStatus)
+    window.shellAPI.on('voice-amplitude', onVoiceAmplitude)
     window.shellAPI.on('speech-status', onSpeechStatus)
     window.shellAPI.on('chat-updated', onChatUpdated)
     return () => {
+      if (amplitudeDecayTimer) window.clearTimeout(amplitudeDecayTimer)
       window.shellAPI?.off('voice-status', onVoiceStatus)
+      window.shellAPI?.off('voice-amplitude', onVoiceAmplitude)
       window.shellAPI?.off('speech-status', onSpeechStatus)
       window.shellAPI?.off('chat-updated', onChatUpdated)
     }
@@ -813,7 +824,7 @@ function DashboardView({
 
   return (
     <div className="flex-1 p-4 grid grid-cols-12 gap-4 h-full overflow-y-auto md:overflow-hidden relative w-full scrollbar-small">
-      <div className="hidden lg:flex col-span-3 flex-col gap-4 h-full z-40 overflow-y-auto pr-1 scrollbar-small">
+      <div className="hidden xl:flex xl:col-span-3 flex-col gap-4 h-full z-40 overflow-y-auto pr-1 scrollbar-small">
         <div
           className={`${glassPanel} h-32 shrink-0 flex flex-col p-1 overflow-hidden relative group`}
         >
@@ -944,7 +955,7 @@ function DashboardView({
 
       </div>
 
-      <div className="col-span-12 md:col-span-7 lg:col-span-5 relative flex flex-col items-center justify-center min-h-[320px] md:min-h-0">
+      <div className="col-span-12 md:col-span-7 xl:col-span-5 relative flex flex-col items-center justify-center min-h-[320px] md:min-h-0">
         <div
           className={`lg:hidden absolute top-4 right-4 w-32 h-28 ${glassPanel} z-50 overflow-hidden ${isVideoOn ? 'block' : 'hidden'}`}
         >
@@ -963,7 +974,11 @@ function DashboardView({
         <div
           className={`w-[60vh] h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
         >
-          <Sphere />
+          <Sphere
+            active={isSystemActive}
+            speaking={speechState === 'SPEAKING' || speechState === 'GEMINI LIVE'}
+            voiceLevel={voiceAmplitude}
+          />
         </div>
 
         <div className="absolute bottom-5 md:bottom-8 lg:bottom-10 z-50">
@@ -1015,7 +1030,7 @@ function DashboardView({
         </div>
       </div>
 
-      <div className="col-span-12 md:col-span-5 lg:col-span-4 flex flex-col overflow-hidden min-h-[420px] md:min-h-0 md:h-full z-40">
+      <div className="col-span-12 md:col-span-5 xl:col-span-4 flex flex-col overflow-hidden min-h-[420px] md:min-h-0 md:h-full z-40">
         <div className={`${glassPanel} h-full p-4 lg:p-5 flex flex-col gap-4 border-blue-500/10 bg-slate-950/55`}>
           <div className="flex items-start justify-between gap-3 border-b border-blue-500/10 pb-3">
             <div className="min-w-0">
