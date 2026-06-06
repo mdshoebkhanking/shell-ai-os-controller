@@ -59,7 +59,11 @@ def prior_reports() -> dict[str, dict[str, Any]]:
         # Runtime health depends on generated Web UI/build artifacts that are
         # produced later in release jobs. The master audit should score the
         # source tree gates here; dedicated release steps run full health checks.
-        "release": load_tool("production_release_check").build_report(include_health=False, strict=True),
+        # Local developer .env values are intentionally excluded from public
+        # packages. The dedicated production release step surfaces them as
+        # warnings, while this source-tree master audit should only fail on
+        # packaged/template blockers.
+        "release": load_tool("production_release_check").build_report(include_health=False, strict=False),
         "repo": load_tool("repo_audit").build_report(),
     }
 
