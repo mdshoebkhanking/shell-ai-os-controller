@@ -12,7 +12,7 @@ def test_sphere_matches_original_voice_reactive_orb():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
 
     assert "const CustomParticleSphere = ({" in sphere
-    assert "count = 3000" in sphere
+    assert "count = 2000" in sphere
     assert "voiceLevel = 0" in sphere
     assert "speaking = false" in sphere
     assert "const ORB_AUDIO_COLOR = '#33db12'" in sphere
@@ -42,6 +42,7 @@ def test_sphere_uses_original_canvas_runtime_settings():
     assert "dpr={[1, 1.5]}" in sphere
     assert "performance={{ min: 0.5 }}" in sphere
     assert "powerPreference: 'high-performance'" in sphere
+    assert "if (document.hidden) return" in sphere
     assert "const ORB_PARTICLE_SIZE = 0.012" in sphere
     assert "shaderMaterial" in sphere
     assert "uScale" in sphere
@@ -54,3 +55,22 @@ def test_dashboard_uses_original_orb_wrapper():
     assert "w-[60vh] h-[60vh] max-w-full transition-all duration-1000" in dashboard
     assert "opacity-85 scale-90 grayscale" in dashboard
     assert "shell-sphere-shell" not in dashboard
+
+
+def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
+    dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
+
+    assert "WINDOWS_OR_LOW_CORE_DEVICE" in dashboard
+    assert "/Windows/i.test(navigator.userAgent || '')" in dashboard
+    assert "FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 500 : 250" in dashboard
+    assert "}, FACE_SCAN_INTERVAL_MS)" in dashboard
+
+
+def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
+    shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
+
+    assert "HISTORY_ACTIVE_POLL_MS = 900" in shell_ai
+    assert "HISTORY_IDLE_POLL_MS = 2500" in shell_ai
+    assert "HISTORY_BACKGROUND_POLL_MS = 6000" in shell_ai
+    assert "document.hidden" in shell_ai
+    assert "setInterval(fetchHistory, 500)" not in shell_ai

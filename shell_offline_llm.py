@@ -8,6 +8,7 @@ with Shell or explicitly configured by environment variables.
 from __future__ import annotations
 
 import os
+import platform
 import re
 import sys
 import threading
@@ -70,7 +71,15 @@ class OfflineLLMResult:
             "reason": self.reason,
         }
         if self.metadata:
-            payload.update(self.metadata)
+            for key, value in self.metadata.items():
+                if key == "success":
+                    payload["statusSuccess"] = value
+                elif key == "reason":
+                    payload["statusReason"] = value
+                elif key in payload:
+                    payload[f"metadata{key[:1].upper()}{key[1:]}"] = value
+                else:
+                    payload[key] = value
         return payload
 
 
@@ -236,8 +245,9 @@ def offline_llm_status() -> dict[str, Any]:
 
 
 def _generation_settings() -> dict[str, Any]:
+    default_max_tokens = "160" if _windows_performance_mode() else "220"
     return {
-        "max_tokens": max(32, min(512, int(float(os.environ.get("SHELL_OFFLINE_LLM_MAX_TOKENS", "220"))))),
+        "max_tokens": max(32, min(512, int(float(os.environ.get("SHELL_OFFLINE_LLM_MAX_TOKENS", default_max_tokens))))),
         "temperature": max(0.0, min(1.2, float(os.environ.get("SHELL_OFFLINE_LLM_TEMPERATURE", "0.2")))),
         "top_p": max(0.1, min(1.0, float(os.environ.get("SHELL_OFFLINE_LLM_TOP_P", "0.9")))),
         "repeat_penalty": max(1.0, min(2.0, float(os.environ.get("SHELL_OFFLINE_LLM_REPEAT_PENALTY", "1.05")))),
@@ -245,12 +255,29 @@ def _generation_settings() -> dict[str, Any]:
     }
 
 
+def _windows_performance_mode() -> bool:
+    configured = os.environ.get("SHELL_WINDOWS_PERFORMANCE_MODE", "").strip().lower()
+    if configured in {"0", "off", "false", "no", "disabled"}:
+        return False
+    if configured in {"1", "on", "true", "yes", "balanced", "low", "low_power"}:
+        return True
+    return platform.system().lower().startswith("win")
+
+
 def _runtime_settings() -> dict[str, Any]:
     cpu_count = os.cpu_count() or 4
+    if _windows_performance_mode():
+        default_context = "1024"
+        default_threads = str(max(1, min(4, cpu_count - 1 if cpu_count > 1 else 1)))
+        default_batch = "64"
+    else:
+        default_context = "4096"
+        default_threads = str(min(cpu_count, 6))
+        default_batch = "256"
     return {
-        "n_ctx": max(512, min(32768, int(float(os.environ.get("SHELL_OFFLINE_LLM_CONTEXT", "4096"))))),
-        "n_threads": max(1, min(12, int(float(os.environ.get("SHELL_OFFLINE_LLM_THREADS", str(min(cpu_count, 6))))))),
-        "n_batch": max(32, min(2048, int(float(os.environ.get("SHELL_OFFLINE_LLM_BATCH", "256"))))),
+        "n_ctx": max(512, min(32768, int(float(os.environ.get("SHELL_OFFLINE_LLM_CONTEXT", default_context))))),
+        "n_threads": max(1, min(12, int(float(os.environ.get("SHELL_OFFLINE_LLM_THREADS", default_threads))))),
+        "n_batch": max(32, min(2048, int(float(os.environ.get("SHELL_OFFLINE_LLM_BATCH", default_batch))))),
         "n_gpu_layers": max(0, min(999, int(float(os.environ.get("SHELL_OFFLINE_LLM_GPU_LAYERS", "0"))))),
         "verbose": str(os.environ.get("SHELL_OFFLINE_LLM_VERBOSE", "0")).strip().lower() in {"1", "true", "yes", "on"},
     }

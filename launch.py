@@ -1,6 +1,10 @@
 import os, sys, traceback, faulthandler
-os.environ['OPENBLAS_NUM_THREADS'] = '1'
-os.environ['OMP_NUM_THREADS'] = '1'
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
+os.environ.setdefault('MKL_NUM_THREADS', '1')
+os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
+if sys.platform.startswith('win'):
+    os.environ.setdefault('SHELL_WINDOWS_PERFORMANCE_MODE', 'balanced')
 
 # QtWebEngine / Chromium switches — MUST be set before QtWebEngine is
 # imported. Windows Server (and any GPU-less RDP host) blocklists WebGL

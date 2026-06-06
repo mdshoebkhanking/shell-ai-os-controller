@@ -25,34 +25,43 @@ _MAX_HISTORY = 20
 
 def _copy_to_clipboard(text: str) -> bool:
     """Copy text to clipboard using best available method."""
-    # Try pyperclip first
-    try:
-        import pyperclip
-        pyperclip.copy(text)
-        return True
-    except ImportError as _e:
-        logger.debug("ignored ImportError: %s", _e)
-    except Exception as e:
-        logger.warning(f"pyperclip copy failed: {e}")
-
-    # Windows fallback using clip command
     if sys.platform == "win32":
+        # Prefer native Windows clipboard plumbing over pyperclip. It avoids
+        # backend-selection issues on fresh installs and RDP sessions.
         try:
-            process = subprocess.Popen(
-                ["clip"],
-                stdin=subprocess.PIPE,
-                shell=True,
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Set-Clipboard -Value ([Console]::In.ReadToEnd())",
+                ],
+                input=text,
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
-            process.communicate(input=text.encode("utf-16le"))
-            return True
+            if result.returncode == 0:
+                return True
         except Exception as e:
-            logger.warning(f"clip command failed: {e}")
+            logger.debug("PowerShell Set-Clipboard failed: %s", e)
 
-    # Windows fallback using ctypes
-    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                "clip",
+                input=text,
+                capture_output=True,
+                text=True,
+                shell=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return True
+        except Exception as e:
+            logger.debug("clip command failed: %s", e)
+
         try:
             import ctypes
-            from ctypes import wintypes
 
             kernel32 = ctypes.windll.kernel32
             user32 = ctypes.windll.user32
@@ -70,38 +79,35 @@ def _copy_to_clipboard(text: str) -> bool:
             user32.CloseClipboard()
             return True
         except Exception as e:
-            logger.warning(f"ctypes clipboard copy failed: {e}")
+            logger.debug("ctypes clipboard copy failed: %s", e)
+
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        return True
+    except ImportError as _e:
+        logger.debug("ignored ImportError: %s", _e)
+    except Exception as e:
+        logger.debug("pyperclip copy failed: %s", e)
 
     return False
 
 
 def _read_from_clipboard() -> str:
     """Read text from clipboard using best available method."""
-    # Try pyperclip first
-    try:
-        import pyperclip
-        return pyperclip.paste()
-    except ImportError as _e:
-        logger.debug("ignored ImportError: %s", _e)
-    except Exception as e:
-        logger.warning(f"pyperclip paste failed: {e}")
-
-    # Windows fallback using PowerShell
     if sys.platform == "win32":
         try:
             result = subprocess.run(
-                ["powershell", "-command", "Get-Clipboard"],
+                ["powershell", "-NoProfile", "-Command", "Get-Clipboard -Raw"],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
             if result.returncode == 0:
-                return result.stdout.strip()
+                return result.stdout.rstrip("\r\n")
         except Exception as e:
-            logger.warning(f"PowerShell Get-Clipboard failed: {e}")
+            logger.debug("PowerShell Get-Clipboard failed: %s", e)
 
-    # Windows fallback using ctypes
-    if sys.platform == "win32":
         try:
             import ctypes
 
@@ -120,7 +126,15 @@ def _read_from_clipboard() -> str:
             user32.CloseClipboard()
             return ""
         except Exception as e:
-            logger.warning(f"ctypes clipboard read failed: {e}")
+            logger.debug("ctypes clipboard read failed: %s", e)
+
+    try:
+        import pyperclip
+        return pyperclip.paste()
+    except ImportError as _e:
+        logger.debug("ignored ImportError: %s", _e)
+    except Exception as e:
+        logger.debug("pyperclip paste failed: %s", e)
 
     return ""
 
@@ -196,17 +210,18 @@ async def clipboard_clear_tool() -> str:
     """
     Clear the system clipboard contents.
     """
-    # Try pyperclip
-    try:
-        import pyperclip
-        pyperclip.copy("")
-        return "Clipboard cleared successfully."
-    except ImportError as _e:
-        logger.debug("ignored ImportError: %s", _e)
-    except Exception as _e:
-        logger.debug("ignored Exception: %s", _e)
-    # Windows fallback
     if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", "Set-Clipboard -Value $null"],
+                capture_output=True,
+                timeout=5,
+            )
+            if result.returncode == 0:
+                return "Clipboard cleared successfully."
+        except Exception as _e:
+            logger.debug("ignored Exception: %s", _e)
+
         try:
             import ctypes
             user32 = ctypes.windll.user32
@@ -215,17 +230,16 @@ async def clipboard_clear_tool() -> str:
             user32.CloseClipboard()
             return "Clipboard cleared successfully."
         except Exception as e:
-            logger.warning(f"ctypes clipboard clear failed: {e}")
+            logger.debug("ctypes clipboard clear failed: %s", e)
 
-        try:
-            subprocess.run(
-                ["powershell", "-command", "Set-Clipboard -Value $null"],
-                capture_output=True,
-                timeout=5,
-            )
-            return "Clipboard cleared successfully."
-        except Exception as _e:
-            logger.debug("ignored Exception: %s", _e)
+    try:
+        import pyperclip
+        pyperclip.copy("")
+        return "Clipboard cleared successfully."
+    except ImportError as _e:
+        logger.debug("ignored ImportError: %s", _e)
+    except Exception as _e:
+        logger.debug("ignored Exception: %s", _e)
     return (
         "Error: Could not clear clipboard. "
         "Install pyperclip (pip install pyperclip) for best results."

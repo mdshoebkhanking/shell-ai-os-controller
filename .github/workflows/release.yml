@@ -160,7 +160,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
-          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sounddevice SpeechRecognition pynput keyboard pillow
+          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sherpa-onnx sounddevice SpeechRecognition pynput keyboard pillow
           python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
 
       - name: Cache Kokoro offline TTS assets
@@ -180,6 +180,15 @@ jobs:
 
       - name: Stage Falcon offline LLM assets
         run: python tools/stage_falcon_offline_llm_assets.py --variant q4_k_m
+
+      - name: Cache sherpa-onnx offline STT assets
+        uses: actions/cache@v4
+        with:
+          path: models/stt/sherpa-onnx
+          key: sherpa-onnx-streaming-zipformer-en-20m-assets
+
+      - name: Stage sherpa-onnx offline STT assets
+        run: python tools/stage_sherpa_stt_assets.py
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
@@ -268,7 +277,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
-          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sounddevice SpeechRecognition pynput keyboard pillow
+          python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx sherpa-onnx sounddevice SpeechRecognition pynput keyboard pillow
           python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
 
       - name: Cache Kokoro offline TTS assets
@@ -288,6 +297,15 @@ jobs:
 
       - name: Stage Falcon offline LLM assets
         run: python tools/stage_falcon_offline_llm_assets.py --variant q4_k_m
+
+      - name: Cache sherpa-onnx offline STT assets
+        uses: actions/cache@v4
+        with:
+          path: models/stt/sherpa-onnx
+          key: sherpa-onnx-streaming-zipformer-en-20m-assets
+
+      - name: Stage sherpa-onnx offline STT assets
+        run: python tools/stage_sherpa_stt_assets.py
 
       - name: Install Inno Setup
         run: choco install innosetup --no-progress -y

@@ -167,6 +167,13 @@ def test_speechy_photo_generate_phrase_routes_to_image_tool():
     assert route["args"]["description"] == "quantum battery ki"
 
 
+def test_misspelled_photo_generate_phrase_routes_to_image_tool():
+    route = route_natural_command("mere liye koi cat ke photo ganarete karke do ok")
+
+    assert route["tool"] == "shell_image_ai:generate_image_tool"
+    assert route["args"]["description"] == "cat"
+
+
 def test_hinglish_deep_research_routes_to_research_agent():
     route = route_natural_command("AI chips ke bare mein deep recerch karo")
 

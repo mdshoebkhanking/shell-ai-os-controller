@@ -48,6 +48,42 @@ def test_language_setting_reaches_browser_bridge_and_gemini_live_prompt():
     assert "utterance.lang = shellSpeechLocale()" in dashboard
 
 
+def test_dashboard_local_voice_prefers_backend_before_browser_speech():
+    dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
+    speak_shell = dashboard.split("const speakShell = useCallback", 1)[1].split("}, [speakRealVoice, voiceRuntime])", 1)[0]
+
+    assert "window.shellAPI?.speakText?.(speechText)" in speak_shell
+    assert speak_shell.index("window.shellAPI?.speakText?.(speechText)") < speak_shell.index("speakWithBrowser(speechText)")
+    assert "let didSendToRealVoice = false" in speak_shell
+    assert "didSendToRealVoice = await speakRealVoice(speechText)" in speak_shell
+
+
+def test_dashboard_voice_test_startup_text_is_english():
+    dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
+
+    assert "import { normalizeGeminiApiKey } from '@renderer/services/api-key-utils'" in dashboard
+    assert "const hasBrowserGeminiVoiceKey = () =>" in dashboard
+    assert "const useGeminiTestVoice = voiceRuntime === 'gemini' && hasBrowserGeminiVoiceKey()" in dashboard
+    assert "Premium Gemini voice is active. Your private command center is standing by." in dashboard
+    assert "Offline voice is active. Your private command center is standing by." in dashboard
+    assert "voice ready hai" not in dashboard
+    assert "bol raha hoon" not in dashboard
+
+
+def test_gemini_voice_without_key_falls_through_to_backend_voice():
+    root = read_project_file("shell_web_ui/src/IndexRoot.tsx")
+
+    assert "import { normalizeGeminiApiKey } from './services/api-key-utils'" in root
+    assert "const hasGeminiVoiceKey = async () =>" in root
+    assert "const localKey = normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key'))" in root
+    assert "if (!desktopBridgeExpected()) return false" in root
+    assert "if (!(await hasGeminiVoiceKey())) return false" in root
+    speak_real_voice = root.split("const speakRealVoice = async", 1)[1].split("const startVision = async", 1)[0]
+    assert speak_real_voice.index("if (!(await hasGeminiVoiceKey())) return false") < speak_real_voice.index(
+        "await shellService.connect()"
+    )
+
+
 def test_settings_exposes_offline_tts_status_without_extra_tab():
     settings = read_project_file("shell_web_ui/src/views/Settings.tsx")
     bridge = read_project_file("shell_web_ui/src/shellBridge.ts")

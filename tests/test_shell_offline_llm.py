@@ -1,6 +1,26 @@
 from __future__ import annotations
 
 
+def test_offline_llm_result_as_dict_keeps_generation_failure_reason():
+    import shell_offline_llm
+
+    result = shell_offline_llm.OfflineLLMResult(
+        False,
+        "",
+        "offline-llm",
+        "Offline LLM generation failed: Failed to create llama_context",
+        {"success": True, "reason": "Packaged offline LLM is ready.", "available": True},
+    )
+
+    payload = result.as_dict()
+
+    assert payload["success"] is False
+    assert payload["reason"] == "Offline LLM generation failed: Failed to create llama_context"
+    assert payload["statusSuccess"] is True
+    assert payload["statusReason"] == "Packaged offline LLM is ready."
+    assert payload["available"] is True
+
+
 def test_offline_llm_status_reports_disabled(monkeypatch, tmp_path):
     import shell_offline_llm
 
@@ -97,6 +117,29 @@ def test_generate_offline_reply_uses_packaged_llama_runtime(monkeypatch, tmp_pat
     assert calls["init"]["model_path"] == str(model)
     assert calls["completion"]["messages"][-1]["content"] == "hello"
     assert calls["completion"]["max_tokens"] >= 32
+
+
+def test_windows_performance_mode_caps_offline_llm_defaults(monkeypatch):
+    import shell_offline_llm
+
+    for key in (
+        "SHELL_WINDOWS_PERFORMANCE_MODE",
+        "SHELL_OFFLINE_LLM_CONTEXT",
+        "SHELL_OFFLINE_LLM_BATCH",
+        "SHELL_OFFLINE_LLM_THREADS",
+        "SHELL_OFFLINE_LLM_MAX_TOKENS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(shell_offline_llm.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(shell_offline_llm.os, "cpu_count", lambda: 2)
+
+    runtime = shell_offline_llm._runtime_settings()
+    generation = shell_offline_llm._generation_settings()
+
+    assert runtime["n_ctx"] == 1024
+    assert runtime["n_batch"] == 64
+    assert runtime["n_threads"] == 1
+    assert generation["max_tokens"] == 160
 
 
 def test_generate_offline_reply_short_circuits_shell_identity(monkeypatch, tmp_path):

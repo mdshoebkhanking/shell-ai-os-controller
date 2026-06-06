@@ -421,9 +421,14 @@ body {
 }
 
 .shell-session-dock {
+  width: fit-content;
+  max-width: calc(100vw - 28px);
   padding: 7px;
   gap: 7px;
   border-radius: 999px;
+  justify-content: center;
+  pointer-events: auto;
+  isolation: isolate;
 }
 
 .shell-session-dock::before {
@@ -435,6 +440,15 @@ body {
   background:
     linear-gradient(120deg, rgba(255, 255, 255, 0.10), transparent 28% 74%, rgba(255, 255, 255, 0.045));
   opacity: 0.5;
+}
+
+.shell-orb-dock-anchor {
+  inset-inline: 0;
+  bottom: clamp(14px, 4vh, 42px);
+  display: flex;
+  justify-content: center;
+  padding-inline: 14px;
+  pointer-events: none;
 }
 
 .shell-workstream-anchor {
@@ -880,8 +894,9 @@ body {
 .shell-dock-button {
   position: relative;
   display: grid;
-  width: 44px;
-  height: 44px;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
   place-items: center;
   border: 1px solid rgba(215, 225, 238, 0.12);
   border-radius: 999px;
@@ -892,6 +907,23 @@ body {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.075),
     0 8px 18px rgba(0, 0, 0, 0.20);
+  outline: none;
+  touch-action: manipulation;
+  z-index: 1;
+}
+
+.shell-dock-button svg {
+  width: 20px;
+  height: 20px;
+  filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.38));
+}
+
+.shell-dock-button:focus-visible {
+  border-color: rgba(244, 247, 251, 0.52);
+  box-shadow:
+    0 0 0 3px rgba(244, 247, 251, 0.13),
+    0 12px 28px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .shell-dock-button:hover {
@@ -905,13 +937,13 @@ body {
 .shell-dock-button-active,
 .shell-dock-button-speaking {
   color: #f8fbff;
-  border-color: rgba(185, 201, 238, 0.26);
+  border-color: rgba(126, 211, 186, 0.36);
   background:
-    radial-gradient(circle at 50% 0%, rgba(215, 225, 238, 0.12), transparent 62%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.105), rgba(134, 168, 231, 0.055)),
-    rgba(18, 22, 30, 0.72);
+    radial-gradient(circle at 50% 0%, rgba(126, 211, 186, 0.20), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.115), rgba(94, 234, 212, 0.070)),
+    rgba(16, 24, 28, 0.76);
   box-shadow:
-    0 0 18px rgba(185, 201, 238, 0.10),
+    0 0 20px rgba(94, 234, 212, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
 }
 
@@ -924,14 +956,30 @@ body {
 }
 
 .shell-dock-button-main {
-  width: 48px;
-  height: 48px;
-  margin-inline: 2px;
+  width: 52px;
+  height: 52px;
+  margin-inline: 3px;
   color: #f8fbff;
   border-color: rgba(215, 225, 238, 0.24);
   background:
     radial-gradient(circle at 46% 16%, rgba(255, 255, 255, 0.16), transparent 46%),
     linear-gradient(145deg, rgba(185, 201, 238, 0.11), rgba(18, 22, 30, 0.78));
+}
+
+.shell-dock-button-main svg {
+  width: 24px;
+  height: 24px;
+}
+
+.shell-dock-button-main.shell-dock-button-live {
+  border-color: rgba(126, 211, 186, 0.42);
+  background:
+    radial-gradient(circle at 46% 16%, rgba(236, 253, 245, 0.22), transparent 44%),
+    radial-gradient(circle at 50% 118%, rgba(94, 234, 212, 0.18), transparent 48%),
+    linear-gradient(145deg, rgba(45, 212, 191, 0.13), rgba(18, 22, 30, 0.82));
+  box-shadow:
+    0 0 26px rgba(94, 234, 212, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
 }
 
 .shell-dock-button-main.shell-dock-button-live::after,
@@ -943,6 +991,14 @@ body {
   border-radius: inherit;
   opacity: 0.85;
   animation: shell-liquid-breathe 1.8s var(--shell-liquid-ease) infinite;
+}
+
+.shell-dock-button-speaking {
+  border-color: rgba(250, 204, 21, 0.34);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(250, 204, 21, 0.16), transparent 62%),
+    linear-gradient(135deg, rgba(255, 255, 255, 0.10), rgba(251, 191, 36, 0.06)),
+    rgba(26, 22, 14, 0.76);
 }
 
 .shell-control-button {
@@ -961,6 +1017,29 @@ body {
 
 .shell-control-button:active {
   transform: translate3d(0, 1px, 0) scale(0.96);
+}
+
+@media (max-width: 767px) {
+  .shell-orb-dock-anchor {
+    bottom: 12px;
+    padding-inline: 10px;
+  }
+
+  .shell-session-dock {
+    padding: 6px;
+    gap: 6px;
+  }
+
+  .shell-dock-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .shell-dock-button-main {
+    width: 48px;
+    height: 48px;
+    margin-inline: 2px;
+  }
 }
 
 .shell-primary-action {
@@ -1085,6 +1164,12 @@ body {
   .shell-tab-indicator,
   .shell-control-button {
     transition-duration: 1ms;
+  }
+
+  .shell-dock-button-main.shell-dock-button-live::after,
+  .shell-dock-button-speaking::after {
+    animation-duration: 1ms;
+    animation-delay: 0ms;
   }
 }
 

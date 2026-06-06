@@ -211,8 +211,9 @@ def _looks_like_math(expr: str) -> bool:
 
 def _image_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
     image_noun = r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)"
-    image_verb = r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
-    speech_generate = r"(?:generate|ganerate|gana\s*re|gane\s*rate)"
+    image_verb = r"(?:generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
+    speech_generate = r"(?:generate|genrate|ganerate|ganarete|ganarate|gana\s*re|gane\s*rate)"
+    polite_tail = r"(?:karo|kar\s+do|karke\s+do|karke\s+de\s+do|de\s+do|do)?(?:\s+ok)?"
 
     image_match = re.match(
         rf"^(?:generate|create|make|draw|design|banao|bana|banado|banaao)\s+"
@@ -226,13 +227,13 @@ def _image_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
         image_match = re.match(
             rf"^(.+?)\s+(?:ki|ka|ke)?\s*"
             rf"{image_noun}\s+"
-            rf"{image_verb}\s*(?:karo|kar\s+do|karke\s+do)?$",
+            rf"{image_verb}\s*{polite_tail}$",
             raw,
             flags=re.I | re.S,
         )
     if not image_match:
         image_match = re.match(
-            rf"^{image_noun}\s+{speech_generate}\s*(?:karo|kar\s+do|karke\s+do)?\s*(.+)$",
+            rf"^{image_noun}\s+{speech_generate}\s*{polite_tail}\s*(.+)$",
             raw,
             flags=re.I | re.S,
         )
@@ -240,7 +241,8 @@ def _image_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
         return None
 
     prompt = _strip_quotes(image_match.group(1))
-    prompt = re.sub(r"\b(?:ok|please|pls|karo|kar\s+do)\b\s*$", "", prompt, flags=re.I).strip()
+    prompt = re.sub(r"\b(?:ok|please|pls|karo|kar\s+do|karke\s+do|karke\s+de\s+do|de\s+do|do)\b\s*$", "", prompt, flags=re.I).strip()
+    prompt = re.sub(r"^(?:(?:mere\s+liye|mujhe|mojhe|koi|ek|a|an)\s+)+", "", prompt, flags=re.I).strip()
     return _route(
         "shell_image_ai:generate_image_tool",
         {

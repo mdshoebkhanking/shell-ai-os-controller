@@ -11,12 +11,26 @@ from typing import Any, Iterable
 from shell_safe_executor import god_tier_tool as function_tool
 
 
+PROJECT_ROOT = Path(__file__).resolve().parent
+DEFAULT_LOCAL_STT_MODEL_DIRS = (
+    PROJECT_ROOT
+    / "models"
+    / "stt"
+    / "sherpa-onnx"
+    / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17",
+    PROJECT_ROOT / ".shell_runtime" / "models" / "stt" / "sherpa-onnx",
+)
+
+
 def _truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def local_stt_enabled() -> bool:
-    return _truthy(os.environ.get("SHELL_LOCAL_STT_ENABLED"))
+    configured = os.environ.get("SHELL_LOCAL_STT_ENABLED")
+    if configured is not None:
+        return _truthy(configured)
+    return default_local_stt_model_dir() is not None
 
 
 def sherpa_onnx_installed() -> bool:
@@ -46,8 +60,25 @@ def _path_from_env(name: str) -> Path | None:
     return Path(raw).expanduser()
 
 
+def default_local_stt_model_dir() -> Path | None:
+    """Return the bundled local STT model directory when it is usable."""
+
+    for candidate in DEFAULT_LOCAL_STT_MODEL_DIRS:
+        if (candidate / "tokens.txt").is_file() and (
+            (candidate / "encoder-epoch-99-avg-1.int8.onnx").is_file()
+            or (candidate / "encoder-epoch-99-avg-1.onnx").is_file()
+            or any(candidate.rglob("encoder*.onnx"))
+        ):
+            return candidate
+    return None
+
+
 def _prefer_int8_key(path: Path) -> tuple[int, str]:
     return (0 if "int8" in path.name.lower() else 1, path.name.lower())
+
+
+def _prefer_fp32_key(path: Path) -> tuple[int, str]:
+    return (1 if "int8" in path.name.lower() else 0, path.name.lower())
 
 
 def _first_existing(paths: Iterable[Path | None]) -> Path | None:
@@ -68,6 +99,15 @@ def _find_model_file(model_dir: Path | None, *patterns: str) -> Path | None:
     return sorted(found, key=_prefer_int8_key)[0]
 
 
+def _find_decoder_file(model_dir: Path | None) -> Path | None:
+    if model_dir is None or not model_dir.exists():
+        return None
+    found = [path for path in model_dir.rglob("decoder*.onnx") if path.is_file()]
+    if not found:
+        return None
+    return sorted(found, key=_prefer_fp32_key)[0]
+
+
 @dataclass(frozen=True)
 class LocalSTTConfig:
     enabled: bool = False
@@ -81,6 +121,13 @@ class LocalSTTConfig:
     paraformer_encoder: Path | None = None
     paraformer_decoder: Path | None = None
     wenet_ctc: Path | None = None
+    whisper_encoder: Path | None = None
+    whisper_decoder: Path | None = None
+    whisper_language: str = "en"
+    whisper_task: str = "transcribe"
+    sense_voice_model: Path | None = None
+    sense_voice_language: str = "auto"
+    sense_voice_use_itn: bool = False
     sample_rate: int = 16000
     feature_dim: int = 80
     num_threads: int = 1
@@ -93,7 +140,7 @@ class LocalSTTConfig:
 
     @classmethod
     def from_environment(cls) -> "LocalSTTConfig":
-        model_dir = _path_from_env("SHELL_LOCAL_STT_MODEL_DIR")
+        model_dir = _path_from_env("SHELL_LOCAL_STT_MODEL_DIR") or default_local_stt_model_dir()
         tokens = _first_existing(
             [
                 _path_from_env("SHELL_LOCAL_STT_TOKENS"),
@@ -114,7 +161,7 @@ class LocalSTTConfig:
             decoder=_first_existing(
                 [
                     _path_from_env("SHELL_LOCAL_STT_DECODER"),
-                    _find_model_file(model_dir, "decoder*.onnx"),
+                    _find_decoder_file(model_dir),
                 ]
             ),
             joiner=_first_existing(
@@ -147,6 +194,36 @@ class LocalSTTConfig:
                     _find_model_file(model_dir, "*wenet*.onnx", "model-streaming.onnx"),
                 ]
             ),
+            whisper_encoder=_first_existing(
+                [
+                    _path_from_env("SHELL_LOCAL_STT_WHISPER_ENCODER"),
+                    _find_model_file(model_dir, "*encoder*.onnx"),
+                ]
+            ),
+            whisper_decoder=_first_existing(
+                [
+                    _path_from_env("SHELL_LOCAL_STT_WHISPER_DECODER"),
+                    _find_model_file(model_dir, "*decoder*.onnx"),
+                ]
+            ),
+            whisper_language=str(
+                os.environ.get("SHELL_LOCAL_STT_WHISPER_LANGUAGE")
+                or os.environ.get("SHELL_LOCAL_STT_LANGUAGE")
+                or "en"
+            ).strip(),
+            whisper_task=str(os.environ.get("SHELL_LOCAL_STT_WHISPER_TASK", "transcribe") or "transcribe").strip(),
+            sense_voice_model=_first_existing(
+                [
+                    _path_from_env("SHELL_LOCAL_STT_SENSE_VOICE_MODEL"),
+                    _find_model_file(model_dir, "model*.onnx", "*sense*.onnx"),
+                ]
+            ),
+            sense_voice_language=str(
+                os.environ.get("SHELL_LOCAL_STT_SENSE_VOICE_LANGUAGE")
+                or os.environ.get("SHELL_LOCAL_STT_LANGUAGE")
+                or "auto"
+            ).strip(),
+            sense_voice_use_itn=_truthy(os.environ.get("SHELL_LOCAL_STT_SENSE_VOICE_ITN")),
             sample_rate=_env_int("SHELL_LOCAL_STT_SAMPLE_RATE", 16000, minimum=8000, maximum=48000),
             feature_dim=_env_int("SHELL_LOCAL_STT_FEATURE_DIM", 80, minimum=40, maximum=128),
             num_threads=_env_int("SHELL_LOCAL_STT_THREADS", 1, minimum=1, maximum=8),
@@ -171,11 +248,17 @@ class LocalSTTConfig:
                 return "paraformer"
             if self.tokens and self.wenet_ctc:
                 return "wenet_ctc"
+            if self.tokens and self.whisper_encoder and self.whisper_decoder:
+                return "whisper"
+            if self.tokens and self.sense_voice_model:
+                return "sense_voice"
         return kind
 
     def missing_reason(self) -> str:
         if not self.enabled:
-            return "SHELL_LOCAL_STT_ENABLED=0"
+            if os.environ.get("SHELL_LOCAL_STT_ENABLED") is not None:
+                return "SHELL_LOCAL_STT_ENABLED=0"
+            return "No bundled local STT model is configured."
         if not sherpa_onnx_installed():
             return "sherpa-onnx is not installed"
         kind = self.configured_kind()
@@ -187,11 +270,16 @@ class LocalSTTConfig:
             return ""
         if kind == "wenet_ctc" and self.tokens and self.wenet_ctc:
             return ""
-        return "streaming model files are missing; set SHELL_LOCAL_STT_MODEL_DIR or explicit model paths"
+        if kind == "whisper" and self.tokens and self.whisper_encoder and self.whisper_decoder:
+            return ""
+        if kind == "sense_voice" and self.tokens and self.sense_voice_model:
+            return ""
+        return "local STT model files are missing; set SHELL_LOCAL_STT_MODEL_DIR or explicit model paths"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "enabled": self.enabled,
+            "autoEnabled": os.environ.get("SHELL_LOCAL_STT_ENABLED") is None and default_local_stt_model_dir() is not None,
             "installed": sherpa_onnx_installed(),
             "model_kind": self.configured_kind(),
             "model_dir": str(self.model_dir) if self.model_dir else "",
@@ -203,6 +291,13 @@ class LocalSTTConfig:
             "paraformer_encoder": str(self.paraformer_encoder) if self.paraformer_encoder else "",
             "paraformer_decoder": str(self.paraformer_decoder) if self.paraformer_decoder else "",
             "wenet_ctc": str(self.wenet_ctc) if self.wenet_ctc else "",
+            "whisper_encoder": str(self.whisper_encoder) if self.whisper_encoder else "",
+            "whisper_decoder": str(self.whisper_decoder) if self.whisper_decoder else "",
+            "whisper_language": self.whisper_language,
+            "whisper_task": self.whisper_task,
+            "sense_voice_model": str(self.sense_voice_model) if self.sense_voice_model else "",
+            "sense_voice_language": self.sense_voice_language,
+            "sense_voice_use_itn": self.sense_voice_use_itn,
             "sample_rate": self.sample_rate,
             "feature_dim": self.feature_dim,
             "num_threads": self.num_threads,
@@ -243,7 +338,9 @@ class SherpaOnnxStreamingSTT:
             raise RuntimeError(reason)
         started = time.perf_counter()
         self._recognizer = self._create_recognizer()
-        self._stream = self._recognizer.create_stream()
+        self._offline_kind = self.config.configured_kind() in {"whisper", "sense_voice"}
+        self._stream = None if self._offline_kind else self._recognizer.create_stream()
+        self._offline_chunks: list[Any] = []
         self._last_text = ""
         self.load_ms = round((time.perf_counter() - started) * 1000.0, 3)
 
@@ -290,6 +387,30 @@ class SherpaOnnxStreamingSTT:
                 **common,
                 model=str(cfg.wenet_ctc),
             )
+        if kind == "whisper":
+            return sherpa_onnx.OfflineRecognizer.from_whisper(
+                encoder=str(cfg.whisper_encoder),
+                decoder=str(cfg.whisper_decoder),
+                tokens=str(cfg.tokens),
+                language=cfg.whisper_language,
+                task=cfg.whisper_task,
+                num_threads=cfg.num_threads,
+                decoding_method=cfg.decoding_method,
+                provider=cfg.provider,
+                tail_paddings=-1,
+            )
+        if kind == "sense_voice":
+            return sherpa_onnx.OfflineRecognizer.from_sense_voice(
+                model=str(cfg.sense_voice_model),
+                tokens=str(cfg.tokens),
+                num_threads=cfg.num_threads,
+                sample_rate=cfg.sample_rate,
+                feature_dim=cfg.feature_dim,
+                decoding_method=cfg.decoding_method,
+                provider=cfg.provider,
+                language=cfg.sense_voice_language,
+                use_itn=cfg.sense_voice_use_itn,
+            )
         raise RuntimeError(f"Unsupported local STT model kind: {kind}")
 
     @staticmethod
@@ -322,6 +443,8 @@ class SherpaOnnxStreamingSTT:
         return str(result or "").strip()
 
     def _decode_ready(self) -> None:
+        if self._stream is None:
+            return
         guard = 0
         while self._recognizer.is_ready(self._stream):
             self._recognizer.decode_stream(self._stream)
@@ -335,6 +458,15 @@ class SherpaOnnxStreamingSTT:
         if len(samples) <= 0:
             return LocalSTTResult(True, self._last_text, partial=True, elapsed_ms=0.0)
         actual_rate = int(sample_rate or self.config.sample_rate)
+        if self._offline_kind:
+            self._offline_chunks.append(samples.copy())
+            return LocalSTTResult(
+                True,
+                self._last_text,
+                partial=True,
+                elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+                metadata={"changed": False, "buffered_samples": int(sum(len(chunk) for chunk in self._offline_chunks))},
+            )
         self._stream.accept_waveform(actual_rate, samples)
         self._decode_ready()
         text = self._result_text(self._recognizer.get_result(self._stream))
@@ -353,6 +485,32 @@ class SherpaOnnxStreamingSTT:
 
         started = time.perf_counter()
         actual_rate = int(sample_rate or self.config.sample_rate)
+        if self._offline_kind:
+            if self._offline_chunks:
+                samples = np.concatenate(self._offline_chunks).astype(np.float32, copy=False)
+            else:
+                samples = np.zeros(0, dtype=np.float32)
+            if len(samples) <= 0:
+                return LocalSTTResult(True, "", partial=False, elapsed_ms=0.0)
+            stream = self._recognizer.create_stream()
+            stream.accept_waveform(actual_rate, samples)
+            try:
+                stream.input_finished()
+            except Exception:
+                pass
+            self._recognizer.decode_stream(stream)
+            text = self._result_text(getattr(stream, "result", None))
+            if not text and hasattr(self._recognizer, "get_result"):
+                text = self._result_text(self._recognizer.get_result(stream))
+            result = LocalSTTResult(
+                True,
+                text,
+                partial=False,
+                elapsed_ms=round((time.perf_counter() - started) * 1000.0, 3),
+                metadata={"offline_model_kind": self.config.configured_kind()},
+            )
+            self.reset()
+            return result
         tail = np.zeros(int(max(1, actual_rate * self.config.tail_padding_s)), dtype=np.float32)
         self._stream.accept_waveform(actual_rate, tail)
         try:
@@ -385,7 +543,8 @@ class SherpaOnnxStreamingSTT:
         )
 
     def reset(self) -> None:
-        self._stream = self._recognizer.create_stream()
+        self._offline_chunks = []
+        self._stream = None if self._offline_kind else self._recognizer.create_stream()
         self._last_text = ""
 
 

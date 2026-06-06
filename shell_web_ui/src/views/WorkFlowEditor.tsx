@@ -187,6 +187,13 @@ const CATEGORIZED_TOOLS = {
 const ALL_TOOLS = Object.values(CATEGORIZED_TOOLS).flat()
 const nodeTypes = { customTool: ToolNode }
 
+type RunStatusTone = 'idle' | 'running' | 'success' | 'error'
+
+type RunStatus = {
+  tone: RunStatusTone
+  message: string
+}
+
 function Editor() {
   const [nodes, setNodes] = useState<any[]>([])
   const [edges, setEdges] = useState<any[]>([])
@@ -194,6 +201,7 @@ function Editor() {
   const [description, setDescription] = useState('Custom Macro')
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
   const [isSaved, setIsSaved] = useState(false)
+  const [runStatus, setRunStatus] = useState<RunStatus>({ tone: 'idle', message: '' })
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
 
@@ -222,6 +230,7 @@ function Editor() {
     setNodes([])
     setEdges([])
     setIsSaved(false)
+    setRunStatus({ tone: 'idle', message: '' })
   }
 
   const updateNodeInputs = useCallback(
@@ -314,12 +323,13 @@ function Editor() {
   }
 
   const runMacroManually = async () => {
+    setRunStatus({ tone: 'running', message: 'Preparing macro run...' })
     await saveWorkflow()
 
     const macroRes = await getMacroSequence(workflowName)
 
     if (!macroRes.success) {
-      alert(`❌ Execution Failed: ${macroRes.error}`)
+      setRunStatus({ tone: 'error', message: `Execution failed: ${macroRes.error}` })
       return
     }
 
@@ -395,12 +405,23 @@ function Editor() {
         } else {
         }
       } catch (stepError) {
-        alert(`🔴 Macro Execution Halted! Failed at node: ${step.tool}`)
-        break
+        setRunStatus({
+          tone: 'error',
+          message: `Macro execution halted at ${step.tool}. Check that node inputs and permissions are valid.`
+        })
+        return
       }
     }
 
+    setRunStatus({ tone: 'success', message: `Macro "${macroRes.name}" completed.` })
   }
+
+  const runStatusClass =
+    runStatus.tone === 'error'
+      ? 'border-red-500/30 bg-red-950/40 text-red-100 shadow-[0_0_24px_rgba(248,113,113,0.12)]'
+      : runStatus.tone === 'success'
+        ? 'border-emerald-500/30 bg-emerald-950/35 text-emerald-100 shadow-[0_0_24px_rgba(16,185,129,0.12)]'
+        : 'border-sky-400/25 bg-sky-950/30 text-sky-100 shadow-[0_0_24px_rgba(56,189,248,0.1)]'
 
   return (
     <div className="flex h-full w-full bg-[#09090b] relative overflow-hidden">
@@ -457,38 +478,50 @@ function Editor() {
         onDrop={onDrop}
         onDragOver={onDragOver}
       >
-        <div className="absolute top-4 left-4 z-10 flex items-center gap-3 shadow-2xl">
-          <button
-            onClick={resetCanvas}
-            className="p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-zinc-600 hover:text-emerald-500 hover:border-emerald-500/50 transition-colors cursor-pointer"
-            data-tooltip-id="global-tooltip"
-            data-tooltip-content="Start New Macro"
-          >
-            <RiAddLine size={16} />
-          </button>
+        <div className="absolute top-4 left-4 right-4 z-10 flex flex-col items-start gap-2 pointer-events-none">
+          <div className="flex items-center gap-3 shadow-2xl pointer-events-auto">
+            <button
+              onClick={resetCanvas}
+              className="p-3 rounded-lg bg-[#18181b] border border-[#27272a] text-zinc-600 hover:text-emerald-500 hover:border-emerald-500/50 transition-colors cursor-pointer"
+              data-tooltip-id="global-tooltip"
+              data-tooltip-content="Start New Macro"
+            >
+              <RiAddLine size={16} />
+            </button>
 
-          <MacroManagementMenu loadMacroToCanvas={loadMacroToCanvas} />
+            <MacroManagementMenu loadMacroToCanvas={loadMacroToCanvas} />
 
-          <input
-            type="text"
-            value={workflowName}
-            onChange={(e) => setWorkflowName(e.target.value)}
-            className="bg-[#18181b] border border-[#27272a] px-4 py-2 rounded-lg text-sm text-white outline-none focus:border-emerald-500 font-bold tracking-wide w-64 shadow-inner"
-          />
+            <input
+              type="text"
+              value={workflowName}
+              onChange={(e) => setWorkflowName(e.target.value)}
+              className="bg-[#18181b] border border-[#27272a] px-4 py-2 rounded-lg text-sm text-white outline-none focus:border-emerald-500 font-bold tracking-wide w-64 shadow-inner"
+            />
 
-          <button
-            onClick={runMacroManually}
-            className="bg-[#18181b] hover:bg-[#27272a] text-emerald-400 px-5 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all border border-[#27272a] hover:border-emerald-500/50 flex items-center gap-2 cursor-pointer shadow-lg"
-          >
-            <RiPlayFill size={16} /> RUN
-          </button>
+            <button
+              onClick={runMacroManually}
+              className="bg-[#18181b] hover:bg-[#27272a] text-emerald-400 px-5 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all border border-[#27272a] hover:border-emerald-500/50 flex items-center gap-2 cursor-pointer shadow-lg"
+            >
+              <RiPlayFill size={16} /> RUN
+            </button>
 
-          <button
-            onClick={saveWorkflow}
-            className="bg-emerald-600 hover:bg-emerald-500 text-black px-6 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-2 cursor-pointer"
-          >
-            <RiSave3Line size={16} /> SAVE
-          </button>
+            <button
+              onClick={saveWorkflow}
+              className="bg-emerald-600 hover:bg-emerald-500 text-black px-6 py-2 rounded-lg text-[11px] font-black tracking-widest transition-all shadow-[0_0_20px_rgba(16,185,129,0.3)] flex items-center gap-2 cursor-pointer"
+            >
+              <RiSave3Line size={16} /> SAVE
+            </button>
+          </div>
+
+          {runStatus.message && (
+            <div
+              role="status"
+              aria-live="polite"
+              className={`max-w-[min(640px,calc(100vw-24rem))] rounded-lg border px-4 py-2 text-xs font-semibold tracking-wide leading-relaxed backdrop-blur-xl pointer-events-auto ${runStatusClass}`}
+            >
+              {runStatus.message}
+            </div>
+          )}
         </div>
 
         <ReactFlow

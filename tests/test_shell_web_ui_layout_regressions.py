@@ -22,9 +22,25 @@ def test_dashboard_orb_listens_to_backend_voice_amplitude():
     assert "voice-amplitude" in dashboard
     assert "voiceLevel={voiceAmplitude}" in dashboard
     assert "speaking={speechState === 'SPEAKING' || speechState === 'GEMINI LIVE'}" in dashboard
+    assert "runSpeechReaction" in dashboard
+    assert "amplitudeFrames" in dashboard
+    assert "durationMs" in dashboard
     assert "backendLevel" in sphere
     assert "speechPulse" in sphere
     assert "idlePulse" in sphere
+
+
+def test_dashboard_queued_tts_does_not_start_orb_reaction():
+    dashboard = (ROOT / "shell_web_ui" / "src" / "views" / "Dashboard.tsx").read_text(encoding="utf-8")
+    speak_shell = dashboard.split("const speakShell = useCallback", 1)[1].split("useEffect", 1)[0]
+    queued_branch = speak_shell.split("if ((result as any)?.queued)", 1)[1].split("setSpeechState('SPEAKING')", 1)[0]
+    speech_status = dashboard.split("const onSpeechStatus", 1)[1].split("const onChatUpdated", 1)[0]
+
+    assert "setSpeechState('VOICE QUEUED')" in speak_shell
+    assert "setVoiceAmplitude(0)" in queued_branch
+    assert "runSpeechReaction" not in queued_branch
+    assert "state === 'QUEUED'" in speech_status
+    assert speech_status.index("state === 'QUEUED'") < speech_status.index("state === 'SPEAKING'")
 
 
 def test_backend_probe_voice_amplitude_channel_is_env_gated(monkeypatch):
@@ -64,3 +80,18 @@ def test_primary_tabs_can_scroll_inside_tight_windows():
     assert "flex-1 items-center justify-center" in shell_ai
     assert ".shell-primary-tabs" in css
     assert "overflow-x: auto" in css
+
+
+def test_orb_session_dock_keeps_accessible_icon_controls():
+    dashboard = (ROOT / "shell_web_ui" / "src" / "views" / "Dashboard.tsx").read_text(encoding="utf-8")
+    css = (ROOT / "shell_web_ui" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
+
+    assert "shell-orb-dock-anchor" in dashboard
+    assert dashboard.count('type="button"') >= 4
+    assert "aria-pressed={isSystemActive}" in dashboard
+    assert "aria-pressed={!isMicMuted}" in dashboard
+    assert ".shell-orb-dock-anchor" in css
+    assert "touch-action: manipulation" in css
+    assert ".shell-dock-button:focus-visible" in css
+    assert ".shell-dock-button svg" in css
+    assert ".shell-dock-button-main.shell-dock-button-live" in css

@@ -116,3 +116,13 @@ def test_shell_root_avoids_idle_render_churn():
     assert "current.width === nextStyle.width" in shell_ai
     assert "export default memo(" in dashboard
     assert "areDashboardShellPropsEqual" in dashboard
+
+
+def test_macro_runner_reports_failures_inline_without_browser_alerts():
+    workflow_editor = read_project_file("shell_web_ui/src/views/WorkFlowEditor.tsx")
+
+    assert "alert(" not in workflow_editor
+    assert "role=\"status\"" in workflow_editor
+    assert "aria-live=\"polite\"" in workflow_editor
+    assert "Execution failed:" in workflow_editor
+    assert "Macro execution halted at" in workflow_editor

@@ -7,8 +7,10 @@ import os
 import platform
 import re
 import shutil
+import socket
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.parse
@@ -51,6 +53,11 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
         }
 
 try:
+    from shell_voice_runtime import TTSSpeaker
+except Exception:  # pragma: no cover - cloud voice is optional in the host
+    TTSSpeaker = None  # type: ignore
+
+try:
     from shell_offline_llm import generate_offline_reply, offline_llm_status
 except Exception:  # pragma: no cover - fallback keeps the host importable
     def offline_llm_status() -> dict[str, Any]:
@@ -88,6 +95,28 @@ UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
 UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
 DEFAULT_UPDATE_REPO = "mdshoebkhanking/shell-ai-os-controller"
 ALLOWED_SHELL_LANGUAGES = {"hinglish", "english", "hindi"}
+CHAT_PROVIDER_SECRET_GROUPS = (
+    ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    ("OPENAI_API_KEY",),
+    ("ANTHROPIC_API_KEY",),
+    ("OPENROUTER_API_KEY",),
+    ("GROQ_API_KEY",),
+    ("MISTRAL_API_KEY",),
+    ("TOGETHER_API_KEY",),
+    ("HF_API_KEY", "HUGGINGFACE_API_KEY"),
+)
+CHAT_PROVIDER_PROBE_HOSTS = {
+    "GOOGLE_API_KEY": "generativelanguage.googleapis.com",
+    "GEMINI_API_KEY": "generativelanguage.googleapis.com",
+    "OPENAI_API_KEY": "api.openai.com",
+    "ANTHROPIC_API_KEY": "api.anthropic.com",
+    "OPENROUTER_API_KEY": "openrouter.ai",
+    "GROQ_API_KEY": "api.groq.com",
+    "MISTRAL_API_KEY": "api.mistral.ai",
+    "TOGETHER_API_KEY": "api.together.xyz",
+    "HF_API_KEY": "huggingface.co",
+    "HUGGINGFACE_API_KEY": "huggingface.co",
+}
 
 
 def _shell_language() -> str:
@@ -148,6 +177,11 @@ class ShellBackendBridge(QObject):
         self._voice_input_unavailable_state = False
         self._last_voice_amp_event = 0.0
         self._speech_process: subprocess.Popen[Any] | None = None
+        self._speech_job_lock = threading.Lock()
+        self._speech_job_id = 0
+        self._cloud_tts_speaker: Any | None = None
+        self._cloud_tts_fallback_text = ""
+        self._chat_provider_network_cache: tuple[float, str, bool] = (0.0, "", False)
 
     @pyqtSlot(str, str, result=str)
     def call(self, channel: str, payload: str = "[]") -> str:
@@ -162,6 +196,22 @@ class ShellBackendBridge(QObject):
 
     def emit_event(self, channel: str, payload: Any) -> None:
         self.eventEmitted.emit(channel, json.dumps(payload, ensure_ascii=False))
+
+    def _next_speech_job_id(self) -> int:
+        with self._speech_job_lock:
+            self._speech_job_id += 1
+            return self._speech_job_id
+
+    def _current_speech_job_id(self) -> int:
+        with self._speech_job_lock:
+            return self._speech_job_id
+
+    def _invalidate_speech_jobs(self) -> None:
+        with self._speech_job_lock:
+            self._speech_job_id += 1
+
+    def _start_background_task(self, name: str, target: Any) -> None:
+        threading.Thread(target=target, name=name, daemon=True).start()
 
     def _dispatch(self, channel: str, args: list[Any]) -> Any:
         handlers = {
@@ -923,13 +973,13 @@ class ShellBackendBridge(QObject):
     def _clean_image_prompt(prompt: str) -> str:
         cleaned = re.sub(r"\s+", " ", str(prompt or "")).strip(" :.-")
         cleaned = re.sub(
-            r"^(?:of|for|about|ki|ka|ke|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please)\s+",
+            r"^(?:(?:of|for|about|ki|ka|ke|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|mere\s+liye|mujhe|mojhe|koi|ek|a|an)\s+)+",
             "",
             cleaned,
             flags=re.I,
         ).strip()
         if re.fullmatch(
-            r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra|generate|create|make|draw|design|banao|bana|banado|banaao|karo|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|\s)+",
+            r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra|generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design|banao|bana|banado|banaao|karo|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|\s)+",
             cleaned,
             flags=re.I,
         ):
@@ -943,7 +993,8 @@ class ShellBackendBridge(QObject):
             return ""
 
         image_word = r"(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)"
-        action_word = r"(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
+        action_word = r"(?:generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\s+do)"
+        polite_tail = r"(?:karo|kar\s+do|karke\s+do|karke\s+de\s+do|de\s+do|do)?(?:\s+ok)?"
         connector = r"(?:(?:of|for|about|ki|ka|ke)\b|:)"
         if not re.search(rf"\b{image_word}\b", raw, flags=re.I) or not re.search(
             rf"\b{action_word}\b",
@@ -953,14 +1004,14 @@ class ShellBackendBridge(QObject):
             return ""
 
         patterns = (
-            rf"^(?:please\s+)?(?:generate|create|make|draw|design)\s+"
+            rf"^(?:please\s+)?(?:generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design)\s+"
             rf"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
             rf"{image_word}\s*{connector}?\s*(.*)$",
             rf"^(?:please\s+)?{image_word}\s+{action_word}\s*{connector}?\s*(.*)$",
             rf"^(?:please\s+)?{action_word}\s+"
             rf"(?:an?\s+|ek\s+|achhi\s+|acchi\s+|high\s+quality\s+)*"
             rf"{image_word}\s*{connector}?\s*(.*)$",
-            rf"^(.+?)\s+(?:(?:ki|ka|ke)\b\s*)?{image_word}\s+{action_word}\s*$",
+            rf"^(.+?)\s+(?:(?:ki|ka|ke)\b\s*)?{image_word}\s+{action_word}\s*{polite_tail}\s*$",
         )
         for pattern in patterns:
             match = re.match(pattern, raw, flags=re.I | re.S)
@@ -1255,6 +1306,143 @@ class ShellBackendBridge(QObject):
                 rows.append(f"{role}: {text[:220]}")
         return "\n".join(rows)
 
+    @staticmethod
+    def _env_flag_enabled(name: str, *, default: bool = True) -> bool:
+        raw = os.environ.get(name)
+        if raw is None:
+            return default
+        return str(raw).strip().lower() not in {"0", "false", "no", "off", "disabled"}
+
+    def _memory_context_snippet(self, query: str, *, limit: int = 4) -> str:
+        if not self._env_flag_enabled("SHELL_CHAT_MEMORY_CONTEXT", default=True):
+            return ""
+        rows: list[str] = []
+        try:
+            from shell_memory_v2 import memory_v2_enabled, recall_memory
+
+            if memory_v2_enabled():
+                result = recall_memory(query, limit=max(1, limit))
+                for item in list(result.get("memories") or [])[:limit]:
+                    if not isinstance(item, dict):
+                        continue
+                    text = str(item.get("redacted_text") or item.get("text") or "").strip()
+                    if text:
+                        rows.append(f"- {text[:260]}")
+        except Exception:
+            rows = []
+
+        if not rows:
+            try:
+                from shell_memory import load_memory
+
+                memory = load_memory()
+                query_tokens = {token for token in re.findall(r"[a-zA-Z0-9_]{3,}", query.lower())}
+                broad_memory_query = bool(re.search(r"\b(memory|remember|yaad|meri|mera|mere|my)\b", query, flags=re.I))
+                for category, items in (memory or {}).items():
+                    if not isinstance(items, dict):
+                        continue
+                    for key, value in items.items():
+                        haystack = f"{key} {value}".lower()
+                        if broad_memory_query or any(token in haystack for token in query_tokens):
+                            rows.append(f"- {category}.{key}: {str(value)[:220]}")
+                        if len(rows) >= limit:
+                            break
+                    if len(rows) >= limit:
+                        break
+            except Exception:
+                return ""
+        if not rows:
+            return ""
+        return "\n".join(rows)[:1200]
+
+    def _project_rag_context_snippet(self, query: str, *, limit: int = 3) -> str:
+        if not self._env_flag_enabled("SHELL_CHAT_PROJECT_RAG_CONTEXT", default=True):
+            return ""
+        try:
+            from shell_project_rag import index_project, project_rag_enabled, project_status, query_project
+
+            if not project_rag_enabled():
+                return ""
+            status = project_status(str(PROJECT_ROOT))
+            if int(status.get("indexed_chunks") or 0) <= 0 and self._env_flag_enabled(
+                "SHELL_CHAT_PROJECT_RAG_AUTOINDEX",
+                default=True,
+            ):
+                max_files = max(25, min(1000, int(float(os.environ.get("SHELL_CHAT_PROJECT_RAG_MAX_FILES", "250")))))
+                index_project(str(PROJECT_ROOT), max_files=max_files)
+            result = query_project(str(PROJECT_ROOT), query, limit=max(1, limit))
+        except Exception:
+            return ""
+
+        rows: list[str] = []
+        for item in list(result.get("matches") or [])[:limit] if isinstance(result, dict) else []:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("relative_path") or "").strip()
+            start = item.get("start_line")
+            end = item.get("end_line")
+            preview = re.sub(r"\s+", " ", str(item.get("preview") or "")).strip()
+            if path and preview:
+                line_ref = f":{start}-{end}" if start and end else ""
+                rows.append(f"- {path}{line_ref}: {preview[:360]}")
+        return "\n".join(rows)[:1600]
+
+    def _configured_chat_provider_keys(self) -> list[str]:
+        try:
+            from shell_api_manager import get_configured_secret_value
+        except Exception:
+            get_configured_secret_value = None  # type: ignore[assignment]
+
+        configured: list[str] = []
+        for group in CHAT_PROVIDER_SECRET_GROUPS:
+            value = ""
+            if get_configured_secret_value is not None:
+                try:
+                    value = str(get_configured_secret_value(*group) or "")
+                except Exception:
+                    value = ""
+            if not value:
+                value = next((os.environ.get(key, "") for key in group if self._looks_configured_secret(os.environ.get(key, ""))), "")
+            if value:
+                configured.append(group[0])
+        return configured
+
+    def _chat_provider_network_ready(self, configured_keys: list[str]) -> bool:
+        if not configured_keys:
+            return False
+        if not self._env_flag_enabled("SHELL_CHAT_ONLINE_CHECK", default=True):
+            return True
+        cache_key = ",".join(sorted(configured_keys))
+        now = time.monotonic()
+        ttl = max(1.0, min(60.0, float(os.environ.get("SHELL_CHAT_ONLINE_CACHE_SECONDS", "20"))))
+        cached_at, cached_key, cached_value = self._chat_provider_network_cache
+        if cached_key == cache_key and now - cached_at <= ttl:
+            return cached_value
+
+        timeout = max(0.2, min(2.5, float(os.environ.get("SHELL_CHAT_ONLINE_TIMEOUT", "0.7"))))
+        hosts = [CHAT_PROVIDER_PROBE_HOSTS.get(key, "") for key in configured_keys]
+        hosts.append("www.google.com")
+        for host in [item for item in dict.fromkeys(hosts) if item]:
+            try:
+                with socket.create_connection((host, 443), timeout=timeout):
+                    self._chat_provider_network_cache = (now, cache_key, True)
+                    return True
+            except OSError:
+                continue
+        self._chat_provider_network_cache = (now, cache_key, False)
+        return False
+
+    def _should_try_provider_chat(self) -> bool:
+        mode = os.environ.get("SHELL_CHAT_PROVIDER_MODE", os.environ.get("SHELL_WEB_CHAT_PROVIDER_MODE", "auto")).strip().lower()
+        if mode in {"offline", "local", "none", "disabled", "off"}:
+            return False
+        configured_keys = self._configured_chat_provider_keys()
+        if not configured_keys:
+            return False
+        if mode in {"auto", "", "cloud", "provider", "online"}:
+            return self._chat_provider_network_ready(configured_keys)
+        return self._chat_provider_network_ready(configured_keys)
+
     def _provider_chat_reply(self, prompt: str, system_prompt: str) -> str:
         try:
             import concurrent.futures
@@ -1300,7 +1488,16 @@ class ShellBackendBridge(QObject):
         return ""
 
     def _brain_chat_fallback(self, text: str, *, previous_messages: list[Any] | None = None) -> str:
-        context = self._history_context_snippet(previous_messages or [])
+        history_context = self._history_context_snippet(previous_messages or [])
+        memory_context = self._memory_context_snippet(text)
+        rag_context = self._project_rag_context_snippet(text)
+        context_sections: list[str] = []
+        if history_context:
+            context_sections.append(f"Recent conversation:\n{history_context}")
+        if memory_context:
+            context_sections.append(f"Relevant local memory:\n{memory_context}")
+        if rag_context:
+            context_sections.append(f"Relevant Project RAG:\n{rag_context}")
         system_prompt = (
             "You are Shell AI, a concise desktop OS assistant. "
             f"{_shell_language_instruction()} "
@@ -1308,12 +1505,14 @@ class ShellBackendBridge(QObject):
             "answer exactly: Mujhe mdshoebking ne banaya hai. Never say Meta, Google, OpenAI, Gemini, Qwen, llama.cpp, or any provider/model made you. "
             "Answer the user's normal text question directly in 1-3 short lines. "
             "Do not claim you executed tools in this text-only fallback. "
-            "Use recent conversation context if the user asks what they said or what task they gave."
+            "Use recent conversation, memory, and Project RAG context when relevant. Do not invent missing context."
         )
-        prompt = text if not context else f"Recent conversation:\n{context}\n\nUser: {text}"
-        provider_reply = self._provider_chat_reply(prompt, system_prompt)
-        if provider_reply:
-            return provider_reply
+        context_block = "\n\n".join(context_sections)
+        prompt = text if not context_block else f"{context_block}\n\nUser: {text}"
+        if self._should_try_provider_chat():
+            provider_reply = self._provider_chat_reply(prompt, system_prompt)
+            if provider_reply:
+                return provider_reply
 
         offline_reply = self._offline_chat_reply(prompt, system_prompt, previous_messages)
         if offline_reply:
@@ -1484,6 +1683,13 @@ class ShellBackendBridge(QObject):
         return None
 
     def _stop_speech_process(self) -> None:
+        self._invalidate_speech_jobs()
+        speaker = getattr(self, "_cloud_tts_speaker", None)
+        if speaker is not None:
+            try:
+                speaker.stop_speaking()
+            except Exception:
+                pass
         proc = getattr(self, "_speech_process", None)
         if proc is None:
             return
@@ -1497,6 +1703,218 @@ class ShellBackendBridge(QObject):
         except Exception:
             pass
         self._speech_process = None
+
+    def _start_os_tts(self, text: str, *, job_id: int | None = None) -> dict[str, Any]:
+        command = self._tts_command(text)
+        if not command:
+            self.emit_event("speech-status", {"state": "error", "message": "No local TTS engine found"})
+            return {"success": False, "message": "No local TTS engine found"}
+
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+            )
+            if job_id is not None and job_id != self._current_speech_job_id():
+                try:
+                    process.terminate()
+                except Exception:
+                    pass
+                return {"success": False, "message": "Speech request was superseded.", "stale": True}
+            self._speech_process = process
+            self.emit_event("speech-status", {"state": "speaking", "engine": "os", "chars": len(text)})
+            return {"success": True, "message": "Speech started", "chars": len(text), "source": "os-tts"}
+        except Exception as exc:
+            self.emit_event("speech-status", {"state": "error", "message": str(exc)})
+            return {"success": False, "message": str(exc)}
+
+    @staticmethod
+    def _offline_tts_ready() -> tuple[bool, dict[str, Any]]:
+        try:
+            status = offline_tts_status()
+        except Exception as exc:
+            status = {"available": False, "engine": "fallback", "reason": str(exc)}
+        return bool(status.get("available")), status
+
+    def _queue_offline_tts(self, text: str, *, fallback_from: str = "") -> dict[str, Any]:
+        job_id = self._next_speech_job_id()
+        self.emit_event(
+            "speech-status",
+            {
+                "state": "queued",
+                "engine": "offline",
+                "source": "offline-tts",
+                "fallbackFrom": fallback_from or None,
+                "chars": len(text),
+            },
+        )
+
+        def run() -> None:
+            offline_result = speak_offline_tts(text)
+            offline_process = offline_result.pop("_process", None) if isinstance(offline_result, dict) else None
+            if job_id != self._current_speech_job_id():
+                if offline_process is not None:
+                    try:
+                        offline_process.terminate()
+                    except Exception:
+                        pass
+                return
+
+            if isinstance(offline_result, dict) and offline_result.get("success"):
+                if offline_process is not None:
+                    self._speech_process = offline_process
+                payload = self._speech_status_payload("speaking", offline_result, text=text)
+                if fallback_from:
+                    payload["fallbackFrom"] = fallback_from
+                self.emit_event("speech-status", payload)
+                return
+
+            if isinstance(offline_result, dict) and offline_result.get("available"):
+                self.emit_event(
+                    "speech-status",
+                    {
+                        "state": "fallback",
+                        "engine": offline_result.get("engine", "offline"),
+                        "message": offline_result.get("message", "Offline TTS failed; using OS fallback."),
+                    },
+                )
+            self._start_os_tts(text, job_id=job_id)
+
+        self._start_background_task("ShellOfflineTTS", run)
+        return {
+            "success": True,
+            "queued": True,
+            "source": "offline-tts",
+            "engine": "offline",
+            "message": "Offline natural speech queued",
+            "chars": len(text),
+        }
+
+    @staticmethod
+    def _looks_configured_secret(value: str) -> bool:
+        low = str(value or "").strip().lower()
+        return bool(low) and len(low) >= 20 and low not in {
+            "your_google_api_key_here",
+            "your_gemini_api_key_here",
+            "your_google_api_key",
+            "your_gemini_api_key",
+        } and not low.startswith(("your_", "replace_"))
+
+    def _gemini_voice_configured(self) -> bool:
+        return self._looks_configured_secret(os.environ.get("GOOGLE_API_KEY", "")) or self._looks_configured_secret(
+            os.environ.get("GEMINI_API_KEY", "")
+        )
+
+    def _cloud_voice_requested(self) -> bool:
+        mode = os.environ.get("SHELL_VOICE_MODE", "").strip().lower()
+        engine = os.environ.get("SHELL_TTS_ENGINE", "").strip().lower()
+        if mode == "cloud":
+            return True
+        if engine in {"gemini", "gemini-live", "gemini-stream", "live", "live-pcm", "cloud"}:
+            return True
+        return mode == "auto" and self._gemini_voice_configured()
+
+    def _cloud_tts_source(self) -> str:
+        if not self._cloud_voice_requested() or not self._gemini_voice_configured():
+            return ""
+        if TTSSpeaker is None:
+            return ""
+        return "gemini-live"
+
+    def _ensure_cloud_tts_speaker(self) -> Any | None:
+        if TTSSpeaker is None:
+            return None
+        speaker = getattr(self, "_cloud_tts_speaker", None)
+        if speaker is None:
+            speaker = TTSSpeaker(self)
+            speaker._engine = os.environ.get("SHELL_TTS_ENGINE", "gemini-live").strip().lower() or "gemini-live"
+            if speaker._engine in {"auto", "fast", "system"}:
+                speaker._engine = "gemini-live"
+            try:
+                speaker.speech_error.connect(self._on_cloud_tts_error)
+                speaker.speaking_finished.connect(
+                    lambda: self.emit_event("speech-status", {"state": "stopped", "engine": "gemini"})
+                )
+            except Exception:
+                pass
+            speaker.start()
+            self._cloud_tts_speaker = speaker
+        return speaker
+
+    @staticmethod
+    def _speech_status_payload(
+        state: str,
+        result: dict[str, Any] | None = None,
+        *,
+        engine: str = "",
+        text: str = "",
+        **extra: Any,
+    ) -> dict[str, Any]:
+        result = result if isinstance(result, dict) else {}
+        payload: dict[str, Any] = {
+            "state": state,
+            "engine": engine or str(result.get("engine", "offline") or "offline"),
+            "voice": result.get("voice", ""),
+            "chars": result.get("chars", len(text)),
+        }
+        for key in ("durationMs", "amplitudeFrameMs", "amplitudeFrames"):
+            value = result.get(key)
+            if value not in (None, ""):
+                payload[key] = value
+        payload.update({key: value for key, value in extra.items() if value not in (None, "")})
+        return payload
+
+    def _speak_cloud_tts(self, text: str) -> dict[str, Any]:
+        source = self._cloud_tts_source()
+        if not source:
+            return {"success": False, "available": False, "engine": "gemini", "message": "Gemini cloud voice is not configured."}
+        speaker = self._ensure_cloud_tts_speaker()
+        if speaker is None:
+            return {"success": False, "available": False, "engine": "gemini", "message": "Gemini voice runtime is unavailable."}
+        try:
+            if not os.environ.get("GOOGLE_API_KEY") and os.environ.get("GEMINI_API_KEY"):
+                os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
+            speaker.set_voice(os.environ.get("VOICE_NAME") or os.environ.get("VOICE_PERSONA") or "Aoede")
+            self._cloud_tts_fallback_text = text
+            speaker.speak(text, force=True)
+        except Exception as exc:
+            self.emit_event("speech-status", {"state": "error", "engine": "gemini", "message": str(exc)})
+            return {"success": False, "available": True, "engine": "gemini", "message": str(exc)}
+        voice = ""
+        try:
+            voice = speaker.voice_identity_snapshot().get("gemini_voice", "")
+        except Exception:
+            voice = os.environ.get("VOICE_NAME", "Aoede")
+        self.emit_event("speech-status", {"state": "speaking", "engine": "gemini", "voice": voice, "chars": len(text)})
+        return {
+            "success": True,
+            "available": True,
+            "engine": "gemini",
+            "voice": voice,
+            "chars": len(text),
+            "message": "Gemini cloud speech queued",
+            "source": source,
+        }
+
+    def _on_cloud_tts_error(self, message: str) -> None:
+        text = str(getattr(self, "_cloud_tts_fallback_text", "") or "").strip()
+        self.emit_event(
+            "speech-status",
+            {
+                "state": "fallback",
+                "engine": "gemini",
+                "message": f"Gemini voice failed; using offline voice. {str(message)[:180]}",
+            },
+        )
+        if not text:
+            return
+        offline_ready, _status = self._offline_tts_ready()
+        if offline_ready:
+            self._queue_offline_tts(text, fallback_from="gemini")
+            return
+        self._start_os_tts(text)
 
     def _tts_command(self, text: str) -> list[str] | None:
         system = platform.system().lower()
@@ -1553,50 +1971,18 @@ class ShellBackendBridge(QObject):
             text = text[:max_chars].rsplit(" ", 1)[0].strip() + "..."
 
         self._stop_speech_process()
-        offline_result = speak_offline_tts(text)
-        offline_process = offline_result.pop("_process", None) if isinstance(offline_result, dict) else None
-        if isinstance(offline_result, dict) and offline_result.get("success"):
-            if offline_process is not None:
-                self._speech_process = offline_process
-            payload = {
-                "state": "speaking",
-                "engine": offline_result.get("engine", "offline"),
-                "voice": offline_result.get("voice", ""),
-                "chars": offline_result.get("chars", len(text)),
-            }
-            self.emit_event("speech-status", payload)
-            return {
-                **offline_result,
-                "message": "Offline natural speech started",
-                "source": "offline-tts",
-            }
-        if isinstance(offline_result, dict) and offline_result.get("available"):
-            self.emit_event(
-                "speech-status",
-                {
-                    "state": "fallback",
-                    "engine": offline_result.get("engine", "offline"),
-                    "message": offline_result.get("message", "Offline TTS failed; using OS fallback."),
-                },
-            )
+        cloud_result = self._speak_cloud_tts(text)
+        if cloud_result.get("success"):
+            return cloud_result
 
-        command = self._tts_command(text)
-        if not command:
-            self.emit_event("speech-status", {"state": "error", "message": "No local TTS engine found"})
-            return {"success": False, "message": "No local TTS engine found"}
+        offline_ready, status = self._offline_tts_ready()
+        if offline_ready:
+            queued = self._queue_offline_tts(text)
+            queued["engine"] = str(status.get("engine") or "offline")
+            queued["label"] = status.get("label", "Offline natural voice")
+            return queued
 
-        try:
-            self._speech_process = subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-            )
-            self.emit_event("speech-status", {"state": "speaking", "engine": "os", "chars": len(text)})
-            return {"success": True, "message": "Speech started", "chars": len(text), "source": "os-tts"}
-        except Exception as exc:
-            self.emit_event("speech-status", {"state": "error", "message": str(exc)})
-            return {"success": False, "message": str(exc)}
+        return self._start_os_tts(text)
 
     def _stop_speech(self, _args: list[Any]) -> dict[str, Any]:
         self._stop_speech_process()

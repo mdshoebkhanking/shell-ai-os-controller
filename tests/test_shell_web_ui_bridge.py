@@ -8,6 +8,15 @@ PNG_DATA_URL = (
 )
 
 
+def _clear_chat_provider_env(monkeypatch, host):
+    for group in host.CHAT_PROVIDER_SECRET_GROUPS:
+        for key in group:
+            monkeypatch.delenv(key, raising=False)
+    monkeypatch.delenv("SHELL_CHAT_PROVIDER_MODE", raising=False)
+    monkeypatch.delenv("SHELL_WEB_CHAT_PROVIDER_MODE", raising=False)
+    monkeypatch.delenv("SHELL_CHAT_ONLINE_CHECK", raising=False)
+
+
 def test_chart_and_voice_chat_recall_previous_task(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
@@ -95,6 +104,111 @@ def test_voice_prompt_uses_offline_llm_and_stays_voice_originated(monkeypatch, t
     assert result["success"] is True
     assert result["reply"] == "Offline voice answer."
     assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["voice"] is True
+
+
+def test_chat_provider_success_skips_offline_llm(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    calls = {"provider": 0, "offline": 0}
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+
+    def fake_provider(*_args, **_kwargs):
+        calls["provider"] += 1
+        return "Gemini provider answer."
+
+    def fake_offline(*_args, **_kwargs):
+        calls["offline"] += 1
+        return "Offline answer should not be used."
+
+    monkeypatch.setattr(bridge, "_provider_chat_reply", fake_provider)
+    monkeypatch.setattr(bridge, "_offline_chat_reply", fake_offline)
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text"}])
+
+    assert result["reply"] == "Gemini provider answer."
+    assert calls == {"provider": 1, "offline": 0}
+
+
+def test_chat_without_api_key_skips_provider_and_uses_offline(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+
+    def provider_should_not_run(*_args, **_kwargs):
+        raise AssertionError("provider should be skipped when no chat API key is configured")
+
+    monkeypatch.setattr(bridge, "_provider_chat_reply", provider_should_not_run)
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Offline no-key answer.")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text"}])
+
+    assert result["reply"] == "Offline no-key answer."
+
+
+def test_chat_offline_network_skips_provider_even_with_api_key(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("GEMINI_API_KEY", "g" * 32)
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: False)
+
+    def provider_should_not_run(*_args, **_kwargs):
+        raise AssertionError("provider should be skipped when network probe says offline")
+
+    monkeypatch.setattr(bridge, "_provider_chat_reply", provider_should_not_run)
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Offline network answer.")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text"}])
+
+    assert result["reply"] == "Offline network answer."
+
+
+def test_offline_fallback_prompt_includes_memory_and_project_rag(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("SHELL_CHAT_PROVIDER_MODE", "offline")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    seen = {}
+
+    monkeypatch.setattr(bridge, "_memory_context_snippet", lambda _query: "- user prefers concise Hinglish replies")
+    monkeypatch.setattr(bridge, "_project_rag_context_snippet", lambda _query: "- shell_web_ui/host.py: offline routing lives here")
+
+    def fake_offline(prompt, system_prompt, previous_messages):
+        seen["prompt"] = prompt
+        seen["system_prompt"] = system_prompt
+        seen["previous_messages"] = previous_messages
+        return "Offline context answer."
+
+    monkeypatch.setattr(bridge, "_offline_chat_reply", fake_offline)
+
+    reply = bridge._brain_chat_fallback(
+        "offline model ka route batao",
+        previous_messages=[{"role": "user", "parts": [{"text": "pehle ka task"}]}],
+    )
+
+    assert reply == "Offline context answer."
+    assert "Recent conversation:" in seen["prompt"]
+    assert "Relevant local memory:" in seen["prompt"]
+    assert "user prefers concise Hinglish replies" in seen["prompt"]
+    assert "Relevant Project RAG:" in seen["prompt"]
+    assert "shell_web_ui/host.py" in seen["prompt"]
+    assert "memory, and Project RAG context" in seen["system_prompt"]
 
 
 def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch, tmp_path):
@@ -287,6 +401,7 @@ def test_chat_message_includes_attached_text_context(monkeypatch, tmp_path):
         ("generate image", {"source": "text", "entry": "chart"}, "high quality original Shell AI concept image"),
         ("pic banao", {"source": "voice", "entry": "chart"}, "high quality original Shell AI concept image"),
         ("cyberpunk city ki image banao", {"source": "text"}, "cyberpunk city"),
+        ("mere liye koi cat ke photo ganarete karke do ok", {"source": "text"}, "cat"),
     ],
 )
 def test_short_image_intents_route_to_generation_and_emit_gallery_events(

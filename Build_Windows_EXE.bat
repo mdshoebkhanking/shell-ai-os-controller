@@ -8,6 +8,14 @@ set "SHELL_TTS_ENGINE=fast"
 set "SHELL_LEGACY_UI=0"
 set "SHELL_V2_STREAM=1"
 set "SHELL_IMAGE_LOCAL_FALLBACK=1"
+set "SHELL_WINDOWS_PERFORMANCE_MODE=balanced"
+set "SHELL_OFFLINE_LLM_CONTEXT=1024"
+set "SHELL_OFFLINE_LLM_BATCH=64"
+set "SHELL_OFFLINE_LLM_MAX_TOKENS=160"
+set "OPENBLAS_NUM_THREADS=1"
+set "OMP_NUM_THREADS=1"
+set "MKL_NUM_THREADS=1"
+set "NUMEXPR_NUM_THREADS=1"
 call :refresh_path
 
 echo.
@@ -77,6 +85,11 @@ if not "!SHELL_RC!"=="0" goto failed
 
 echo Staging offline LLM assets...
 %PY_CMD% tools\stage_falcon_offline_llm_assets.py --variant q4_k_m
+set "SHELL_RC=!ERRORLEVEL!"
+if not "!SHELL_RC!"=="0" goto failed
+
+echo Staging offline STT assets...
+%PY_CMD% tools\stage_sherpa_stt_assets.py
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 

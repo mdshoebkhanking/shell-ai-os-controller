@@ -6,6 +6,8 @@ Handles authentication and control for WhatsApp, Telegram, Instagram
 
 import os
 import json
+import tempfile
+from pathlib import Path
 from typing import Dict, Optional, Tuple
 from datetime import datetime
 from shell_safe_executor import god_tier_tool as function_tool
@@ -19,7 +21,33 @@ except ImportError:
 logger = logging.getLogger("shell_social_connector")
 
 # Connection state storage
-CONNECTIONS_FILE = os.path.expanduser("~/.shell_social_connections.json")
+def _path_is_writable(path: Path) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        probe = path.parent / f".{path.name}.write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _connections_file() -> Path:
+    candidates = [
+        Path(os.environ.get("SHELL_SOCIAL_CONNECTIONS_FILE", "")).expanduser()
+        if os.environ.get("SHELL_SOCIAL_CONNECTIONS_FILE")
+        else None,
+        Path.home() / ".shell_social_connections.json",
+        Path(__file__).resolve().parent / ".shell_runtime" / "social_connections.json",
+        Path(tempfile.gettempdir()) / "shell_social_connections.json",
+    ]
+    for candidate in candidates:
+        if candidate and _path_is_writable(candidate):
+            return candidate
+    return Path(tempfile.gettempdir()) / "shell_social_connections.json"
+
+
+CONNECTIONS_FILE = str(_connections_file())
 
 SUPPORTED_PLATFORMS = ["whatsapp", "telegram", "instagram"]
 

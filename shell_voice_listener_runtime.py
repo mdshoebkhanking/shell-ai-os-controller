@@ -149,8 +149,19 @@ class VoiceListenerThread(QThread):
         self._last_endpoint_timeout = self._speech_timeout
         self._pipeline: VoicePipelineManager | None = None
         self._manual_trigger = _env_bool("SHELL_VOICE_BUTTON_BYPASSES_WAKE", True)
-        self._local_stt_enabled = _env_bool("SHELL_LOCAL_STT_ENABLED", False)
-        self._local_stt_primary = _env_bool("SHELL_LOCAL_STT_PRIMARY", False)
+        if os.environ.get("SHELL_LOCAL_STT_ENABLED") is None:
+            try:
+                from shell_local_stt import local_stt_enabled
+
+                self._local_stt_enabled = local_stt_enabled()
+            except Exception:
+                self._local_stt_enabled = False
+        else:
+            self._local_stt_enabled = _env_bool("SHELL_LOCAL_STT_ENABLED", False)
+        if os.environ.get("SHELL_LOCAL_STT_PRIMARY") is None:
+            self._local_stt_primary = self._local_stt_enabled
+        else:
+            self._local_stt_primary = _env_bool("SHELL_LOCAL_STT_PRIMARY", False)
         self._local_stt = None
         self._local_stt_error_reported = False
 

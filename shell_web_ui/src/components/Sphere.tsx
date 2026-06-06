@@ -43,7 +43,7 @@ const ORB_FRAGMENT_SHADER = `
 `
 
 const CustomParticleSphere = ({
-  count = 3000,
+  count = 2000,
   voiceLevel = 0,
   active = false,
   speaking = false
@@ -93,6 +93,7 @@ const CustomParticleSphere = ({
 
   useFrame((state, delta) => {
     if (!state.clock.running || !mesh.current || !materialRef.current) return
+    if (document.hidden) return
 
     mesh.current.rotation.y += delta * 0.05
     mesh.current.rotation.z += delta * 0.05

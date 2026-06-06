@@ -40,6 +40,7 @@ Source bootstrap behavior:
 - Requires Node.js/npm 20.19+ or 22.12+ for Web UI builds.
 - Refreshes Windows PATH after winget installs and resolves `npm.cmd` directly so npm health checks and Web UI build commands use the same executable.
 - Sets the modern Web UI defaults (`SHELL_LEGACY_UI=0`, `SHELL_V2_STREAM=1`) and keeps image generation usable with `SHELL_IMAGE_LOCAL_FALLBACK=1` when cloud image keys are unavailable.
+- On Windows, enables balanced performance defaults for bundled offline LLM and BLAS worker pools so low-end PCs remain responsive.
 - Reports cloud image provider readiness without printing secret values. Add `OPENAI_API_KEY`, `STABILITY_API_KEY`, `REPLICATE_API_KEY`, or `HUGGINGFACE_API_KEY` for real AI images.
 - Installs Playwright Chromium.
 - Installs ffmpeg, Tesseract OCR, uv/uvx, Python, and Node.js when the OS package manager supports it.

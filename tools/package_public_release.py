@@ -46,6 +46,7 @@ REQUIRED_PACKAGE_FILES = {
     "installer/bootstrap.py",
     "installer/windows_audio_preflight.ps1",
     "launch.py",
+    "models/stt/README.md",
     "requirements.txt",
     "shell_hub.py",
     "shell_ui/requirements_ui.txt",
@@ -60,6 +61,9 @@ REQUIRED_PACKAGE_FILES = {
     "shell_web_ui/tsconfig.json",
     "shell_web_ui/vite.config.ts",
     "tools/build_windows_installer.py",
+    "tools/stage_falcon_offline_llm_assets.py",
+    "tools/stage_kokoro_tts_assets.py",
+    "tools/stage_sherpa_stt_assets.py",
     "tools/windows_app/shellai_desktop_entry.py",
     "tools/windows_installer/ShellAI_Setup.iss",
     "tools/windows_installer/ShellAI_Setup.nsi",
@@ -208,6 +212,8 @@ def version() -> str:
 def excluded(path: Path) -> bool:
     rel = path.relative_to(ROOT)
     rel_parts = rel.parts
+    if len(rel_parts) >= 2 and rel_parts[0] == "models" and rel_parts[1] in {"llm", "tts", "stt"}:
+        return path.name != "README.md"
     if any(rel_parts[: len(prefix)] == prefix for prefix in EXCLUDED_PATH_PREFIXES):
         return True
     parts = set(rel.parts)

@@ -23,6 +23,7 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_TTS_DIR = PROJECT_ROOT / ".shell_runtime" / "tts_audio"
 DEFAULT_ENGINE_ORDER = ("kokoro", "piper")
+PLAYBACK_STARTUP_GRACE_S = 0.12
 SUPPORTED_SHELL_LANGUAGE_ORDER = ("hinglish", "english", "hindi")
 SUPPORTED_SHELL_LANGUAGES = set(SUPPORTED_SHELL_LANGUAGE_ORDER)
 KOKORO_MODEL_FAMILY = "Kokoro-82M"
@@ -41,14 +42,24 @@ KOKORO_HINDI_NATIVE_VOICE = "hf_alpha"
 HINGLISH_ROUTING_HINTS = frozenset(
     {
         "aap",
+        "ab",
         "abhi",
         "acha",
         "achha",
+        "achhi",
+        "awaaz",
+        "awaz",
         "baat",
+        "badiya",
         "bhai",
+        "bigad",
         "bol",
+        "bolo",
+        "bolne",
         "bolna",
         "bolra",
+        "bolta",
+        "bolti",
         "chahiye",
         "dekho",
         "fir",
@@ -58,14 +69,30 @@ HINGLISH_ROUTING_HINTS = frozenset(
         "haan",
         "hoga",
         "ho",
+        "hoon",
         "horra",
+        "hoti",
+        "hotti",
+        "hun",
+        "ja",
+        "jaa",
+        "jarra",
+        "ka",
+        "kaam",
         "kar",
+        "karra",
+        "karri",
         "karna",
         "karo",
+        "ke",
         "kaise",
         "kaisa",
+        "ki",
+        "ko",
         "kya",
         "kyun",
+        "lagra",
+        "lagta",
         "main",
         "mai",
         "mat",
@@ -73,11 +100,14 @@ HINGLISH_ROUTING_HINTS = frozenset(
         "na",
         "nahi",
         "nai",
-        "os",
         "pahle",
+        "raha",
+        "rahe",
+        "rahi",
         "samjhe",
         "sahi",
         "sab",
+        "se",
         "shuru",
         "theek",
         "thik",
@@ -87,6 +117,112 @@ HINGLISH_ROUTING_HINTS = frozenset(
         "yeh",
     }
 )
+HINGLISH_SHORT_CLAUSE_HINTS = frozenset(
+    {
+        "acha",
+        "achha",
+        "achhi",
+        "awaaz",
+        "awaz",
+        "bhai",
+        "haan",
+        "han",
+        "kaise",
+        "kya",
+        "nahi",
+        "nai",
+        "samjhe",
+        "sahi",
+    }
+)
+ROMAN_HINDI_PRONUNCIATION_WORDS = {
+    "aap": "आप",
+    "ab": "अब",
+    "abhi": "अभी",
+    "acha": "अच्छा",
+    "achha": "अच्छा",
+    "achhi": "अच्छी",
+    "accent": "एक्सेंट",
+    "acsent": "एक्सेंट",
+    "api": "ए पी आई",
+    "awaaz": "आवाज",
+    "awaz": "आवाज",
+    "baat": "बात",
+    "badiya": "बढ़िया",
+    "bhai": "भाई",
+    "bigad": "बिगड़",
+    "bol": "बोल",
+    "bolo": "बोलो",
+    "bolna": "बोलना",
+    "bolne": "बोलने",
+    "bolra": "बोल रहा",
+    "bolta": "बोलता",
+    "bolti": "बोलती",
+    "chahiye": "चाहिए",
+    "dekho": "देखो",
+    "gemini": "जेमिनी",
+    "hai": "है",
+    "hain": "हैं",
+    "han": "हां",
+    "haan": "हां",
+    "hoga": "होगा",
+    "ho": "हो",
+    "hoon": "हूं",
+    "horra": "हो रहा",
+    "hoti": "होती",
+    "hotti": "होती",
+    "hun": "हूं",
+    "ja": "जा",
+    "jaa": "जा",
+    "jarra": "जा रहा",
+    "ka": "का",
+    "kaam": "काम",
+    "kar": "कर",
+    "karna": "करना",
+    "karo": "करो",
+    "karra": "कर रहा",
+    "karri": "कर रही",
+    "ke": "के",
+    "key": "की",
+    "ki": "की",
+    "ko": "को",
+    "kaise": "कैसे",
+    "kaisa": "कैसा",
+    "kya": "क्या",
+    "kyun": "क्यों",
+    "lagra": "लग रहा",
+    "lagta": "लगता",
+    "main": "मैं",
+    "mai": "मैं",
+    "mat": "मत",
+    "mujhe": "मुझे",
+    "na": "ना",
+    "nahi": "नहीं",
+    "nai": "नहीं",
+    "offline": "ऑफलाइन",
+    "online": "ऑनलाइन",
+    "pahle": "पहले",
+    "problem": "प्रॉब्लम",
+    "raha": "रहा",
+    "rahe": "रहे",
+    "rahi": "रही",
+    "route": "रूट",
+    "sab": "सब",
+    "samjhe": "समझे",
+    "sahi": "सही",
+    "se": "से",
+    "shell": "शेल",
+    "shuru": "शुरू",
+    "theek": "ठीक",
+    "thik": "ठीक",
+    "tum": "तुम",
+    "tumhe": "तुम्हें",
+    "user": "यूजर",
+    "voice": "वॉइस",
+    "work": "वर्क",
+    "yah": "यह",
+    "yeh": "यह",
+}
 
 
 @dataclass(frozen=True)
@@ -176,8 +312,9 @@ def _kokoro_voice_for(language: str) -> str:
 
 
 def _kokoro_routing_mode() -> str:
-    mode = os.environ.get("SHELL_HINGLISH_TTS_ROUTING", "balanced").strip().lower()
-    return mode if mode in {"balanced", "aggressive", "english", "native-hindi"} else "balanced"
+    mode = os.environ.get("SHELL_HINGLISH_TTS_ROUTING", "bilingual").strip().lower()
+    allowed_modes = {"balanced", "bilingual", "aggressive", "english", "native-hindi"}
+    return mode if mode in allowed_modes else "bilingual"
 
 
 def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> dict[str, Any]:
@@ -192,7 +329,10 @@ def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> d
         "preferredVoiceProfile": "realistic-female",
         "preferredFemaleVoice": KOKORO_REALISTIC_FEMALE_VOICE,
         "nativeHindiVoice": KOKORO_HINDI_NATIVE_VOICE,
-        "hinglishStrategy": "Roman Hinglish uses af_heart for a more natural female voice; native Hindi uses hf_alpha for Hindi phonemization.",
+        "hinglishStrategy": (
+            "English clauses use af_heart; Hindi/Hinglish clauses use hf_alpha with "
+            "native Hindi pronunciation rewriting for a cleaner bilingual accent."
+        ),
     }
     if model:
         payload["modelPath"] = str(model)
@@ -390,12 +530,17 @@ def _play_wav_async(wav_path: Path) -> subprocess.Popen[Any] | None:
     command = _playback_command(wav_path)
     if not command:
         return None
-    return subprocess.Popen(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        stdin=subprocess.DEVNULL,
-    )
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception:
+        return None
+    time.sleep(PLAYBACK_STARTUP_GRACE_S)
+    return None if process.poll() not in (None, 0) else process
 
 
 def _tts_audio_path(engine: str) -> Path:
@@ -418,6 +563,64 @@ def _write_float_wav(path: Path, samples: Any, sample_rate: int) -> None:
         wav_file.writeframes(pcm)
 
 
+def _audio_reactivity_metadata(samples: Any, sample_rate: int) -> dict[str, Any]:
+    try:
+        import numpy as np
+
+        audio = np.asarray(samples, dtype=np.float32)
+        if audio.ndim > 1:
+            audio = audio.reshape(-1)
+        audio = np.clip(audio, -1.0, 1.0)
+        rate = max(1, int(sample_rate or 0))
+        if audio.size == 0:
+            return {"durationMs": 0, "amplitudeFrameMs": 80, "amplitudeFrames": []}
+
+        frame_ms = 70
+        frame_size = max(1, int(rate * frame_ms / 1000))
+        rms_values = []
+        for start in range(0, int(audio.size), frame_size):
+            frame = audio[start : start + frame_size]
+            if frame.size == 0:
+                continue
+            rms_values.append(float(np.sqrt(np.mean(np.square(frame)))))
+
+        if not rms_values:
+            return {
+                "durationMs": int(round(audio.size / rate * 1000)),
+                "amplitudeFrameMs": frame_ms,
+                "amplitudeFrames": [],
+            }
+
+        normalizer = max(float(np.percentile(rms_values, 90)), 0.015)
+        frames = [round(max(0.0, min(1.0, (value / normalizer) * 0.82)), 3) for value in rms_values[:220]]
+        return {
+            "durationMs": int(round(audio.size / rate * 1000)),
+            "amplitudeFrameMs": frame_ms,
+            "amplitudeFrames": frames,
+        }
+    except Exception:
+        return {"durationMs": 0, "amplitudeFrameMs": 80, "amplitudeFrames": []}
+
+
+def _wav_reactivity_metadata(wav_path: Path) -> dict[str, Any]:
+    try:
+        import numpy as np
+
+        with wave.open(str(wav_path), "rb") as wav_file:
+            sample_rate = int(wav_file.getframerate())
+            channels = max(1, int(wav_file.getnchannels()))
+            sample_width = int(wav_file.getsampwidth())
+            frames = wav_file.readframes(wav_file.getnframes())
+        if sample_width != 2 or not frames:
+            return {"durationMs": 0, "amplitudeFrameMs": 80, "amplitudeFrames": []}
+        audio = np.frombuffer(frames, dtype="<i2").astype(np.float32) / 32768.0
+        if channels > 1:
+            audio = audio.reshape(-1, channels).mean(axis=1)
+        return _audio_reactivity_metadata(audio, sample_rate)
+    except Exception:
+        return {"durationMs": 0, "amplitudeFrameMs": 80, "amplitudeFrames": []}
+
+
 def _contains_devanagari(text: str) -> bool:
     return any(0x0900 <= ord(char) <= 0x097F for char in text)
 
@@ -431,12 +634,34 @@ def _roman_hindi_score(text: str) -> tuple[int, int]:
 def _classify_hinglish_clause(text: str) -> str:
     if _contains_devanagari(text):
         return "hindi"
+    mode = _kokoro_routing_mode()
     score, word_count = _roman_hindi_score(text)
-    if _kokoro_routing_mode() == "native-hindi" and (score >= 2 or (score > 0 and score == word_count)):
+    if mode == "balanced":
+        return "english"
+    if mode == "native-hindi" and score > 0:
         return "hindi"
-    if _kokoro_routing_mode() == "aggressive" and score > 0:
+    if mode == "aggressive" and score > 0:
         return "hindi"
+    if mode == "bilingual" and score >= 2:
+        return "hindi"
+    if mode == "bilingual" and score == 1 and word_count <= 4:
+        words = re.findall(r"[a-zA-Z]+", text.lower())
+        if any(word in HINGLISH_SHORT_CLAUSE_HINTS for word in words):
+            return "hindi"
     return "english"
+
+
+def _kokoro_synthesis_text_for(segment: KokoroTTSSegment) -> str:
+    if segment.language != "hindi" or _contains_devanagari(segment.text):
+        return segment.text
+
+    def replace_word(match: re.Match[str]) -> str:
+        return ROMAN_HINDI_PRONUNCIATION_WORDS.get(match.group(0).lower(), match.group(0))
+
+    rewritten = re.sub(r"[a-zA-Z]+", replace_word, segment.text)
+    if _contains_devanagari(rewritten):
+        return rewritten
+    return segment.text
 
 
 def _split_speech_clauses(text: str) -> list[str]:
@@ -538,6 +763,7 @@ def _kokoro_espeak_config() -> Any | None:
         data_path = Path(str(espeakng_loader.get_data_path()))
         library_path = Path(str(espeakng_loader.get_library_path()))
         _prepare_kokoro_espeak_data_layout(data_path)
+        _patch_kokoro_espeak_absolute_data_path()
         os.environ.setdefault("PHONEMIZER_ESPEAK_LIBRARY", str(library_path))
         os.environ.setdefault("PHONEMIZER_ESPEAK_DATA_PATH", str(data_path))
         return EspeakConfig(
@@ -546,6 +772,41 @@ def _kokoro_espeak_config() -> Any | None:
         )
     except Exception:
         return None
+
+
+def _kokoro_espeak_native_data_arg(data_path: Any) -> Any:
+    if platform.system().lower() != "darwin" or data_path is None:
+        return data_path
+    try:
+        candidate = Path(os.fsdecode(data_path))
+    except TypeError:
+        return data_path
+    if not candidate.is_absolute() or candidate.name != "espeak-ng-data" or not (candidate / "phontab").exists():
+        return data_path
+    try:
+        relative = os.path.relpath(candidate, Path.cwd())
+    except ValueError:
+        return data_path
+    return relative if Path(relative).is_dir() else data_path
+
+
+def _patch_kokoro_espeak_absolute_data_path() -> None:
+    if platform.system().lower() != "darwin":
+        return
+    try:
+        from phonemizer.backend.espeak.api import EspeakAPI
+    except Exception:
+        return
+    if getattr(EspeakAPI, "_shellai_relative_data_path_patch", False):
+        return
+
+    original_init = EspeakAPI.__init__
+
+    def shellai_init(self: Any, library: Any, data_path: Any) -> None:
+        original_init(self, library, _kokoro_espeak_native_data_arg(data_path))
+
+    EspeakAPI.__init__ = shellai_init
+    EspeakAPI._shellai_relative_data_path_patch = True
 
 
 def _prepare_kokoro_espeak_data_layout(data_path: Path) -> None:
@@ -594,10 +855,12 @@ def _speak_kokoro(text: str) -> dict[str, Any]:
         engine = Kokoro(str(model), str(voices))
     segments = _prepare_kokoro_segments(text)
     rendered_segments = [
-        engine.create(segment.text, voice=segment.voice, speed=speed, lang=segment.locale) for segment in segments
+        engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
+        for segment in segments
     ]
     samples, sample_rate = _join_kokoro_audio(rendered_segments)
     _write_float_wav(wav_path, samples, int(sample_rate))
+    reactivity = _audio_reactivity_metadata(samples, int(sample_rate))
     process = _play_wav_async(wav_path)
     if not process:
         return {"success": False, "available": True, "engine": "kokoro", "message": "No local WAV playback command found."}
@@ -610,6 +873,7 @@ def _speak_kokoro(text: str) -> dict[str, Any]:
         "segments": [segment.as_dict() for segment in segments],
         "chars": len(text),
         "audioPath": str(wav_path),
+        **reactivity,
         "_process": process,
     }
 
@@ -639,12 +903,14 @@ def _speak_piper(text: str) -> dict[str, Any]:
     process = _play_wav_async(wav_path)
     if not process:
         return {"success": False, "available": True, "engine": "piper", "message": "No local WAV playback command found."}
+    reactivity = _wav_reactivity_metadata(wav_path)
     return {
         "success": True,
         "available": True,
         "engine": "piper",
         "chars": len(text),
         "audioPath": str(wav_path),
+        **reactivity,
         "_process": process,
     }
 

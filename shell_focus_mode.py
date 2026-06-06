@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -12,18 +13,43 @@ from shell_safe_executor import god_tier_tool as function_tool
 STATE_PATH = Path(os.environ.get("SHELL_FOCUS_STATE", "~/.shell_focus_mode_state.json")).expanduser()
 
 
+def _runtime_state_path() -> Path:
+    return Path(__file__).resolve().parent / ".shell_runtime" / "focus_mode_state.json"
+
+
+def _path_is_writable(path: Path) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        probe = path.parent / f".{path.name}.write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _state_path() -> Path:
+    if _path_is_writable(STATE_PATH):
+        return STATE_PATH
+    fallback = _runtime_state_path()
+    if _path_is_writable(fallback):
+        return fallback
+    return Path(tempfile.gettempdir()) / "shell_focus_mode_state.json"
+
+
 def _load_state() -> dict[str, Any]:
     try:
-        return json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        return json.loads(_state_path().read_text(encoding="utf-8"))
     except Exception:
         return {"active": False, "sessions": []}
 
 
 def _save_state(state: dict[str, Any]) -> None:
-    STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_PATH.with_suffix(STATE_PATH.suffix + ".tmp")
+    path = _state_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
-    tmp.replace(STATE_PATH)
+    tmp.replace(path)
 
 
 @function_tool(category="productivity")

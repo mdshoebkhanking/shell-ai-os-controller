@@ -40,6 +40,8 @@ visible.
 | --- | --- | --- |
 | Current 16:9 Web UI demo | `videos/shell-current-ui-landscape-demo.mp4` | Primary English landscape Remotion demo |
 | Current 16:9 Web UI poster | `videos/shell-current-ui-landscape-poster.png` | Primary README poster frame |
+| Cinematic launch trailer | `videos/shell-cinematic-launch-trailer.mp4` | 57-second 16:9 launch trailer with real Shell UI captures and narrator audio |
+| Cinematic launch poster | `videos/shell-cinematic-launch-trailer-poster.png` | Poster frame for launch trailer sharing |
 
 ## Remotion Source
 
@@ -54,11 +56,16 @@ Useful commands:
 ```bash
 npm run still:landscape
 npm run render:landscape
+npm run still:cinematic
+npm run render:cinematic
 ```
 
 The primary current demo composition is `ShellCurrentUiLandscape` at 1920x1080.
 It uses English on-screen copy and current PNG UI captures from
 `videos/instagram-reel/public/current-ui/`.
+The cinematic launch composition is `ShellCinematicLaunchTrailer` at 1920x1080
+and uses the same real UI captures plus the generated narrator track in
+`videos/instagram-reel/public/audio/shell-cinematic-voice.wav`.
 
 Old vertical reels, classic launch videos, placeholder screenshots, and
 reference captures were removed so public media only reflects the current Shell

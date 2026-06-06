@@ -52,6 +52,7 @@ APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 TTS_MODEL_STAGE = APP_STAGE / "models" / "tts"
 LLM_MODEL_STAGE = APP_STAGE / "models" / "llm"
+STT_MODEL_STAGE = APP_STAGE / "models" / "stt" / "sherpa-onnx"
 PRIMARY_LLM_MODEL_FAMILY = "Falcon-H1-1.5B-Deep-Instruct-GGUF"
 PRIMARY_LLM_MODEL_REPO = "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
 PRIMARY_LLM_MODEL_FILE = "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf"
@@ -73,6 +74,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "psutil",
     "requests",
     "shell_hub",
+    "shell_local_stt",
     "shell_offline_llm",
     "shell_tool_gateway",
     "shell_ui.splash_screen",
@@ -80,6 +82,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "socketio",
     "kokoro_onnx",
     "kokoro_onnx.config",
+    "sherpa_onnx",
     "llama_cpp",
     "espeakng_loader",
     "phonemizer",
@@ -92,6 +95,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
 PYINSTALLER_COLLECT_ALL = [
     "espeakng_loader",
     "kokoro_onnx",
+    "sherpa_onnx",
 ]
 PYINSTALLER_COPY_METADATA = [
     "aiohttp",
@@ -108,6 +112,7 @@ PYINSTALLER_COPY_METADATA = [
     "python-engineio",
     "python-socketio",
     "requests",
+    "sherpa-onnx",
 ]
 
 
@@ -188,6 +193,27 @@ def stage_release_files() -> dict[str, object]:
         encoding="utf-8",
     )
     return marker
+
+
+def copy_staged_model_assets_to_stage() -> dict[str, object]:
+    copied: dict[str, object] = {}
+    source_root = ROOT / "models"
+    for family in ("llm", "tts", "stt"):
+        source = source_root / family
+        target = APP_STAGE / "models" / family
+        if not source.exists():
+            copied[family] = {"status": "missing", "files": 0, "size_bytes": 0}
+            continue
+        if target.exists():
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+        files = [path for path in target.rglob("*") if path.is_file()]
+        copied[family] = {
+            "status": "copied",
+            "files": len(files),
+            "size_bytes": sum(path.stat().st_size for path in files),
+        }
+    return copied
 
 
 def _npm_command() -> str:
@@ -338,6 +364,36 @@ def offline_llm_stage_report() -> dict[str, object]:
                 "model_family": active_family,
             },
         },
+    }
+
+
+def offline_stt_stage_report() -> dict[str, object]:
+    model_root = STT_MODEL_STAGE / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
+    expected = {
+        "tokens": model_root / "tokens.txt",
+        "encoder": model_root / "encoder-epoch-99-avg-1.int8.onnx",
+        "decoder": model_root / "decoder-epoch-99-avg-1.onnx",
+        "joiner": model_root / "joiner-epoch-99-avg-1.int8.onnx",
+    }
+    ready = all(path.exists() and path.is_file() for path in expected.values())
+    model_files = [path for path in model_root.rglob("*") if path.is_file()] if model_root.exists() else []
+    return {
+        "status": "ready" if ready else "fallback",
+        "reason": (
+            "Packaged offline STT model assets detected."
+            if ready
+            else "No packaged sherpa-onnx STT model assets detected; Shell will fall back to API/browser speech recognition."
+        ),
+        "model_dir": str(model_root),
+        "model_file_count": len(model_files),
+        "total_size_bytes": sum(path.stat().st_size for path in model_files),
+        "recommended_engine": "sherpa-onnx",
+        "model_family": "sherpa-onnx streaming Zipformer EN 20M",
+        "model_kind": "transducer",
+        "language_support": ["english", "hinglish"],
+        "sample_rate": 16000,
+        "runtime_downloads": False,
+        "expected_files": {key: path.name for key, path in expected.items()},
     }
 
 
@@ -519,8 +575,10 @@ def build_windows_installer(
     if installer_engine not in {"nsis", "inno"}:
         raise RuntimeError(f"Unsupported installer engine: {installer_engine}")
     marker = stage_release_files()
+    model_assets_report = copy_staged_model_assets_to_stage()
     offline_tts_report = offline_tts_stage_report()
     offline_llm_report = offline_llm_stage_report()
+    offline_stt_report = offline_stt_stage_report()
     if not dry_run:
         copy_web_ui_dist_to_stage()
     icon_report = prepare_windows_icon(dry_run=dry_run)
@@ -546,9 +604,11 @@ def build_windows_installer(
         "nsis_compiler": makensis or "",
         "inno_compiler": iscc or "",
         "source_file_count": marker["source_file_count"],
+        "model_assets": model_assets_report,
         "bundled_app": app_report,
         "offline_tts": offline_tts_report,
         "offline_llm": offline_llm_report,
+        "offline_stt": offline_stt_report,
         "expected_output": str(DIST_DIR / f"shell-ai-os-controller-setup-{version()}.exe"),
     }
     if dry_run:

@@ -2,11 +2,37 @@
 import os
 import json
 import logging
+import tempfile
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Optional
 from shell_safe_executor import god_tier_tool as function_tool
 
 logger = logging.getLogger("shell_planner")
+
+
+def _path_is_writable(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".shell_write_test"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+
+
+def _plan_dir() -> Path:
+    candidates = [
+        Path(os.environ.get("SHELL_PLANS_DIR", "")).expanduser() if os.environ.get("SHELL_PLANS_DIR") else None,
+        Path.home() / "Documents" / "Shell_Plans",
+        Path(__file__).resolve().parent / ".shell_runtime" / "Shell_Plans",
+        Path(tempfile.gettempdir()) / "Shell_Plans",
+    ]
+    for candidate in candidates:
+        if candidate and _path_is_writable(candidate):
+            return candidate
+    return Path(tempfile.gettempdir()) / "Shell_Plans"
 
 # --- CATEGORY TEMPLATES ---
 CATEGORY_TEMPLATES = {
@@ -133,24 +159,23 @@ async def generate_task_plan(goal: str, duration_days: int = 30, category: str =
         # Build structured plan with adaptive phases
         text_plan, json_plan = _build_structured_plan(goal, duration_days, category)
 
-        # Save plan to files
-        home = os.path.expanduser("~")
-        plan_dir = os.path.join(home, "Documents", "Shell_Plans")
-        os.makedirs(plan_dir, exist_ok=True)
+        # Save plan to files. Prefer the user's Documents folder, but fall back
+        # to Shell runtime storage on locked-down Windows/RDP profiles.
+        plan_dir = _plan_dir()
 
         clean_name = goal.lower().replace(' ', '_')
         clean_name = "".join(c for c in clean_name if c.isalnum() or c == '_')
 
         # Save text version
         txt_filename = f"plan_{clean_name}.txt"
-        txt_filepath = os.path.join(plan_dir, txt_filename)
-        with open(txt_filepath, "w", encoding="utf-8") as f:
+        txt_filepath = plan_dir / txt_filename
+        with txt_filepath.open("w", encoding="utf-8") as f:
             f.write(text_plan)
 
         # Save JSON version for machine parsing
         json_filename = f"plan_{clean_name}.json"
-        json_filepath = os.path.join(plan_dir, json_filename)
-        with open(json_filepath, "w", encoding="utf-8") as f:
+        json_filepath = plan_dir / json_filename
+        with json_filepath.open("w", encoding="utf-8") as f:
             json.dump(json_plan, f, indent=2, ensure_ascii=False)
 
         num_phases = json_plan["total_phases"]
@@ -184,13 +209,12 @@ async def list_plans_tool() -> str:
     Shows filename, size, and created date for each plan.
     """
     try:
-        home = os.path.expanduser("~")
-        plan_dir = os.path.join(home, "Documents", "Shell_Plans")
+        plan_dir = _plan_dir()
 
-        if not os.path.exists(plan_dir):
+        if not plan_dir.exists():
             return "📂 Shell_Plans folder abhi exist nahi karta Sir. Pehle ek plan banayein!"
 
-        all_files = [f for f in os.listdir(plan_dir) if os.path.isfile(os.path.join(plan_dir, f))]
+        all_files = [item.name for item in plan_dir.iterdir() if item.is_file()]
 
         if not all_files:
             return "📂 Koi plan file nahi mili Sir. `generate_task_plan` se pehle ek plan banayein!"
@@ -198,17 +222,17 @@ async def list_plans_tool() -> str:
         result_lines = [f"📂 --- Your Plans ({len(all_files)} files) ---\n"]
 
         for fname in sorted(all_files):
-            fpath = os.path.join(plan_dir, fname)
+            fpath = plan_dir / fname
             try:
                 # File size
-                size_bytes = os.path.getsize(fpath)
+                size_bytes = fpath.stat().st_size
                 if size_bytes >= 1024 * 1024:
                     size_str = f"{size_bytes / (1024 * 1024):.2f} MB"
                 else:
                     size_str = f"{size_bytes / 1024:.2f} KB"
 
                 # Created date
-                created_time = os.path.getctime(fpath)
+                created_time = fpath.stat().st_ctime
                 created_date = datetime.fromtimestamp(created_time).strftime("%Y-%m-%d %H:%M")
 
                 result_lines.append(f"📄 {fname}\n   Size: {size_str} | Created: {created_date}")
@@ -233,18 +257,17 @@ async def delete_plan_tool(plan_name: str) -> str:
         plan_name (str): Exact filename of the plan to delete (e.g., 'plan_learn_python.txt').
     """
     try:
-        home = os.path.expanduser("~")
-        plan_dir = os.path.join(home, "Documents", "Shell_Plans")
+        plan_dir = _plan_dir()
 
         if not plan_name or not plan_name.strip():
             return "❌ Sir, plan_name dena zaroori hai. Pehle `list_plans_tool` se filenames check karein."
 
         plan_name = plan_name.strip()
-        filepath = os.path.join(plan_dir, plan_name)
+        filepath = plan_dir / plan_name
 
         # Safety: check the file exists
-        if not os.path.exists(filepath):
-            available = [f for f in os.listdir(plan_dir) if os.path.isfile(os.path.join(plan_dir, f))] if os.path.exists(plan_dir) else []
+        if not filepath.exists():
+            available = [item.name for item in plan_dir.iterdir() if item.is_file()] if plan_dir.exists() else []
             available_str = "\n".join(f"  • {f}" for f in available) if available else "  (koi file nahi hai)"
             return (
                 f"❌ File nahi mili: '{plan_name}'\n"
@@ -253,14 +276,14 @@ async def delete_plan_tool(plan_name: str) -> str:
             )
 
         # Safety: must be inside plan_dir (no path traversal)
-        real_filepath = os.path.realpath(filepath)
-        real_plan_dir = os.path.realpath(plan_dir)
-        if not real_filepath.startswith(real_plan_dir):
+        real_filepath = filepath.resolve()
+        real_plan_dir = plan_dir.resolve()
+        if os.path.commonpath([str(real_filepath), str(real_plan_dir)]) != str(real_plan_dir):
             return "❌ Security check fail! Sirf Shell_Plans folder ke andar ki files delete ho sakti hain."
 
         # Delete the file
-        file_size = os.path.getsize(filepath)
-        os.remove(filepath)
+        file_size = filepath.stat().st_size
+        filepath.unlink()
 
         size_str = f"{file_size / 1024:.2f} KB" if file_size < 1024 * 1024 else f"{file_size / (1024 * 1024):.2f} MB"
 

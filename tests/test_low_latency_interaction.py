@@ -17,7 +17,8 @@ def test_fast_local_reply_is_conservative(monkeypatch):
     assert ShellHoloUI._fast_local_reply_candidate("what time is it")
     status_reply = ShellHoloUI._fast_local_reply_candidate("kya hua bolo")
     assert status_reply
-    assert "Shell chal raha hai" in status_reply
+    assert "Shell is running" in status_reply
+    assert "Text chat does not auto-speak" in status_reply
     assert ShellHoloUI._fast_local_reply_candidate("/tool shell_calculator:calculate_tool {}") is None
     assert ShellHoloUI._fast_local_reply_candidate("write a python app for me") is None
 

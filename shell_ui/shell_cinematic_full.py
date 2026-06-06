@@ -14086,12 +14086,12 @@ class ShellHoloUI(QMainWindow):
         ]):
             platform = "macOS" if sys.platform == "darwin" else ("Windows" if os.name == "nt" else sys.platform)
             if os.name == "nt":
-                windows_mcp = "Windows-MCP Windows par available hai, bas Python 3.13+ aur uv/uvx installed hone chahiye."
+                windows_mcp = "Windows-MCP is available on Windows when Python 3.13+ and uv/uvx are installed."
             else:
-                windows_mcp = "Windows-MCP is platform par unavailable hai; yeh sirf real Windows machine par chalega."
+                windows_mcp = "Windows-MCP is unavailable on this platform; it only runs on a real Windows machine."
             return (
-                f"Shell chal raha hai. Platform: {platform}. Chat/text ready hai. "
-                "Text chat auto voice nahi chalata; reply bubble ke speaker button se voice sun sakte ho. "
+                f"Shell is running. Platform: {platform}. Chat and text are ready. "
+                "Text chat does not auto-speak; use the reply bubble speaker button when you want voice output. "
                 f"{windows_mcp}"
             )
 

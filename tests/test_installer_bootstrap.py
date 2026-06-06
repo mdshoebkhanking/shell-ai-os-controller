@@ -145,6 +145,15 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "PYTHONUTF8=1" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
+    assert "SHELL_WINDOWS_PERFORMANCE_MODE=balanced" in start
+    assert "SHELL_OFFLINE_LLM_CONTEXT=1024" in start
+    assert "SHELL_OFFLINE_LLM_BATCH=64" in start
+    assert "SHELL_OFFLINE_LLM_MAX_TOKENS=160" in start
+    assert "OPENBLAS_NUM_THREADS=1" in start
+    assert "MKL_NUM_THREADS=1" in start
+    for script in (start, one_click, repair, acceptance):
+        assert "SHELL_WINDOWS_PERFORMANCE_MODE=balanced" in script
+        assert "NUMEXPR_NUM_THREADS=1" in script
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in start
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in one_click
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
@@ -178,6 +187,25 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "installer\\bootstrap.py install --yes" in acceptance
 
 
+def test_bootstrap_applies_windows_runtime_performance_defaults(monkeypatch):
+    import installer.bootstrap as bootstrap
+
+    env = {}
+    monkeypatch.setattr(bootstrap, "detect_os", lambda: "windows")
+
+    bootstrap.apply_runtime_performance_defaults(env)
+
+    assert env["OPENBLAS_NUM_THREADS"] == "1"
+    assert env["OMP_NUM_THREADS"] == "1"
+    assert env["MKL_NUM_THREADS"] == "1"
+    assert env["NUMEXPR_NUM_THREADS"] == "1"
+    assert env["SHELL_WINDOWS_PERFORMANCE_MODE"] == "balanced"
+    assert env["SHELL_OFFLINE_LLM_CONTEXT"] == "1024"
+    assert env["SHELL_OFFLINE_LLM_BATCH"] == "64"
+    assert env["SHELL_OFFLINE_LLM_MAX_TOKENS"] == "160"
+    assert "SHELL_OFFLINE_LLM_THREADS" not in env
+
+
 def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     nsi = open("tools/windows_installer/ShellAI_Setup.nsi", encoding="utf-8").read()
     iss = open("tools/windows_installer/ShellAI_Setup.iss", encoding="utf-8").read()
@@ -199,6 +227,8 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "PyInstaller" in builder
     assert "--windowed" in builder
     assert "shell_hub" in builder
+    assert "shell_local_stt" in builder
+    assert "sherpa_onnx" in builder
     assert "aiohttp_cors" in builder
     assert "engineio.async_drivers.aiohttp" in builder
     assert "_available_pyinstaller_copy_metadata" in builder
@@ -209,8 +239,12 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert '"offline_tts": offline_tts_report' in builder
     assert "offline_llm_stage_report" in builder
     assert '"offline_llm": offline_llm_report' in builder
+    assert "offline_stt_stage_report" in builder
+    assert '"offline_stt": offline_stt_report' in builder
+    assert "copy_staged_model_assets_to_stage" in builder
     assert "No packaged natural offline TTS model assets detected" in builder
     assert "No packaged GGUF offline LLM model assets detected" in builder
+    assert "No packaged sherpa-onnx STT model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert '!define AppIconName "shell-ai.ico"' in nsi
     assert 'CreateShortCut "$DESKTOP\\Shell AI OS Controller.lnk" "$INSTDIR\\${AppExeName}" "" "$INSTDIR\\${AppIconName}" 0' in nsi
@@ -310,6 +344,35 @@ def test_windows_installer_reports_legacy_qwen_offline_llm_assets(monkeypatch, t
     assert ready["engines"]["llama_cpp_python"]["legacy_qwen_ready"] is True
 
 
+def test_windows_installer_reports_packaged_offline_stt_assets(monkeypatch, tmp_path):
+    build_windows_installer = load_tool_module("build_windows_installer")
+
+    stt_root = tmp_path / "models" / "stt" / "sherpa-onnx"
+    monkeypatch.setattr(build_windows_installer, "STT_MODEL_STAGE", stt_root)
+
+    fallback = build_windows_installer.offline_stt_stage_report()
+    assert fallback["status"] == "fallback"
+    assert fallback["model_file_count"] == 0
+
+    model_dir = stt_root / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
+    model_dir.mkdir(parents=True)
+    for name in (
+        "tokens.txt",
+        "encoder-epoch-99-avg-1.int8.onnx",
+        "decoder-epoch-99-avg-1.onnx",
+        "joiner-epoch-99-avg-1.int8.onnx",
+    ):
+        (model_dir / name).write_bytes(b"asset")
+
+    ready = build_windows_installer.offline_stt_stage_report()
+    assert ready["status"] == "ready"
+    assert ready["model_file_count"] == 4
+    assert ready["recommended_engine"] == "sherpa-onnx"
+    assert ready["model_kind"] == "transducer"
+    assert ready["language_support"] == ["english", "hinglish"]
+    assert ready["runtime_downloads"] is False
+
+
 def test_kokoro_asset_staging_helper_dry_run(tmp_path):
     stage_kokoro = load_tool_module("stage_kokoro_tts_assets")
 
@@ -348,6 +411,32 @@ def test_falcon_offline_llm_asset_staging_helper_dry_run(tmp_path):
     assert not (tmp_path / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").exists()
 
 
+def test_sherpa_stt_asset_staging_helper_dry_run(tmp_path):
+    stage_sherpa = load_tool_module("stage_sherpa_stt_assets")
+
+    report = stage_sherpa.stage_assets(output_root=tmp_path, dry_run=True, force=False)
+
+    assert report["status"] == "dry-run"
+    assert report["model_family"] == "sherpa-onnx streaming Zipformer EN 20M"
+    assert report["runtime"] == "sherpa-onnx"
+    assert [asset["name"] for asset in report["assets"]] == [
+        "tokens.txt",
+        "encoder-epoch-99-avg-1.int8.onnx",
+        "decoder-epoch-99-avg-1.onnx",
+        "joiner-epoch-99-avg-1.int8.onnx",
+    ]
+    assert not (tmp_path / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17" / "tokens.txt").exists()
+
+
+def test_public_source_package_excludes_staged_model_binaries_but_keeps_readmes():
+    package_public_release = load_tool_module("package_public_release")
+
+    assert package_public_release.excluded(ROOT / "models" / "llm" / "falcon-h1" / "model.gguf") is True
+    assert package_public_release.excluded(ROOT / "models" / "tts" / "kokoro" / "model.onnx") is True
+    assert package_public_release.excluded(ROOT / "models" / "stt" / "sherpa-onnx" / "encoder.onnx") is True
+    assert package_public_release.excluded(ROOT / "models" / "stt" / "README.md") is False
+
+
 def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
@@ -357,6 +446,9 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "llama-cpp-python" in workflow
     assert "tools/stage_falcon_offline_llm_assets.py --variant q4_k_m" in workflow
     assert "models/llm/falcon-h1-1.5b-deep" in workflow
+    assert "sherpa-onnx" in workflow
+    assert "tools/stage_sherpa_stt_assets.py" in workflow
+    assert "models/stt/sherpa-onnx" in workflow
     assert "choco install innosetup" in workflow
     assert "--installer-engine inno" in workflow
 

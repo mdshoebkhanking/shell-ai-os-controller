@@ -156,7 +156,7 @@ class ChatHistoryStore:
                     pass
                 return candidate
             except Exception as e:
-                logger.warning("could not use chat history dir %s: %s", candidate, e)
+                logger.debug("could not use chat history dir %s: %s", candidate, e)
 
         fallback = Path(os.environ.get("TMPDIR", "/tmp"))
         fallback.mkdir(parents=True, exist_ok=True)

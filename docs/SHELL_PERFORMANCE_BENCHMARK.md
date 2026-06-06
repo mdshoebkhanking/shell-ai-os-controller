@@ -34,10 +34,17 @@
 - Phase 2 Memory v2 uses local SQLite, WAL mode, redaction-before-write,
   lexical scoring, importance weighting, time-decay ranking, tag filtering, and
   recall audit logging behind `SHELL_MEMORY_V2_ENABLED=0`.
-- Phase 2 offline STT adds a lazy sherpa-onnx streaming recognizer behind
-  `SHELL_LOCAL_STT_ENABLED=0`. Voice recognition keeps the existing API path by
-  default and only creates the local model when fallback or primary-local mode
-  is explicitly enabled.
+- Phase 2 offline STT now auto-enables when the bundled sherpa-onnx streaming
+  model is present, keeps local STT as the primary backend voice path, and still
+  respects `SHELL_LOCAL_STT_ENABLED=0` as an explicit disable. The bundled model
+  is English-focused for low-latency English/Hinglish commands; optional
+  sherpa-onnx Whisper exports can be selected with
+  `SHELL_LOCAL_STT_MODEL_KIND=whisper` and `SHELL_LOCAL_STT_LANGUAGE=<code>`.
+- Windows balanced performance mode is enabled by the Windows launchers and
+  installer launch path. It keeps BLAS worker pools at one thread, uses smaller
+  offline LLM context/batch/token defaults, slows idle/background chat-history
+  polling, skips orb frame work when the WebEngine document is hidden, and
+  reduces optional camera face-scan frequency on Windows or low-core devices.
 - Phase 3 Project RAG v2 uses incremental SQLite indexing, `.gitignore`-style
   ignore rules, chunked source/doc scans, optional sentence-transformers
   embeddings, optional `rank-bm25`, and a stdlib BM25 fallback behind
@@ -114,10 +121,12 @@ completed successfully.
 - `SHELL_MEMORY_V2_ENABLED` defaults to `0`. Memory v2 is wired and unit-tested
   locally, but it remains opt-in while existing users validate migration from
   `~/.shell_smart_memory.json`.
-- `SHELL_LOCAL_STT_ENABLED` defaults to `0`. The sherpa-onnx adapter and voice
-  fallback are fake-recognizer tested on this macOS host. Real `<500 ms`
-  short-command latency and `>85%` accuracy require downloading a compatible
-  sherpa-onnx streaming model and validating with microphone audio.
+- Local STT auto-enables when the bundled sherpa-onnx streaming model is present.
+  The current bundled model is
+  `models/stt/sherpa-onnx/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/`.
+  Backend voice input uses local STT first, with Google/SpeechRecognition only as
+  fallback. Real microphone latency/accuracy still requires target-device audio
+  validation.
 - `SHELL_PROJECT_RAG_ENABLED` defaults to `0`. Lexical indexing/query is
   validated locally; real semantic embedding quality depends on installing
   `sentence-transformers` and selecting a model that is available on the host.

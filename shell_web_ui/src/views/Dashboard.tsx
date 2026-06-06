@@ -21,6 +21,7 @@ import {
 } from 'react-icons/ri'
 import { VisionMode } from '@renderer/IndexRoot'
 import { shellSpeechLocale } from '@renderer/services/language-settings'
+import { normalizeGeminiApiKey } from '@renderer/services/api-key-utils'
 
 interface ShellProps {
   isSystemActive: boolean
@@ -68,10 +69,18 @@ type AttachedFile = {
   error?: string
 }
 
+const GEMINI_STARTUP_VOICE_MESSAGE =
+  'Shell AI is online. Premium Gemini voice is active. Your private command center is standing by.'
+const LOCAL_STARTUP_VOICE_MESSAGE =
+  'Shell AI is online. Offline voice is active. Your private command center is standing by.'
+
 type FaceApiModule = typeof import('face-api.js')
 
 const glassPanel = 'shell-liquid-panel'
 const MAX_CHAT_ATTACHMENTS = 4
+const WINDOWS_OR_LOW_CORE_DEVICE =
+  /Windows/i.test(navigator.userAgent || '') || (navigator.hardwareConcurrency || 0) <= 4
+const FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 500 : 250
 const MAX_CHAT_ATTACHMENT_BYTES = 5 * 1024 * 1024
 const MAX_TEXT_ATTACHMENT_CHARS = 26000
 
@@ -211,6 +220,23 @@ const speakWithBrowser = (text: string) =>
     }
   })
 
+const hasBrowserGeminiVoiceKey = () => {
+  try {
+    return Boolean(normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key')))
+  } catch {
+    return false
+  }
+}
+
+const clampSpeechLevel = (value: unknown) => Math.max(0, Math.min(1, Number(value || 0)))
+
+const speechDurationFromPayload = (payload: any, fallbackText = '') => {
+  const durationMs = Number(payload?.durationMs || payload?.audioDurationMs || 0)
+  if (Number.isFinite(durationMs) && durationMs > 0) return Math.max(700, Math.min(22000, durationMs))
+  const chars = Number(payload?.chars || fallbackText.length || 0)
+  return Math.max(900, Math.min(18000, chars * 58 + 520))
+}
+
 function DashboardView({
   props,
   chatHistory,
@@ -236,6 +262,7 @@ function DashboardView({
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const transcriptInputRef = useRef<HTMLInputElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const speechReactionTimersRef = useRef<number[]>([])
   const faceScanInterval = useRef<NodeJS.Timeout | null>(null)
   const faceApiRef = useRef<FaceApiModule | null>(null)
   const lastSpokenRef = useRef('')
@@ -251,12 +278,50 @@ function DashboardView({
   const [speechState, setSpeechState] = useState('VOICE OUT')
   const [activityState, setActivityState] = useState<ActivityState | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
-  const testVoiceText =
-    voiceRuntime === 'gemini'
-      ? 'Shell AI real Gemini voice ready hai. Main natural voice mein bol raha hoon.'
-      : 'Shell AI local voice ready hai. Main offline voice route se bol raha hoon.'
+  const useGeminiTestVoice = voiceRuntime === 'gemini' && hasBrowserGeminiVoiceKey()
+  const testVoiceText = useGeminiTestVoice ? GEMINI_STARTUP_VOICE_MESSAGE : LOCAL_STARTUP_VOICE_MESSAGE
 
   const readTranscriptPrompt = () => (transcriptPrompt || transcriptInputRef.current?.value || '').trim()
+
+  const clearSpeechReaction = useCallback(() => {
+    speechReactionTimersRef.current.forEach((timer) => window.clearTimeout(timer))
+    speechReactionTimersRef.current = []
+  }, [])
+
+  const runSpeechReaction = useCallback((payload: any = {}, fallbackText = '') => {
+    clearSpeechReaction()
+    const durationMs = speechDurationFromPayload(payload, fallbackText)
+    const frameMs = Math.max(45, Math.min(140, Number(payload?.amplitudeFrameMs || 70)))
+    const frames = Array.isArray(payload?.amplitudeFrames)
+      ? payload.amplitudeFrames.map(clampSpeechLevel).filter((value: number) => Number.isFinite(value))
+      : []
+
+    if (frames.length) {
+      frames.forEach((level: number, index: number) => {
+        const timer = window.setTimeout(() => {
+          setVoiceAmplitude(Math.max(0.08, Math.min(1, level)))
+        }, index * frameMs)
+        speechReactionTimersRef.current.push(timer)
+      })
+    } else {
+      const frameCount = Math.max(8, Math.ceil(durationMs / frameMs))
+      for (let index = 0; index < frameCount; index += 1) {
+        const timer = window.setTimeout(() => {
+          const wave = Math.abs(Math.sin(index * 0.9)) * 0.42
+          const consonants = Math.abs(Math.sin(index * 0.37 + fallbackText.length * 0.11)) * 0.22
+          setVoiceAmplitude(Math.min(1, 0.14 + wave + consonants))
+        }, index * frameMs)
+        speechReactionTimersRef.current.push(timer)
+      }
+    }
+
+    const finishTimer = window.setTimeout(() => {
+      setVoiceAmplitude(0)
+      setSpeechState('VOICE OUT')
+      speechReactionTimersRef.current = []
+    }, durationMs + 180)
+    speechReactionTimersRef.current.push(finishTimer)
+  }, [clearSpeechReaction])
 
   const onTranscriptScroll = () => {
     const node = scrollRef.current
@@ -267,27 +332,50 @@ function DashboardView({
   const speakShell = useCallback(async (text: string) => {
     const speechText = compactForSpeech(text)
     if (!speechText) return
-    setSpeechState('SPEAKING')
+    clearSpeechReaction()
+    setVoiceAmplitude(0)
+    setSpeechState('VOICE QUEUED')
     try {
       if (voiceRuntime === 'gemini' && speakRealVoice) {
-        const didSendToRealVoice = await speakRealVoice(speechText)
-        setSpeechState(didSendToRealVoice ? 'GEMINI LIVE' : 'VOICE ERR')
+        let didSendToRealVoice = false
+        try {
+          didSendToRealVoice = await speakRealVoice(speechText)
+        } catch {
+          didSendToRealVoice = false
+        }
+        if (didSendToRealVoice) {
+          setSpeechState('GEMINI LIVE')
+          return
+        }
+      }
+
+      const result = await window.shellAPI?.speakText?.(speechText)
+      if (result && (result as any)?.success !== false) {
+        if ((result as any)?.queued) {
+          setVoiceAmplitude(0)
+          setSpeechState('VOICE QUEUED')
+          return
+        }
+        setSpeechState('SPEAKING')
+        runSpeechReaction(result, speechText)
         return
       }
 
       const spokeInBrowser = await speakWithBrowser(speechText)
       if (spokeInBrowser) {
-        setSpeechState('VOICE OUT')
-        return
+        setSpeechState('SPEAKING')
+        runSpeechReaction({ source: 'browser-speech' }, speechText)
+      } else {
+        clearSpeechReaction()
+        setVoiceAmplitude(0)
+        setSpeechState('VOICE ERR')
       }
-
-      const result = await window.electron?.ipcRenderer.invoke('speak-text', speechText)
-      if (result?.success === false) setSpeechState('VOICE ERR')
-      else setSpeechState('VOICE OUT')
     } catch {
+      clearSpeechReaction()
+      setVoiceAmplitude(0)
       setSpeechState('VOICE ERR')
     }
-  }, [speakRealVoice, voiceRuntime])
+  }, [clearSpeechReaction, runSpeechReaction, speakRealVoice, voiceRuntime])
 
   useEffect(() => {
     if (scrollRef.current && transcriptPinnedRef.current) {
@@ -313,7 +401,20 @@ function DashboardView({
     }
     const onSpeechStatus = (_event: unknown, payload?: any) => {
       const state = String(payload?.state || 'ready').toUpperCase()
-      setSpeechState(state === 'SPEAKING' ? 'SPEAKING' : state === 'ERROR' ? 'VOICE ERR' : 'VOICE OUT')
+      if (state === 'QUEUED') {
+        clearSpeechReaction()
+        setVoiceAmplitude(0)
+        setSpeechState('VOICE QUEUED')
+        return
+      }
+      if (state === 'SPEAKING') {
+        setSpeechState('SPEAKING')
+        runSpeechReaction(payload)
+        return
+      }
+      clearSpeechReaction()
+      setVoiceAmplitude(0)
+      setSpeechState(state === 'ERROR' ? 'VOICE ERR' : 'VOICE OUT')
     }
     const onChatUpdated = (_event: unknown, payload?: any) => {
       const reply = String(payload?.reply || '').trim()
@@ -328,12 +429,13 @@ function DashboardView({
     window.shellAPI.on('chat-updated', onChatUpdated)
     return () => {
       if (amplitudeDecayTimer) window.clearTimeout(amplitudeDecayTimer)
+      clearSpeechReaction()
       window.shellAPI?.off('voice-status', onVoiceStatus)
       window.shellAPI?.off('voice-amplitude', onVoiceAmplitude)
       window.shellAPI?.off('speech-status', onSpeechStatus)
       window.shellAPI?.off('chat-updated', onChatUpdated)
     }
-  }, [speakShell])
+  }, [clearSpeechReaction, runSpeechReaction, speakShell])
 
   useEffect(() => {
     const normalizePrompt = (value: unknown, fallback = 'Shell AI task') =>
@@ -649,7 +751,7 @@ function DashboardView({
             ctx.fillText('SCANNING OPTICS...', 20, 30)
           }
         } catch (e) {}
-      }, 250)
+      }, FACE_SCAN_INTERVAL_MS)
     } else {
       if (faceScanInterval.current) clearInterval(faceScanInterval.current)
       const ctx = canvasRef.current?.getContext('2d')
@@ -981,39 +1083,50 @@ function DashboardView({
           />
         </div>
 
-        <div className="absolute bottom-5 md:bottom-8 lg:bottom-10 z-50">
+        <div className="shell-orb-dock-anchor absolute z-50">
           <div
             className="shell-liquid-dock shell-session-dock flex items-center"
           >
             <button
+              type="button"
               aria-label="Toggle vision source"
+              aria-pressed={isVideoOn}
               onClick={onVisionClick}
               className={`shell-control-button shell-dock-button cursor-pointer ${
                 isVideoOn ? 'shell-dock-button-active' : ''
               }`}
+              title={isVideoOn ? 'Switch vision source' : 'Start camera or screen vision'}
             >
               {isVideoOn ? <RiSwapBoxLine size={20} /> : <RiCameraLine size={20} />}
             </button>
             <button
+              type="button"
               aria-label={isSystemActive ? 'Stop Shell voice' : 'Start Shell voice'}
+              aria-pressed={isSystemActive}
               onClick={toggleSystem}
               className={`shell-control-button shell-dock-button shell-dock-button-main cursor-pointer ${
                 isSystemActive ? 'shell-dock-button-live' : ''
               }`}
+              title={isSystemActive ? 'Stop Shell voice' : 'Start Shell voice'}
             >
               <RiPhoneFill size={24} />
             </button>
             <button
+              type="button"
               aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
+              aria-pressed={!isMicMuted}
               onClick={toggleMic}
               className={`shell-control-button shell-dock-button cursor-pointer ${
                 isMicMuted ? 'shell-dock-button-danger' : 'shell-dock-button-active'
               }`}
+              title={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
             >
               {isMicMuted ? <RiMicOffLine size={20} /> : <RiMicLine size={20} />}
             </button>
             <button
+              type="button"
               aria-label="Test Shell voice"
+              aria-pressed={speechState === 'SPEAKING'}
               onClick={() => speakShell(testVoiceText)}
               className={`shell-control-button shell-dock-button cursor-pointer ${
                 speechState === 'SPEAKING'

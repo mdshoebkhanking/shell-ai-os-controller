@@ -16,6 +16,7 @@ import ResearchWidget from './Widgets/DeepResearch'
 import SemanticWidget from './Widgets/SematicSearch'
 import SmartDropZonesWidget from './Widgets/SmartZoneWidget'
 import { shellSpeechInstruction } from './services/language-settings'
+import { normalizeGeminiApiKey } from './services/api-key-utils'
 
 export type VisionMode = 'camera' | 'screen' | 'none'
 
@@ -32,6 +33,23 @@ const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
 }
 
 const desktopBridgeExpected = () => Boolean((window as any).qt?.webChannelTransport)
+
+const hasGeminiVoiceKey = async () => {
+  const localKey = normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key'))
+  if (localKey) return true
+  if (!desktopBridgeExpected()) return false
+  try {
+    const secureKeys = window.electron?.ipcRenderer
+      ? await window.electron.ipcRenderer.invoke('secure-get-keys')
+      : null
+    const configuredKey =
+      normalizeGeminiApiKey(secureKeys?.geminiKey) ||
+      localKey
+    return Boolean(configuredKey)
+  } catch {
+    return false
+  }
+}
 
 const IndexRoot = () => {
   const [isOverlay, setIsOverlay] = useState(false)
@@ -261,6 +279,7 @@ const IndexRoot = () => {
 
   const speakRealVoice = async (text: string) => {
     if (!usesGeminiVoice) return false
+    if (!(await hasGeminiVoiceKey())) return false
     try {
       if (!shellService.isConnected) {
         await shellService.connect()

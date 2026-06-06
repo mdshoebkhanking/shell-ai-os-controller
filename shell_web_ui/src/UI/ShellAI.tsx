@@ -46,6 +46,9 @@ const shellTabViewLoaders = [
 ]
 
 const PRELOAD_TAB_GAP_MS = 120
+const HISTORY_ACTIVE_POLL_MS = 900
+const HISTORY_IDLE_POLL_MS = 2500
+const HISTORY_BACKGROUND_POLL_MS = 6000
 
 const waitForPreloadGap = () =>
   new Promise<void>((resolve) => {
@@ -160,11 +163,43 @@ const ShellAI = (props: ShellProps) => {
     }
   }, [])
 
+  const historyPollDelay = useCallback(() => {
+    if (document.hidden) return HISTORY_BACKGROUND_POLL_MS
+    if (activeTab === 'DASHBOARD' || props.isSystemActive) return HISTORY_ACTIVE_POLL_MS
+    return HISTORY_IDLE_POLL_MS
+  }, [activeTab, props.isSystemActive])
+
   useEffect(() => {
+    let cancelled = false
+    let timer: number | undefined
+    let pollGeneration = 0
+
+    const schedule = (delayMs: number) => {
+      const scheduledGeneration = pollGeneration
+      timer = window.setTimeout(async () => {
+        if (cancelled || scheduledGeneration !== pollGeneration) return
+        await fetchHistory()
+        if (!cancelled && scheduledGeneration === pollGeneration) schedule(historyPollDelay())
+      }, delayMs)
+    }
+
+    const reschedule = () => {
+      pollGeneration += 1
+      if (timer !== undefined) window.clearTimeout(timer)
+      schedule(historyPollDelay())
+    }
+
     fetchHistory()
-    const interval = setInterval(fetchHistory, 500)
-    return () => clearInterval(interval)
-  }, [fetchHistory])
+    schedule(historyPollDelay())
+    document.addEventListener('visibilitychange', reschedule)
+
+    return () => {
+      cancelled = true
+      pollGeneration += 1
+      if (timer !== undefined) window.clearTimeout(timer)
+      document.removeEventListener('visibilitychange', reschedule)
+    }
+  }, [fetchHistory, historyPollDelay])
 
   const updateTabIndicator = useCallback(() => {
     const activeButton = tabButtonRefs.current[activeTab]

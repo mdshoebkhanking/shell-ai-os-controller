@@ -231,12 +231,17 @@ latency notes are tracked in
   Public APIs are `save_memory()`, `recall_memory()`, and `forget_memory()` in
   `shell_memory_v2.py`; `memory_v2_migrate_legacy_tool` imports
   `~/.shell_smart_memory.json`.
-- `SHELL_LOCAL_STT_ENABLED=0` (default) keeps Google/SpeechRecognition as the
-  active STT path. Set `SHELL_LOCAL_STT_ENABLED=1` plus
-  `SHELL_LOCAL_STT_MODEL_DIR=/path/to/sherpa-model` to enable offline
-  sherpa-onnx fallback when the speech API is unavailable. Optional
-  `SHELL_LOCAL_STT_PRIMARY=1` tries local STT first and falls back to the
-  current API path if local model loading fails.
+- Local STT auto-enables when the bundled sherpa-onnx streaming model exists at
+  `models/stt/sherpa-onnx/sherpa-onnx-streaming-zipformer-en-20M-2023-02-17/`.
+  In that state Shell uses local STT first for backend voice input and falls
+  back to Google/SpeechRecognition only if local recognition fails. Set
+  `SHELL_LOCAL_STT_ENABLED=0` to explicitly disable local STT, or set
+  `SHELL_LOCAL_STT_MODEL_DIR=/path/to/sherpa-model` to override the bundled
+  model. The default bundled model is English-focused for low-latency
+  English/Hinglish commands. For Hindi or multilingual offline recognition,
+  point `SHELL_LOCAL_STT_MODEL_DIR` at a sherpa-onnx Whisper export, set
+  `SHELL_LOCAL_STT_MODEL_KIND=whisper`, and set
+  `SHELL_LOCAL_STT_LANGUAGE=hi` or another Whisper language code.
 - `SHELL_OFFLINE_LLM=1` (default when packaged assets exist) enables the
   local offline chat brain. Release builds stage
   `Falcon-H1-1.5B-Deep-Instruct-GGUF` under
@@ -246,6 +251,18 @@ latency notes are tracked in
   missing, Settings reports `FALLBACK` and Shell keeps the smaller
   deterministic local answers. The model is transparently reported in release
   metadata and is distributed under the Falcon-LLM License.
+- Windows launchers enable `SHELL_WINDOWS_PERFORMANCE_MODE=balanced` by
+  default. This caps the bundled offline LLM context/batch/token defaults and
+  limits BLAS worker threads so entry-level Windows PCs stay responsive. Power
+  users can override `SHELL_OFFLINE_LLM_CONTEXT`, `SHELL_OFFLINE_LLM_BATCH`,
+  `SHELL_OFFLINE_LLM_MAX_TOKENS`, or set
+  `SHELL_WINDOWS_PERFORMANCE_MODE=off` before launch.
+- `SHELL_CHAT_PROVIDER_MODE=auto` (default) uses a configured cloud provider
+  first only when a non-placeholder chat API key is present and a quick online
+  probe succeeds. Set `SHELL_CHAT_PROVIDER_MODE=offline` to force the packaged
+  offline LLM for typed chat, chart text, and voice-originated turns. Relevant
+  local memory is included by default with `SHELL_CHAT_MEMORY_CONTEXT=1`, and
+  Project RAG context is included when `SHELL_PROJECT_RAG_ENABLED=1`.
 - `SHELL_PROJECT_RAG_ENABLED=0` (default) keeps project indexing off. Set
   `SHELL_PROJECT_RAG_ENABLED=1` to enable incremental local codebase indexing
   and `project_rag_query_tool` / `project_rag_index_tool`. Optional

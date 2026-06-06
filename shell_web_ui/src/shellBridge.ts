@@ -130,11 +130,14 @@ const cleanImagePrompt = (value: string) => {
   const cleaned = String(value || '')
     .replace(/\s+/g, ' ')
     .replace(/^[\s:.-]+|[\s:.-]+$/g, '')
-    .replace(/^(of|for|about|ki|ka|ke|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please)\s+/i, '')
+    .replace(
+      /^((of|for|about|ki|ka|ke|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|mere\s+liye|mujhe|mojhe|koi|ek|a|an)\s+)+/i,
+      ''
+    )
     .trim()
 
   if (
-    /^(image|photo|picture|pic|wallpaper|art|tasveer|chitra|generate|create|make|draw|design|banao|bana|banado|banaao|karo|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|\s)+$/i.test(
+    /^(image|photo|picture|pic|wallpaper|art|tasveer|chitra|generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design|banao|bana|banado|banaao|karo|karke|kar\s+ke|kar\s+do|do|de\s+do|dijiye|please|\s)+$/i.test(
       cleaned
     )
   ) {
@@ -147,15 +150,16 @@ const imagePromptFromIntent = (value: string) => {
   const raw = String(value || '').trim()
   if (!raw) return ''
   const imageWord = '(?:image|photo|picture|pic|wallpaper|art|tasveer|chitra)'
-  const actionWord = '(?:generate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\\s+do)'
+  const actionWord = '(?:generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design|banao|bana|banado|banaao|karo|kar\\s+do)'
   const connector = '(?:(?:of|for|about|ki|ka|ke)\\b|:)'
+  const politeTail = '(?:karo|kar\\s+do|karke\\s+do|karke\\s+de\\s+do|de\\s+do|do)?(?:\\s+ok)?'
   if (!new RegExp(`\\b${imageWord}\\b`, 'i').test(raw) || !new RegExp(`\\b${actionWord}\\b`, 'i').test(raw)) {
     return ''
   }
 
   const patterns = [
     new RegExp(
-      `^(?:please\\s+)?(?:generate|create|make|draw|design)\\s+(?:an?\\s+|ek\\s+|achhi\\s+|acchi\\s+|high\\s+quality\\s+)*${imageWord}\\s*${connector}?\\s*(.*)$`,
+      `^(?:please\\s+)?(?:generate|genrate|ganerate|ganarete|ganarate|create|make|draw|design)\\s+(?:an?\\s+|ek\\s+|achhi\\s+|acchi\\s+|high\\s+quality\\s+)*${imageWord}\\s*${connector}?\\s*(.*)$`,
       'is'
     ),
     new RegExp(`^(?:please\\s+)?${imageWord}\\s+${actionWord}\\s*${connector}?\\s*(.*)$`, 'is'),
@@ -163,7 +167,7 @@ const imagePromptFromIntent = (value: string) => {
       `^(?:please\\s+)?${actionWord}\\s+(?:an?\\s+|ek\\s+|achhi\\s+|acchi\\s+|high\\s+quality\\s+)*${imageWord}\\s*${connector}?\\s*(.*)$`,
       'is'
     ),
-    new RegExp(`^(.+?)\\s+(?:(?:ki|ka|ke)\\b\\s*)?${imageWord}\\s+${actionWord}\\s*$`, 'is')
+    new RegExp(`^(.+?)\\s+(?:(?:ki|ka|ke)\\b\\s*)?${imageWord}\\s+${actionWord}\\s*${politeTail}\\s*$`, 'is')
   ]
 
   for (const pattern of patterns) {

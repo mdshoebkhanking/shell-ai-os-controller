@@ -90,6 +90,12 @@ models/llm/**/*-assets.json
 models/tts/**/*.onnx
 models/tts/**/*.bin
 models/tts/**/*-assets.json
+models/stt/**
+!models/stt/
+!models/stt/README.md
+models/stt/**/*.onnx
+models/stt/**/*.wav
+models/stt/**/*-assets.json
 
 # Local UI/probe captures and scratch artifacts
 _ui_cyber/

@@ -1003,6 +1003,18 @@ def tail_file(path: Path, lines: int = 80) -> str:
         return f"Could not read {path}: {exc}"
 
 
+def apply_runtime_performance_defaults(env: dict[str, str]) -> None:
+    """Keep bundled local runtimes responsive on entry-level Windows PCs."""
+
+    for key in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        env.setdefault(key, "1")
+    if detect_os() == "windows":
+        env.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
+        env.setdefault("SHELL_OFFLINE_LLM_CONTEXT", "1024")
+        env.setdefault("SHELL_OFFLINE_LLM_BATCH", "64")
+        env.setdefault("SHELL_OFFLINE_LLM_MAX_TOKENS", "160")
+
+
 def launch(*, repair_if_needed: bool = False) -> int:
     ensure_runtime_dirs()
     refresh_windows_process_path()
@@ -1024,6 +1036,7 @@ def launch(*, repair_if_needed: bool = False) -> int:
     env.setdefault("SHELL_V2_STREAM", "1")
     env.setdefault("SHELL_V2_TIMEOUT_S", "12")
     env.setdefault("SHELL_AI_PROVIDER_TIMEOUT_S", "18")
+    apply_runtime_performance_defaults(env)
     scripts = str(venv_scripts_dir(path))
     env["PATH"] = scripts + os.pathsep + env.get("PATH", "")
     audio_result = windows_audio_preflight()

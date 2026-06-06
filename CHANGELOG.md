@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+## 1.0.12 - Windows EXE offline voice and smoothness
+
+- Added Windows balanced performance defaults across launch, install, repair,
+  acceptance, and EXE build paths so entry-level PCs use smaller offline LLM
+  context/batch/token defaults and one-thread BLAS worker pools by default.
+- Added build-time sherpa-onnx STT asset staging for the Windows setup EXE so
+  the packaged app can ship offline microphone recognition without runtime
+  model downloads or committed STT binaries.
+- Updated the Windows release workflow to cache and stage Kokoro TTS, Falcon
+  offline LLM, and sherpa-onnx offline STT assets before building the setup EXE.
+- Extended PyInstaller collection for `shell_local_stt` and `sherpa_onnx` so
+  the bundled `ShellAI.exe` can load the local STT runtime.
+- Reduced Web UI idle/background churn with adaptive history polling, hidden
+  orb frame skipping, and lower-frequency optional face scan on Windows or
+  low-core devices.
+- Kept public source packages clean by excluding staged model binaries while
+  copying staged model assets explicitly into the Windows installer tree.
+
 ## 1.0.11 - Offline voice packaging and tab stability
 
 - Switched future Windows offline LLM staging from Qwen3 1.7B to
