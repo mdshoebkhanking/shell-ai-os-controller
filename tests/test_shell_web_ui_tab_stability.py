@@ -97,7 +97,8 @@ def test_lazy_tab_preload_is_staggered_to_avoid_startup_jank():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
 
     assert "const shellTabViewLoaders = [" in shell_ai
-    assert "const PRELOAD_TAB_GAP_MS = 120" in shell_ai
+    assert "const PRELOAD_TAB_GAP_MS = 180" in shell_ai
+    assert "if (shellPerfMode === 'windows') return true" in shell_ai
     assert "await waitForPreloadGap()" in shell_ai
     assert "for (const loadView of shellTabViewLoaders)" in shell_ai
     assert "await loadView()" in shell_ai
