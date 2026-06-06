@@ -80,7 +80,7 @@ def main() -> int:
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("SHELL_V2_TIMEOUT_S", "2")
 
-    from PyQt6.QtWidgets import QApplication, QLabel, QPushButton
+    from PyQt6.QtWidgets import QApplication, QLabel, QLineEdit, QPushButton
 
     from shell_ui.app_bootstrap import configure_qt_application
 
@@ -258,6 +258,40 @@ def main() -> int:
         }
 
         settings = window.settings_page
+        settings_latency_threshold_ms = 250.0
+        try:
+            settings._switch_cat("apikeys", animate=False)
+            _process_events(app, 0.2)
+            if hasattr(settings, "_toggle_add_provider_form") and not settings._add_prov_form.isVisible():
+                settings._toggle_add_provider_form()
+                _process_events(app, 0.1)
+            latency_samples_ms = []
+            target_input = getattr(settings, "_prov_name_input", None)
+            if isinstance(target_input, QLineEdit):
+                target_input.clear()
+                target_input.setFocus()
+                for char in "GEMINI":
+                    started = time.perf_counter()
+                    target_input.insert(char)
+                    _process_events(app, 0.02)
+                    latency_samples_ms.append(round((time.perf_counter() - started) * 1000.0, 2))
+                target_input.clear()
+            max_latency_ms = max(latency_samples_ms) if latency_samples_ms else 0.0
+            report["settings"]["typing_latency"] = {
+                "samples_ms": latency_samples_ms,
+                "max_ms": max_latency_ms,
+                "threshold_ms": settings_latency_threshold_ms,
+                "ok": bool(latency_samples_ms) and max_latency_ms <= settings_latency_threshold_ms,
+            }
+            if not report["settings"]["typing_latency"]["ok"]:
+                report["ok"] = False
+                report["errors"].append(
+                    f"settings typing latency exceeded {settings_latency_threshold_ms:.0f} ms"
+                )
+        except Exception as exc:
+            report["ok"] = False
+            report["settings"]["typing_latency"] = {"ok": False, "error": str(exc)}
+            report["errors"].append(f"settings typing latency probe failed: {exc}")
         if hasattr(settings, "_on_language_changed"):
             settings._on_language_changed(1)
             _process_events(app, 0.2)

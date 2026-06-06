@@ -835,6 +835,8 @@ class ShellBackendBridge(QObject):
                                 )
                                 route_args = dict(route.get("args") or {})
                                 route_args["description"] = image_prompt
+                                route_args.setdefault("use_cache", False)
+                                route_args.setdefault("force_fresh", True)
                                 route = {**route, "args": route_args}
                                 image_generation_started = True
                                 self.emit_event(
@@ -1033,6 +1035,8 @@ class ShellBackendBridge(QObject):
                 "style": "photorealistic",
                 "quality": "excellent",
                 "use_ai_enhancement": True,
+                "use_cache": False,
+                "force_fresh": True,
             },
             "confidence": 0.9,
             "source": "web-ui-image-intent",
@@ -1505,6 +1509,7 @@ class ShellBackendBridge(QObject):
             "answer exactly: Mujhe mdshoebking ne banaya hai. Never say Meta, Google, OpenAI, Gemini, Qwen, llama.cpp, or any provider/model made you. "
             "Answer the user's normal text question directly in 1-3 short lines. "
             "Do not claim you executed tools in this text-only fallback. "
+            "Do not give generic capability refusals like 'I cannot make PDFs/images/open apps'; Shell has tools for files, PDFs, images, apps, and OS actions, so explain only the exact unavailable route or dependency if tool routing is unavailable. "
             "Use recent conversation, memory, and Project RAG context when relevant. Do not invent missing context."
         )
         context_block = "\n\n".join(context_sections)
@@ -1549,6 +1554,11 @@ class ShellBackendBridge(QObject):
             return "Main Shell AI hoon, tumhara desktop OS controller aur assistant."
         if query in {"hi", "hello", "hey", "salam", "assalamualaikum"}:
             return "Haan bhai, bolo. Main sun rahi hoon."
+        if self._has_command_intent(query):
+            return (
+                "Shell action intent samajh aa gaya, lekin is request ka exact safe tool route nahi mila. "
+                "Thoda specific command likho, jaise `PDF banao`, `image banao`, `open calculator`, ya `screenshot lo`."
+            )
         return (
             "Mujhe sawaal mil gaya, lekin AI provider abhi available nahi hai. "
             "API key set karoge to main is par proper detailed jawab de paungi."
@@ -2393,13 +2403,21 @@ class ShellWebUI(QMainWindow):
             QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls,
             QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls,
             QWebEngineSettings.WebAttribute.WebGLEnabled,
-            QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled,
             QWebEngineSettings.WebAttribute.ScreenCaptureEnabled,
         ):
             try:
                 settings.setAttribute(attribute, True)
             except Exception:
                 pass
+        try:
+            accelerate_2d = not (
+                platform.system().lower() == "windows"
+                and os.environ.get("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced").strip().lower()
+                in {"balanced", "low", "eco"}
+            )
+            settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, accelerate_2d)
+        except Exception:
+            pass
 
     def _configure_web_permissions(self) -> None:
         page = self.view.page()

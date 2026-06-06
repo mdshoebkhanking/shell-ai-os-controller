@@ -11,7 +11,6 @@ import {
   RiWifiLine,
   RiLoader4Line
 } from 'react-icons/ri'
-import * as faceapi from 'face-api.js'
 import { motion, AnimatePresence } from 'framer-motion'
 import gsap from 'gsap'
 
@@ -20,6 +19,7 @@ interface LockScreenProps {
 }
 
 type AuthMode = 'face' | 'pin'
+type FaceApiModule = typeof import('face-api.js')
 
 export default function LockScreen({ onUnlock }: LockScreenProps) {
   const [authMode, setAuthMode] = useState<AuthMode>('face')
@@ -41,6 +41,7 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const scanIntervalRef = useRef<NodeJS.Timeout | null>(null)
   const laserRef = useRef<HTMLDivElement>(null)
+  const faceApiRef = useRef<FaceApiModule | null>(null)
 
   const [time, setTime] = useState(new Date().toLocaleTimeString())
 
@@ -109,6 +110,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
     try {
       setAiStatus('LOADING NEURAL NETS...')
       const MODEL_URL = './models'
+      const faceapi = faceApiRef.current || (await import('face-api.js'))
+      faceApiRef.current = faceapi
 
       await Promise.all([
         faceapi.nets.ssdMobilenetv1.loadFromUri(MODEL_URL),
@@ -153,6 +156,8 @@ export default function LockScreen({ onUnlock }: LockScreenProps) {
       if (!videoRef.current || videoRef.current.readyState !== 4 || error || isAuthorized) return
 
       try {
+        const faceapi = faceApiRef.current
+        if (!faceapi) return
         const options = new faceapi.SsdMobilenetv1Options({ minConfidence: 0.4 })
         const detection = await faceapi
           .detectSingleFace(videoRef.current, options)

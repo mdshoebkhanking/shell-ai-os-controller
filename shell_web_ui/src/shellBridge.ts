@@ -729,6 +729,7 @@ if (new URLSearchParams(window.location.search).get('shell-ui-probe') === '1') {
       shellAPI.call(channel, ...args)
     },
     on: (channel: string, listener: Listener) => shellAPI.on(channel, listener),
+    off: (channel: string, listener?: Listener) => shellAPI.off(channel, listener),
     removeAllListeners: (channel: string) => shellAPI.off(channel)
   }
 }

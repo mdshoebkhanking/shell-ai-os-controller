@@ -6,22 +6,22 @@ os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
 if sys.platform.startswith('win'):
     os.environ.setdefault('SHELL_WINDOWS_PERFORMANCE_MODE', 'balanced')
 
-# QtWebEngine / Chromium switches — MUST be set before QtWebEngine is
-# imported. Windows Server (and any GPU-less RDP host) blocklists WebGL
-# by default; SwiftShader gives us a software GL implementation that's
-# slow but correct, which is what the Three.js orb on the voice page
-# needs to render anything at all. `ignore-gpu-blocklist` lets the
-# blocklisted GPU still attempt hardware paths — fast machines win.
-os.environ.setdefault(
-    "QTWEBENGINE_CHROMIUM_FLAGS",
-    " ".join([
-        "--ignore-gpu-blocklist",
-        "--enable-webgl",
-        "--enable-unsafe-swiftshader",
-        "--disable-gpu-sandbox",
-        "--disable-software-rasterizer-fallback-when-hardware-fails",
-    ]),
-)
+def _default_webengine_flags():
+    renderer = os.environ.get("SHELL_WEBENGINE_RENDERER", "balanced").strip().lower()
+    flags = ["--enable-webgl", "--enable-unsafe-swiftshader", "--disable-gpu-sandbox"]
+    if renderer in {"compat", "force-gpu"}:
+        flags.append("--ignore-gpu-blocklist")
+    elif renderer in {"software", "safe-software"}:
+        flags.extend(["--disable-gpu", "--disable-gpu-compositing"])
+    return " ".join(flags)
+
+
+# QtWebEngine / Chromium switches must be set before QtWebEngine is imported.
+# Keep the default conservative for Windows EXE/RDP machines: allow WebGL and
+# SwiftShader fallback, but do not force blocklisted GPU paths or disable the
+# software rasterizer fallback. Those two flags were a common cause of black
+# frames/flicker on weak Windows graphics drivers.
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", _default_webengine_flags())
 
 faulthandler.enable()
 

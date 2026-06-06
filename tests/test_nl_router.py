@@ -150,6 +150,8 @@ def test_hinglish_photo_generation_routes_to_image_tool():
     assert route["kind"] == "tool"
     assert route["args"]["description"] == "neon shell city"
     assert route["args"]["quality"] == "excellent"
+    assert route["args"]["use_cache"] is False
+    assert route["args"]["force_fresh"] is True
 
 
 def test_image_generate_phrase_with_app_words_stays_image_tool():
@@ -172,6 +174,7 @@ def test_misspelled_photo_generate_phrase_routes_to_image_tool():
 
     assert route["tool"] == "shell_image_ai:generate_image_tool"
     assert route["args"]["description"] == "cat"
+    assert route["args"]["force_fresh"] is True
 
 
 def test_hinglish_deep_research_routes_to_research_agent():
@@ -244,6 +247,16 @@ def test_natural_desktop_pdf_save_route():
     assert route["args"]["destination"] == "desktop"
     assert route["args"]["file_type"] == "pdf"
     assert route["args"]["content"] == "quantum battery"
+
+
+def test_natural_pdf_save_without_destination_defaults_to_documents():
+    route = route_natural_command("AI tools ke bare mein pdf bana do")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["destination"] == "documents"
+    assert route["args"]["file_type"] == "pdf"
+    assert route["args"]["content"] == "AI tools"
 
 
 def test_natural_workspace_read_file_route():

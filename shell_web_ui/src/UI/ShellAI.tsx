@@ -55,6 +55,13 @@ const waitForPreloadGap = () =>
     window.setTimeout(resolve, PRELOAD_TAB_GAP_MS)
   })
 
+const shouldPreloadShellTabs = () => {
+  const preference = localStorage.getItem('shell_preload_tabs')
+  if (preference === '1') return true
+  if (preference === '0') return false
+  return !/Windows/i.test(navigator.userAgent)
+}
+
 const preloadShellTabViews = async (isCancelled: () => boolean) => {
   if (isCancelled()) return
   for (const loadView of shellTabViewLoaders) {
@@ -142,6 +149,7 @@ const ShellAI = (props: ShellProps) => {
   }, [])
 
   useEffect(() => {
+    if (!shouldPreloadShellTabs()) return
     let cancelled = false
     const preloadTabs = () => {
       void preloadShellTabViews(() => cancelled).catch(() => undefined)

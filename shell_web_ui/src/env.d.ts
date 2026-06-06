@@ -29,6 +29,7 @@ interface Window {
       invoke: (channel: string, ...args: unknown[]) => Promise<any>
       send: (channel: string, ...args: unknown[]) => void
       on: (channel: string, listener: (event: unknown, payload?: unknown) => void) => void
+      off: (channel: string, listener?: (event: unknown, payload?: unknown) => void) => void
       removeAllListeners: (channel: string) => void
     }
   }

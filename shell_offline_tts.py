@@ -13,6 +13,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import wave
 from dataclasses import dataclass
@@ -268,6 +269,61 @@ def _env_disabled() -> bool:
     return str(value).strip().lower() in {"0", "false", "no", "off", "disabled"}
 
 
+def _unique_paths(paths: list[Path]) -> list[Path]:
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        try:
+            key = str(path.expanduser().resolve())
+            normalized = Path(key)
+        except Exception:
+            normalized = path.expanduser()
+            key = str(normalized)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(normalized)
+    return unique
+
+
+def _runtime_roots() -> list[Path]:
+    """Candidate install roots for source, PyInstaller, and installed layouts."""
+    roots: list[Path] = []
+    for env_name in ("SHELL_APP_ROOT", "SHELL_INSTALL_ROOT"):
+        explicit_root = os.environ.get(env_name, "").strip()
+        if explicit_root:
+            roots.append(Path(explicit_root).expanduser())
+
+    if getattr(sys, "frozen", False):
+        try:
+            exe_dir = Path(sys.executable).resolve().parent
+            roots.extend([exe_dir, exe_dir.parent])
+        except Exception:
+            pass
+        meipass = getattr(sys, "_MEIPASS", "")
+        if meipass:
+            try:
+                meipass_dir = Path(str(meipass)).resolve()
+                roots.extend([meipass_dir, meipass_dir.parent])
+            except Exception:
+                pass
+
+    roots.extend([PROJECT_ROOT, PROJECT_ROOT.parent, Path.cwd()])
+    return _unique_paths(roots)
+
+
+def _runtime_writable_root() -> Path:
+    explicit = os.environ.get("SHELL_RUNTIME_DIR", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+    if getattr(sys, "frozen", False):
+        try:
+            return Path(sys.executable).resolve().parent.parent / ".shell_runtime"
+        except Exception:
+            pass
+    return PROJECT_ROOT / ".shell_runtime"
+
+
 def _engine_setting() -> str:
     return os.environ.get("SHELL_NATURAL_TTS_ENGINE", os.environ.get("SHELL_OFFLINE_TTS_ENGINE", "auto")).strip().lower() or "auto"
 
@@ -347,17 +403,18 @@ def _candidate_model_dirs(engine: str) -> list[Path]:
     if explicit:
         dirs.append(Path(explicit).expanduser())
     language = _shell_language()
-    dirs.extend(
-        [
-            PROJECT_ROOT / "models" / "tts" / engine / language,
-            PROJECT_ROOT / "assets" / "voice" / engine / language,
-            PROJECT_ROOT / ".shell_runtime" / "models" / "tts" / engine / language,
-            PROJECT_ROOT / "models" / "tts" / engine,
-            PROJECT_ROOT / "assets" / "voice" / engine,
-            PROJECT_ROOT / ".shell_runtime" / "models" / "tts" / engine,
-        ]
-    )
-    return dirs
+    for root in _runtime_roots():
+        dirs.extend(
+            [
+                root / "models" / "tts" / engine / language,
+                root / "assets" / "voice" / engine / language,
+                root / ".shell_runtime" / "models" / "tts" / engine / language,
+                root / "models" / "tts" / engine,
+                root / "assets" / "voice" / engine,
+                root / ".shell_runtime" / "models" / "tts" / engine,
+            ]
+        )
+    return _unique_paths(dirs)
 
 
 def _find_first_existing(paths: list[Path], patterns: tuple[str, ...]) -> Path | None:
@@ -526,7 +583,51 @@ def _playback_command(wav_path: Path) -> list[str] | None:
     return None
 
 
-def _play_wav_async(wav_path: Path) -> subprocess.Popen[Any] | None:
+class _WindowsWinsoundPlayback:
+    def __init__(self, wav_path: Path) -> None:
+        import winsound
+
+        self._winsound = winsound
+        self._stopped = threading.Event()
+        self._wav_path = wav_path
+        winsound.PlaySound(
+            str(wav_path),
+            winsound.SND_FILENAME | winsound.SND_ASYNC,
+        )
+
+    def poll(self) -> int | None:
+        return 0 if self._stopped.is_set() else None
+
+    def terminate(self) -> None:
+        self._stopped.set()
+        try:
+            self._winsound.PlaySound(None, self._winsound.SND_PURGE)
+        except Exception:
+            pass
+
+    def wait(self, timeout: float | None = None) -> int:
+        if timeout:
+            self._stopped.wait(timeout)
+        return 0 if self._stopped.is_set() else 0
+
+    def kill(self) -> None:
+        self.terminate()
+
+
+def _play_wav_with_winsound(wav_path: Path) -> Any | None:
+    if platform.system().lower() != "windows":
+        return None
+    try:
+        return _WindowsWinsoundPlayback(wav_path)
+    except Exception:
+        return None
+
+
+def _play_wav_async(wav_path: Path) -> Any | None:
+    winsound_playback = _play_wav_with_winsound(wav_path)
+    if winsound_playback is not None:
+        return winsound_playback
+
     command = _playback_command(wav_path)
     if not command:
         return None
@@ -544,8 +645,9 @@ def _play_wav_async(wav_path: Path) -> subprocess.Popen[Any] | None:
 
 
 def _tts_audio_path(engine: str) -> Path:
-    RUNTIME_TTS_DIR.mkdir(parents=True, exist_ok=True)
-    return RUNTIME_TTS_DIR / f"{engine}-{int(time.time() * 1000)}.wav"
+    runtime_tts_dir = _runtime_writable_root() / "tts_audio"
+    runtime_tts_dir.mkdir(parents=True, exist_ok=True)
+    return runtime_tts_dir / f"{engine}-{int(time.time() * 1000)}.wav"
 
 
 def _write_float_wav(path: Path, samples: Any, sample_rate: int) -> None:

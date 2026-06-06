@@ -1,12 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Terminal } from 'xterm'
-import { FitAddon } from 'xterm-addon-fit'
-import 'xterm/css/xterm.css'
 
 export default function TerminalOverlay() {
   const containerRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<Terminal | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
+  const xtermRef = useRef<any | null>(null)
+  const fitAddonRef = useRef<any | null>(null)
   const pendingChunksRef = useRef<string[]>([])
   const hideTimerRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -48,47 +45,57 @@ export default function TerminalOverlay() {
     }
     if (xtermRef.current) return
 
+    let disposed = false
     const initTimer = setTimeout(() => {
       if (!containerRef.current || xtermRef.current) return
 
-      const term = new Terminal({
-        cursorBlink: true,
-        cursorStyle: 'block',
-        theme: {
-          background: '#050505',
-          foreground: '#00ff41',
-          cursor: '#00ff41',
-          selectionBackground: 'rgba(0, 255, 65, 0.3)',
-          black: '#050505',
-          green: '#00ff41',
-          red: '#ff003c',
-          cyan: '#00e5ff'
-        },
-        fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace',
-        fontSize: 12,
-        lineHeight: 1.1,
-        letterSpacing: 0.5,
-        rows: 16,
-        cols: 80,
-        convertEol: true,
-        allowProposedApi: true
-      })
+      Promise.all([import('xterm'), import('xterm-addon-fit'), import('xterm/css/xterm.css')])
+        .then(([xtermModule, fitModule]) => {
+          if (disposed || !containerRef.current || xtermRef.current) return
 
-      const fitAddon = new FitAddon()
-      fitAddonRef.current = fitAddon
-      term.loadAddon(fitAddon)
-      term.open(containerRef.current)
-      xtermRef.current = term
+          const term = new xtermModule.Terminal({
+            cursorBlink: true,
+            cursorStyle: 'block',
+            theme: {
+              background: '#050505',
+              foreground: '#00ff41',
+              cursor: '#00ff41',
+              selectionBackground: 'rgba(0, 255, 65, 0.3)',
+              black: '#050505',
+              green: '#00ff41',
+              red: '#ff003c',
+              cyan: '#00e5ff'
+            },
+            fontFamily: '"Fira Code", "Cascadia Code", Consolas, monospace',
+            fontSize: 12,
+            lineHeight: 1.1,
+            letterSpacing: 0.5,
+            rows: 16,
+            cols: 80,
+            convertEol: true,
+            allowProposedApi: true
+          })
 
-      try {
-        fitAddon.fit()
-      } catch (e) {}
+          const fitAddon = new fitModule.FitAddon()
+          fitAddonRef.current = fitAddon
+          term.loadAddon(fitAddon)
+          term.open(containerRef.current)
+          xtermRef.current = term
 
-      const pending = pendingChunksRef.current.splice(0)
-      for (const chunk of pending) term.write(chunk)
+          try {
+            fitAddon.fit()
+          } catch (e) {}
+
+          const pending = pendingChunksRef.current.splice(0)
+          for (const chunk of pending) term.write(chunk)
+        })
+        .catch(() => {})
     }, 50)
 
-    return () => clearTimeout(initTimer)
+    return () => {
+      disposed = true
+      clearTimeout(initTimer)
+    }
   }, [isVisible])
 
   if (!isVisible) return null

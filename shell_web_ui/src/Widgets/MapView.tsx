@@ -1,40 +1,34 @@
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet'
-import { useState, useEffect } from 'react'
-import 'leaflet/dist/leaflet.css'
-import L, { LatLngExpression } from 'leaflet'
+import { lazy, Suspense, useEffect, useState } from 'react'
 
-import icon from 'leaflet/dist/images/marker-icon.png'
-import iconShadow from 'leaflet/dist/images/marker-shadow.png'
+const MapCanvas = lazy(() => import('./MapCanvas'))
 
-const DefaultIcon = L.icon({
-  iconUrl: icon,
-  shadowUrl: iconShadow,
-  iconSize: [25, 41],
-  iconAnchor: [12, 41]
-})
-L.Marker.prototype.options.icon = DefaultIcon
+type MapPosition = [number, number]
 
-function MapUpdater({ center }: { center: LatLngExpression }) {
-  const map = useMap()
-  useEffect(() => {
-    if (center) map.flyTo(center as L.LatLngTuple, 13, { duration: 2.5 })
-  }, [center, map])
-  return null
+type RouteData = {
+  start: MapPosition
+  end: MapPosition
+  path: MapPosition[]
+  info: {
+    origin: string
+    destination: string
+    distance: string
+    duration: string
+  }
 }
 
 export default function LeafletMapWidget() {
   const [isVisible, setIsVisible] = useState(false)
 
-  const [position, setPosition] = useState<LatLngExpression>([51.505, -0.09])
+  const [position, setPosition] = useState<MapPosition>([51.505, -0.09])
   const [locationName, setLocationName] = useState('India')
 
   const [isRouteMode, setIsRouteMode] = useState(false)
-  const [routeData, setRouteData] = useState<any>(null)
+  const [routeData, setRouteData] = useState<RouteData | null>(null)
 
   useEffect(() => {
     const handleMap = (event: any) => {
       const { lat, lng, name } = event.detail
-      if (lat && lng) {
+      if (lat != null && lng != null) {
         setIsRouteMode(false)
         setPosition([lat, lng])
         setLocationName(name)
@@ -43,7 +37,7 @@ export default function LeafletMapWidget() {
     }
 
     const handleRoute = (event: any) => {
-      const data = event.detail
+      const data = event.detail as RouteData
       setIsRouteMode(true)
       setRouteData(data)
       setPosition(data.start)
@@ -90,43 +84,14 @@ export default function LeafletMapWidget() {
           </button>
         </div>
 
-        <MapContainer
-          {...({ center: position, zoom: isRouteMode ? 6 : 13 } as any)}
-          style={{ height: '100%', width: '100%', background: '#000' }}
-        >
-          <TileLayer
-            {...({
-              attribution: '&copy; Google Maps',
-              url: 'http://mt0.google.com/vt/lyrs=y&hl=en&x={x}&y={y}&z={z}'
-            } as any)}
+        <Suspense fallback={<div className="h-full w-full bg-black" />}>
+          <MapCanvas
+            isRouteMode={isRouteMode}
+            locationName={locationName}
+            position={position}
+            routeData={routeData}
           />
-
-          {!isRouteMode && (
-            <Marker position={position}>
-              <Popup>{locationName}</Popup>
-            </Marker>
-          )}
-
-          {isRouteMode && routeData && (
-            <>
-              <Marker position={routeData.start}>
-                <Popup>Start: {routeData.info.origin}</Popup>
-              </Marker>
-              <Marker position={routeData.end}>
-                <Popup>End: {routeData.info.destination}</Popup>
-              </Marker>
-
-              <Polyline
-                positions={routeData.path}
-                pathOptions={{ color: '#22d3ee', weight: 4, dashArray: '10, 10', opacity: 0.8 }}
-              />
-
-              <MapUpdater center={routeData.start} />
-            </>
-          )}
-
-          {!isRouteMode && <MapUpdater center={position} />}
-        </MapContainer>
+        </Suspense>
       </div>
     </div>
   )

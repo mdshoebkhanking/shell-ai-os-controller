@@ -427,6 +427,8 @@ def test_short_image_intents_route_to_generation_and_emit_gallery_events(
         executed_routes.append(route)
         assert route["tool"] == "shell_image_ai:generate_image_tool"
         assert route["args"]["description"] == expected_prompt
+        assert route["args"]["use_cache"] is False
+        assert route["args"]["force_fresh"] is True
         image_path.write_bytes(b"\x89PNG\r\n\x1a\nprobe")
         return {"status": "success", "result": f"Image Generated\nSaved: `{image_path}`"}
 
@@ -450,6 +452,40 @@ def test_short_image_intents_route_to_generation_and_emit_gallery_events(
     assert gallery_events[-1]["image"]["filename"] == image_path.name
     assert chat_events[-1]["source"] == meta.get("source", "text")
     assert chat_events[-1]["voice"] is (meta.get("source") == "voice")
+
+
+def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+        assert route["args"]["destination"] == "documents"
+        assert route["args"]["file_type"] == "pdf"
+        assert route["args"]["content"] == "AI tools"
+        return {"status": "success", "result": "Created file: Documents/ai_tools.pdf"}
+
+    def fallback_should_not_run(*_args, **_kwargs):
+        raise AssertionError("tool-capable PDF request should not fall through to brain fallback")
+
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "_brain_chat_fallback", fallback_should_not_run)
+
+    result = bridge._chat_message(["AI tools ke bare mein pdf bana do", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert result["route"]["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert "Created file" in result["reply"]
+    assert "cannot" not in result["reply"].lower()
+    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["success"] is True
 
 
 def test_code_write_blocked_reply_names_relevant_safety_settings():

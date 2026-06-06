@@ -20,6 +20,14 @@ if str(ROOT) not in sys.path:
 
 REPORT_PATH = ROOT / ".shell_runtime" / "windows_acceptance_report.json"
 SCREENS_DIR = ROOT / ".shell_runtime" / "windows_acceptance_screens"
+APP_EXE = ROOT / "ShellAIApp" / "ShellAI.exe"
+APP_ICON = ROOT / "shell-ai.ico"
+RAM_WARN_MB = 1400
+RAM_FAIL_MB = 2200
+
+
+def env_flag(name: str) -> bool:
+    return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -240,6 +248,19 @@ def check_offline_tts_status(py: Path) -> Check:
     )
     result = run_cmd([py, "-c", code], name="offline TTS status probe", timeout=30)
     if result.ok:
+        try:
+            payload = json.loads(result.message.splitlines()[-1])
+            packaged = (ROOT / "models" / "tts" / "kokoro").exists()
+            if packaged and not payload.get("available"):
+                return Check(
+                    "offline TTS status probe",
+                    False,
+                    "FAIL",
+                    f"Packaged Kokoro assets exist but offline TTS is unavailable: {payload.get('reason')}",
+                    {**result.details, "status": payload},
+                )
+        except Exception:
+            pass
         return result
     return Check(
         "offline TTS status probe",
@@ -248,6 +269,201 @@ def check_offline_tts_status(py: Path) -> Check:
         result.message or "Offline TTS status unavailable; Shell should still use OS TTS fallback.",
         result.details,
     )
+
+
+def _windows_icon_count(path: Path) -> int:
+    if not path.exists() or platform.system().lower() != "windows":
+        return 0
+    try:
+        import ctypes
+
+        return int(ctypes.windll.shell32.ExtractIconExW(str(path), -1, None, None, 0))
+    except Exception:
+        return 0
+
+
+def check_installed_bundled_app_layout() -> Check:
+    installed_context = APP_EXE.exists() or (ROOT / "windows_installer_build.json").exists()
+    details = {
+        "app_exe": str(APP_EXE),
+        "app_exe_exists": APP_EXE.exists(),
+        "app_icon": str(APP_ICON),
+        "app_icon_exists": APP_ICON.exists(),
+        "kokoro_dir": str(ROOT / "models" / "tts" / "kokoro"),
+        "kokoro_dir_exists": (ROOT / "models" / "tts" / "kokoro").exists(),
+        "llm_dir_exists": (ROOT / "models" / "llm").exists(),
+        "stt_dir_exists": (ROOT / "models" / "stt").exists(),
+        "app_exe_icon_count": _windows_icon_count(APP_EXE),
+    }
+    if not APP_EXE.exists():
+        status = "FAIL" if installed_context else "WARN"
+        return Check("bundled EXE layout", status != "FAIL", status, f"Missing bundled app EXE: {APP_EXE}", details)
+    if not APP_ICON.exists():
+        return Check("bundled EXE layout", False, "FAIL", f"Missing installed icon: {APP_ICON}", details)
+    if platform.system().lower() == "windows" and int(details["app_exe_icon_count"]) <= 0:
+        return Check("bundled EXE layout", False, "FAIL", "ShellAI.exe has no extractable icon resource.", details)
+    if not details["kokoro_dir_exists"]:
+        return Check("bundled EXE layout", False, "FAIL", "Installed Kokoro model directory is missing.", details)
+    return Check("bundled EXE layout", True, "PASS", "Bundled EXE, icon, and offline model folders are present.", details)
+
+
+def check_frozen_offline_tts_path(py: Path) -> Check:
+    if not APP_EXE.exists():
+        return Check("frozen offline TTS path", False, "WARN", "Skipped because ShellAIApp/ShellAI.exe is not installed.")
+    code = rf"""
+import json
+import sys
+from pathlib import Path
+import shell_offline_tts
+
+sys.frozen = True
+sys.executable = {str(APP_EXE)!r}
+setattr(sys, "_MEIPASS", str(Path({str(APP_EXE)!r}).parent / "_internal"))
+shell_offline_tts.PROJECT_ROOT = Path(getattr(sys, "_MEIPASS"))
+print(json.dumps(shell_offline_tts.offline_tts_status(), sort_keys=True))
+"""
+    result = run_cmd([py, "-c", code], name="frozen offline TTS path", timeout=30)
+    if not result.ok:
+        return result
+    try:
+        payload = json.loads(result.message.splitlines()[-1])
+    except Exception:
+        return Check("frozen offline TTS path", False, "FAIL", result.message, result.details)
+    if payload.get("available"):
+        return Check("frozen offline TTS path", True, "PASS", f"Kokoro resolved from {payload.get('modelDir')}", {**result.details, "status": payload})
+    return Check(
+        "frozen offline TTS path",
+        False,
+        "FAIL",
+        f"Frozen EXE layout cannot resolve Kokoro: {payload.get('reason')}",
+        {**result.details, "status": payload},
+    )
+
+
+def check_windows_app_open_smoke(py: Path) -> Check:
+    if not platform.system().lower().startswith("win"):
+        return Check("Windows app-open smoke", False, "BLOCKED", "Must run on Windows.")
+    if not env_flag("SHELL_ACCEPTANCE_OPEN_APPS"):
+        return Check(
+            "Windows app-open smoke",
+            True,
+            "WARN",
+            "Skipped. Set SHELL_ACCEPTANCE_OPEN_APPS=1 to launch Calculator and Notepad through Shell tools.",
+        )
+    code = r"""
+import json
+import time
+from shell_tool_gateway import execute_tool_sync
+
+cases = ["calculater", "note pad"]
+observed = {}
+for app_title in cases:
+    opened = execute_tool_sync("shell_window_CTRL:open_app", {"app_title": app_title})
+    observed[app_title] = opened
+    if opened.get("status") != "success":
+        raise SystemExit(json.dumps({"failed": app_title, "observed": observed}, sort_keys=True, default=str))
+    result = opened.get("result") or {}
+    if isinstance(result, dict) and result.get("success") is False:
+        raise SystemExit(json.dumps({"failed": app_title, "observed": observed}, sort_keys=True, default=str))
+    time.sleep(0.8)
+    try:
+        close_title = "calculator" if app_title == "calculater" else "notepad"
+        observed[f"close:{app_title}"] = execute_tool_sync(
+            "shell_window_CTRL:close_app",
+            {"window_title": close_title},
+        )
+    except Exception as exc:
+        observed[f"close:{app_title}"] = {"status": "warn", "error": str(exc)}
+
+print(json.dumps(observed, sort_keys=True, default=str))
+"""
+    result = run_cmd([py, "-c", code], name="Windows app-open smoke", timeout=60)
+    if result.ok:
+        return result
+    return Check(
+        "Windows app-open smoke",
+        False,
+        "FAIL",
+        result.message or "Shell app-open smoke failed.",
+        result.details,
+    )
+
+
+def check_bundled_exe_memory() -> Check:
+    if not platform.system().lower().startswith("win"):
+        return Check("bundled EXE RAM smoke", False, "BLOCKED", "Must run on Windows.")
+    if not APP_EXE.exists():
+        return Check("bundled EXE RAM smoke", False, "WARN", f"Skipped because {APP_EXE} is not installed.")
+    if not env_flag("SHELL_ACCEPTANCE_LAUNCH_EXE"):
+        return Check(
+            "bundled EXE RAM smoke",
+            True,
+            "WARN",
+            "Skipped. Set SHELL_ACCEPTANCE_LAUNCH_EXE=1 to launch ShellAI.exe and measure memory.",
+            {"warn_mb": RAM_WARN_MB, "fail_mb": RAM_FAIL_MB},
+        )
+    try:
+        import psutil
+    except Exception as exc:
+        return Check("bundled EXE RAM smoke", True, "WARN", f"psutil unavailable: {exc}")
+
+    env = os.environ.copy()
+    env.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
+    env.setdefault("SHELL_WEBENGINE_RENDERER", "auto")
+    started = time.perf_counter()
+    proc = subprocess.Popen([str(APP_EXE)], cwd=str(ROOT), env=env)
+    samples: list[dict[str, Any]] = []
+    try:
+        parent = psutil.Process(proc.pid)
+        deadline = time.time() + 35
+        while time.time() < deadline:
+            time.sleep(1.0)
+            try:
+                processes = [parent] + parent.children(recursive=True)
+                rss_mb = sum(p.memory_info().rss for p in processes if p.is_running()) / 1024 / 1024
+                samples.append(
+                    {
+                        "elapsed_s": round(time.perf_counter() - started, 2),
+                        "rss_mb": round(rss_mb, 2),
+                        "process_count": len(processes),
+                    }
+                )
+            except Exception:
+                if proc.poll() is not None:
+                    break
+        peak_mb = max((sample["rss_mb"] for sample in samples), default=0.0)
+        details = {
+            "pid": proc.pid,
+            "samples": samples[-12:],
+            "peak_mb": peak_mb,
+            "returncode": proc.poll(),
+            "warn_mb": RAM_WARN_MB,
+            "fail_mb": RAM_FAIL_MB,
+        }
+        if not samples or proc.poll() is not None:
+            return Check("bundled EXE RAM smoke", False, "FAIL", "ShellAI.exe exited before RAM sampling completed.", details)
+        if peak_mb >= RAM_FAIL_MB:
+            return Check("bundled EXE RAM smoke", False, "FAIL", f"Peak RSS {peak_mb:.0f} MB exceeds {RAM_FAIL_MB} MB.", details)
+        if peak_mb >= RAM_WARN_MB:
+            return Check("bundled EXE RAM smoke", True, "WARN", f"Peak RSS {peak_mb:.0f} MB exceeds warning target {RAM_WARN_MB} MB.", details)
+        return Check("bundled EXE RAM smoke", True, "PASS", f"Peak RSS {peak_mb:.0f} MB.", details)
+    except Exception as exc:
+        return Check("bundled EXE RAM smoke", False, "FAIL", str(exc), {"pid": proc.pid})
+    finally:
+        try:
+            parent = psutil.Process(proc.pid)
+            for child in parent.children(recursive=True):
+                child.terminate()
+            parent.terminate()
+        except Exception:
+            pass
+        try:
+            proc.wait(timeout=8)
+        except Exception:
+            try:
+                proc.kill()
+            except Exception:
+                pass
 
 
 def check_local_tts_command(py: Path) -> Check:
@@ -281,17 +497,31 @@ cases = {
     "website banao landing page for bakery": "shell_code_engine:create_fullstack_app_tool",
     "todo app banao with login": "shell_code_engine:create_fullstack_app_tool",
     "snake game banao": "shell_game_builder:build_game_tool",
+    "AI tools ke bare mein pdf bana do": "shell_workspace_tools:create_user_file_tool",
+    "cat ke photo generate karo": "shell_image_ai:generate_image_tool",
     "open calculator": "shell_window_CTRL:open_app",
     "close calculator": "shell_window_CTRL:close_app",
     "voice status check": "shell_neural_voice:shell_streaming_voice_status_tool",
+}
+arg_expectations = {
+    "AI tools ke bare mein pdf bana do": {"destination": "documents", "file_type": "pdf"},
+    "cat ke photo generate karo": {"force_fresh": True, "use_cache": False},
 }
 
 observed = {}
 for prompt, expected in cases.items():
     route = route_natural_command(prompt) or {}
-    observed[prompt] = route.get("tool")
+    observed[prompt] = {"tool": route.get("tool"), "args": route.get("args") or {}}
     if route.get("tool") != expected:
         raise SystemExit(json.dumps({"expected": expected, "observed": observed, "prompt": prompt}, sort_keys=True))
+    for key, expected_value in arg_expectations.get(prompt, {}).items():
+        observed_value = (route.get("args") or {}).get(key)
+        if observed_value != expected_value:
+            raise SystemExit(json.dumps({
+                "expected": {key: expected_value},
+                "observed": observed,
+                "prompt": prompt,
+            }, sort_keys=True))
 
 print(json.dumps(observed, sort_keys=True))
 """
@@ -349,7 +579,8 @@ def print_summary(report: dict[str, Any]) -> None:
     print("2. Chat: ask 'open calculator', then 'close calculator'.")
     print("3. Chat: ask one normal question and confirm text appears without automatic voice.")
     print("4. Voice page: start voice and confirm speaker output is audible.")
-    print("5. Settings: add/remove a test API key and confirm it persists after restart.")
+    print("5. Settings: type into API key fields while update status is visible; confirm no typing lag.")
+    print("6. Settings: add/remove a test API key and confirm it persists after restart.")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -365,10 +596,14 @@ def main(argv: list[str] | None = None) -> int:
     checks.append(check_health(py))
     is_windows = platform.system().lower().startswith("win")
     if is_windows or args.allow_non_windows:
+        checks.append(check_installed_bundled_app_layout())
         checks.append(check_hub(py))
         checks.append(check_ui_probe(py, visible=args.visible_ui_probe))
         checks.append(check_voice_runtime(py))
         checks.append(check_offline_tts_status(py))
+        checks.append(check_frozen_offline_tts_path(py))
+        checks.append(check_windows_app_open_smoke(py))
+        checks.append(check_bundled_exe_memory())
         checks.append(check_local_tts_command(py))
         checks.append(check_hard_task_routes(py))
         if args.include_agents:
@@ -397,6 +632,7 @@ def main(argv: list[str] | None = None) -> int:
             "chat text response works and does not auto-trigger TTS",
             "voice page produces audible speech",
             "Windows-MCP app open/close works on Windows",
+            "settings typing remains responsive while update status is visible",
             "settings/API persistence survives restart",
         ],
     }

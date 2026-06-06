@@ -92,3 +92,57 @@ def test_ui_probe_skips_mcp_and_reports_json_errors(monkeypatch, tmp_path):
     assert result.status == "FAIL"
     assert "backend command worker did not finish" in result.message
     assert result.details["probe_errors"] == ["backend command worker did not finish"]
+
+
+def test_windows_app_open_smoke_is_opt_in(monkeypatch, tmp_path):
+    monkeypatch.setattr(probe.platform, "system", lambda: "Windows")
+    monkeypatch.delenv("SHELL_ACCEPTANCE_OPEN_APPS", raising=False)
+
+    result = probe.check_windows_app_open_smoke(tmp_path / "python.exe")
+
+    assert result.ok is True
+    assert result.status == "WARN"
+    assert "SHELL_ACCEPTANCE_OPEN_APPS=1" in result.message
+
+
+def test_bundled_exe_memory_is_opt_in(monkeypatch, tmp_path):
+    app_exe = tmp_path / "ShellAIApp" / "ShellAI.exe"
+    app_exe.parent.mkdir()
+    app_exe.write_text("", encoding="utf-8")
+
+    monkeypatch.setattr(probe.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(probe, "ROOT", tmp_path)
+    monkeypatch.setattr(probe, "APP_EXE", app_exe)
+    monkeypatch.delenv("SHELL_ACCEPTANCE_LAUNCH_EXE", raising=False)
+
+    result = probe.check_bundled_exe_memory()
+
+    assert result.ok is True
+    assert result.status == "WARN"
+    assert "SHELL_ACCEPTANCE_LAUNCH_EXE=1" in result.message
+    assert result.details["fail_mb"] == probe.RAM_FAIL_MB
+
+
+def test_env_flag_accepts_common_truthy_values(monkeypatch):
+    monkeypatch.setenv("SHELL_ACCEPTANCE_OPEN_APPS", "yes")
+
+    assert probe.env_flag("SHELL_ACCEPTANCE_OPEN_APPS") is True
+
+
+def test_ui_probe_reports_settings_typing_latency():
+    source = (Path(__file__).resolve().parents[1] / "tools" / "e2e_ui_probe.py").read_text(encoding="utf-8")
+
+    assert "typing_latency" in source
+    assert "settings_latency_threshold_ms = 250.0" in source
+    assert "target_input.insert(char)" in source
+    assert "settings typing latency exceeded" in source
+
+
+def test_hard_task_probe_covers_pdf_and_fresh_image_routes():
+    source = (Path(__file__).resolve().parents[1] / "tools" / "windows_acceptance_probe.py").read_text(encoding="utf-8")
+
+    assert "AI tools ke bare mein pdf bana do" in source
+    assert '"destination": "documents"' in source
+    assert "cat ke photo generate karo" in source
+    assert '"force_fresh": True' in source
+    assert '"use_cache": False' in source

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import importlib.metadata as importlib_metadata
 import importlib.util
 import json
@@ -66,6 +67,7 @@ ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
 APP_ICON_NAME = "shell-ai.ico"
 APP_ICON_STAGE = APP_STAGE / APP_ICON_NAME
+ICON_CORNER_RADIUS_RATIO = 0.28
 PYINSTALLER_HIDDEN_IMPORTS = [
     "aiohttp",
     "aiohttp.web",
@@ -260,7 +262,7 @@ def prepare_windows_icon(*, dry_run: bool) -> dict[str, object]:
 
     ICON_BUILD_DIR.mkdir(parents=True, exist_ok=True)
     with Image.open(ICON_SOURCE) as image:
-        image.convert("RGBA").save(
+        _rounded_icon_image(image).save(
             ICON_ICO,
             format="ICO",
             sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)],
@@ -271,12 +273,42 @@ def prepare_windows_icon(*, dry_run: bool) -> dict[str, object]:
     return report
 
 
+def _rounded_icon_image(image: object) -> object:
+    """Apply Shell's app-icon rounded-corner alpha mask before ICO export."""
+    from PIL import Image, ImageChops, ImageDraw
+
+    rgba = image.convert("RGBA")
+    width, height = rgba.size
+    radius = max(1, int(round(min(width, height) * ICON_CORNER_RADIUS_RATIO)))
+    scale = 4
+    mask = Image.new("L", (width * scale, height * scale), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle(
+        (0, 0, width * scale - 1, height * scale - 1),
+        radius=radius * scale,
+        fill=255,
+    )
+    mask = mask.resize((width, height), Image.Resampling.LANCZOS)
+    original_alpha = rgba.getchannel("A")
+    rgba.putalpha(ImageChops.multiply(original_alpha, mask))
+    return rgba
+
+
 def stage_installed_icon(app_icon: Path | None) -> str:
     if not app_icon or not app_icon.exists():
         return ""
     APP_ICON_STAGE.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(app_icon, APP_ICON_STAGE)
     return str(APP_ICON_STAGE)
+
+
+def windows_icon_resource_count(path: Path) -> int:
+    if platform.system().lower() != "windows" or not path.exists():
+        return 0
+    try:
+        return int(ctypes.windll.shell32.ExtractIconExW(str(path), -1, None, None, 0))
+    except Exception:
+        return 0
 
 
 def _has_any_file(path: Path, patterns: tuple[str, ...]) -> bool:
@@ -464,6 +496,7 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
         "app_exe": str(APP_BUNDLE_EXE),
         "app_icon": str(app_icon) if app_icon else "",
         "installed_icon": str(APP_ICON_STAGE) if APP_ICON_STAGE.exists() else "",
+        "app_exe_icon_count": windows_icon_resource_count(APP_BUNDLE_EXE),
         "espeak_data_layout": espeak_layout,
         "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
     }
@@ -636,6 +669,7 @@ def build_windows_installer(
                 "status": "success",
                 "path": str(installer),
                 "size_bytes": installer.stat().st_size,
+                "installer_icon_count": windows_icon_resource_count(installer),
             }
         )
     DIST_DIR.mkdir(parents=True, exist_ok=True)

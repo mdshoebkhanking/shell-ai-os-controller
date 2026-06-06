@@ -262,6 +262,12 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert 'Icon "${InstallerIcon}"' in nsi
     assert "prepare_windows_icon" in builder
     assert "--icon" in builder
+    assert "windows_icon_resource_count" in builder
+    assert "app_exe_icon_count" in builder
+    assert "installer_icon_count" in builder
+    assert "ICON_CORNER_RADIUS_RATIO = 0.28" in builder
+    assert "_rounded_icon_image(image)" in builder
+    assert "ImageChops.multiply(original_alpha, mask)" in builder
     assert "NSIS_SCRIPT" in builder
     assert 'installer_engine: str = "inno"' in builder
     assert "validate_release_file_set(files)" in builder

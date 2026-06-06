@@ -106,6 +106,12 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     assert "settingsTabs = [" in settings
     assert "OFFLINE TTS" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
     assert "OFFLINE BRAIN" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
+    assert "generalHydratedRef" in settings
+    assert "keysHydratedRef" in settings
+    assert "activeTab !== 'general'" in settings
+    assert "activeTab !== 'keys'" in settings
+    assert "removeAllListeners('updater-event')" not in settings
+    assert "ipcRenderer?.off?.('updater-event'" in settings
 
 
 def test_webengine_host_exposes_settings_channels_and_language_prompt():

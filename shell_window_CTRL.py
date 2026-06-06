@@ -5,6 +5,7 @@ import sys
 import asyncio
 import shutil
 import difflib
+import re
 try:
     from fuzzywuzzy import process
 except ImportError:
@@ -47,6 +48,8 @@ APP_MAPPINGS = {
     "chrome": "chrome",
     "vlc": "vlc",
     "command prompt": "cmd",
+    "powershell": "powershell",
+    "explorer": "explorer",
     "control panel": "control",
     "settings": "ms-settings:",
     "paint": "mspaint",
@@ -69,6 +72,37 @@ APP_MAPPINGS = {
     "blender": "blender",
     "photoshop": "photoshop",
     "illustrator": "illustrator",
+}
+
+APP_ALIASES = {
+    "calc": "calculator",
+    "calculater": "calculator",
+    "calculetor": "calculator",
+    "calculator app": "calculator",
+    "note pad": "notepad",
+    "notes app": "notepad",
+    "google chrome": "chrome",
+    "chrom": "chrome",
+    "crome": "chrome",
+    "microsoft edge": "edge",
+    "ms edge": "edge",
+    "window settings": "settings",
+    "windows settings": "settings",
+    "setting": "settings",
+    "settings app": "settings",
+    "controlpanel": "control panel",
+    "file explorer": "explorer",
+    "explorer": "explorer",
+    "files": "explorer",
+    "cmd": "command prompt",
+    "terminal": "command prompt",
+    "powershell": "powershell",
+    "visual studio code": "vs code",
+    "vscode": "vs code",
+    "whats app": "whatsapp",
+    "whatapp": "whatsapp",
+    "ms teams": "teams",
+    "microsoft teams": "teams",
 }
 
 MAC_APP_ALIASES = {
@@ -142,6 +176,33 @@ APP_INSTALL_PATHS = {
 def find_app_path(app_name):
     """Find app path using shutil.which for PATH lookup"""
     return shutil.which(app_name)
+
+def _normalize_app_title(app_title: str) -> str:
+    cleaned = str(app_title or "").lower().strip()
+    cleaned = cleaned.replace("_", " ").replace("-", " ")
+    cleaned = " ".join(cleaned.split())
+    cleaned = re.sub(r"^(open|launch|start|run|khol|kholo|chalao)\s+", "", cleaned)
+    cleaned = re.sub(r"\s+(app|application|software|program)$", "", cleaned).strip()
+    if cleaned in APP_ALIASES:
+        return APP_ALIASES[cleaned]
+    if cleaned in APP_MAPPINGS:
+        return cleaned
+    match = difflib.get_close_matches(cleaned, list(APP_MAPPINGS.keys()) + list(APP_ALIASES.keys()), n=1, cutoff=0.84)
+    if match:
+        return APP_ALIASES.get(match[0], match[0])
+    return cleaned
+
+def _windows_start_command(target: str) -> subprocess.Popen:
+    # `start` treats the first quoted argument as a window title; pass an
+    # explicit empty title so app names/paths with spaces are interpreted as
+    # the command target.
+    return subprocess.Popen(["cmd", "/c", "start", "", target])
+
+def _windows_launch_uri(uri: str) -> None:
+    if hasattr(os, "startfile"):
+        os.startfile(uri)  # type: ignore[attr-defined]
+        return
+    _windows_start_command(uri)
 
 def _mac_app_name(app_title: str) -> str:
     key = str(app_title or "").strip().lower()
@@ -507,7 +568,8 @@ async def open_app(app_title: str) -> str:
     Args:
         app_title: Name of the application to open.
     """
-    app_title = app_title.lower().strip()
+    raw_app_title = str(app_title or "").strip()
+    app_title = _normalize_app_title(raw_app_title)
     if not app_title:
         return "App name is empty."
 
@@ -533,13 +595,13 @@ async def open_app(app_title: str) -> str:
 
         # Special case for settings (URI protocol)
         if app_title == "settings":
-            subprocess.Popen(["cmd", "/c", "start", "ms-settings:"])
+            _windows_launch_uri("ms-settings:")
             await asyncio.sleep(2)
             return f"Settings launched (URI protocol, no PID tracking)."
 
         # Special case for whatsapp (URI protocol)
         if app_title == "whatsapp":
-            subprocess.Popen(["cmd", "/c", "start", "whatsapp:"])
+            _windows_launch_uri("whatsapp:")
             await asyncio.sleep(2)
             return f"WhatsApp launched (URI protocol, no PID tracking)."
 
@@ -551,11 +613,11 @@ async def open_app(app_title: str) -> str:
             else:
                 app_path = find_app_path("discord")
                 if app_path:
-                    proc = subprocess.Popen(app_path)
+                    proc = subprocess.Popen([app_path])
                 else:
-                    subprocess.Popen(["cmd", "/c", f"start {app_command}"])
+                    _windows_start_command(app_command)
                     await asyncio.sleep(2)
-                    return f"{app_title} launch attempted (PID unavailable)."
+                    return f"{app_title} launch requested through Windows Shell."
 
         # Special case for Teams (uses Update.exe)
         elif app_title == "teams":
@@ -565,24 +627,28 @@ async def open_app(app_title: str) -> str:
             else:
                 app_path = find_app_path("teams") or find_app_path("ms-teams")
                 if app_path:
-                    proc = subprocess.Popen(app_path)
+                    proc = subprocess.Popen([app_path])
                 else:
-                    subprocess.Popen(["cmd", "/c", "start", "msteams:"])
+                    _windows_launch_uri("msteams:")
                     await asyncio.sleep(2)
                     return f"Teams launch attempted via URI protocol."
         else:
             # 1) Try PATH lookup
             app_path = find_app_path(app_command)
             if app_path:
-                proc = subprocess.Popen(app_path)
+                proc = subprocess.Popen([app_path])
             else:
                 # 2) Try known install paths
                 install_path = install_path_hint
                 if install_path:
-                    proc = subprocess.Popen(install_path)
+                    proc = subprocess.Popen([install_path])
                 else:
-                    # 3) Fallback: let Windows shell figure it out
-                    proc = subprocess.Popen(["cmd", "/c", f"start {app_command}"])
+                    # 3) Try a direct Windows process launch before asking the
+                    # shell to resolve aliases/URI handlers.
+                    try:
+                        proc = subprocess.Popen([app_command])
+                    except FileNotFoundError:
+                        proc = _windows_start_command(app_command)
 
         # Get PID
         pid = proc.pid if proc else None
@@ -595,7 +661,7 @@ async def open_app(app_title: str) -> str:
         if focused:
             return f"App launched and focused: {app_title}{pid_info}"
         else:
-            return f"{app_title} launched (may be in background){pid_info}"
+            return f"{app_title} launch requested (may be in background){pid_info}"
 
     except FileNotFoundError:
         return f"{app_title} not found. Make sure it is installed."

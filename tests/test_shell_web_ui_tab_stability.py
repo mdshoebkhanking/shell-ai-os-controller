@@ -67,7 +67,7 @@ def test_primary_tab_views_do_not_zoom_during_tab_switches():
         assert "animate-in fade-in duration-150" not in content
 
 
-def test_lazy_tab_views_are_preloaded_before_first_switch():
+def test_lazy_tab_views_can_preload_before_first_switch_when_enabled():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
     skeleton = read_project_file("shell_web_ui/src/components/ViewSkelrton.tsx")
 
@@ -84,6 +84,9 @@ def test_lazy_tab_views_are_preloaded_before_first_switch():
         assert loader in shell_ai
 
     assert "const preloadShellTabViews" in shell_ai
+    assert "const shouldPreloadShellTabs" in shell_ai
+    assert "Windows" in shell_ai
+    assert "shell_preload_tabs" in shell_ai
     assert "void preloadShellTabViews(() => cancelled).catch(() => undefined)" in shell_ai
     assert "requestIdleCallback" in shell_ai
     assert "animate-in" not in skeleton
@@ -116,6 +119,29 @@ def test_shell_root_avoids_idle_render_churn():
     assert "current.width === nextStyle.width" in shell_ai
     assert "export default memo(" in dashboard
     assert "areDashboardShellPropsEqual" in dashboard
+
+
+def test_heavy_widgets_defer_map_editor_and_terminal_libraries_until_visible():
+    map_view = read_project_file("shell_web_ui/src/Widgets/MapView.tsx")
+    map_canvas = read_project_file("shell_web_ui/src/Widgets/MapCanvas.tsx")
+    live_coding = read_project_file("shell_web_ui/src/Widgets/LiveCodingWidget.tsx")
+    live_editor = read_project_file("shell_web_ui/src/Widgets/LiveCodingEditor.tsx")
+    terminal = read_project_file("shell_web_ui/src/components/TerminalOverlay.tsx")
+
+    assert "lazy(() => import('./MapCanvas'))" in map_view
+    assert "from 'react-leaflet'" not in map_view
+    assert "from 'leaflet'" not in map_view
+    assert "from 'react-leaflet'" in map_canvas
+    assert "from 'leaflet'" in map_canvas
+
+    assert "lazy(() => import('./LiveCodingEditor'))" in live_coding
+    assert "from '@monaco-editor/react'" not in live_coding
+    assert "from '@monaco-editor/react'" in live_editor
+
+    assert "from 'xterm'" not in terminal
+    assert "from 'xterm-addon-fit'" not in terminal
+    assert "import('xterm')" in terminal
+    assert "import('xterm-addon-fit')" in terminal
 
 
 def test_macro_runner_reports_failures_inline_without_browser_alerts():

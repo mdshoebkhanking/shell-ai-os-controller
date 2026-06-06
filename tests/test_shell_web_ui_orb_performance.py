@@ -36,12 +36,13 @@ def test_sphere_preserves_original_particle_expansion_on_gpu():
     assert "originalPositions" not in sphere
 
 
-def test_sphere_uses_original_canvas_runtime_settings():
+def test_sphere_uses_windows_friendly_canvas_runtime_settings():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
 
-    assert "dpr={[1, 1.5]}" in sphere
+    assert "const ORB_TARGET_FRAME_MS = 1000 / 30" in sphere
+    assert "dpr={[1, 1.2]}" in sphere
     assert "performance={{ min: 0.5 }}" in sphere
-    assert "powerPreference: 'high-performance'" in sphere
+    assert "powerPreference: 'default'" in sphere
     assert "if (document.hidden) return" in sphere
     assert "const ORB_PARTICLE_SIZE = 0.012" in sphere
     assert "shaderMaterial" in sphere

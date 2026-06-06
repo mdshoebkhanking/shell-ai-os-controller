@@ -107,6 +107,35 @@ def test_offline_tts_status_reports_kokoro_metadata(monkeypatch, tmp_path):
     assert status["nativeHindiVoice"] == "hf_alpha"
 
 
+def test_offline_tts_status_finds_kokoro_next_to_installed_pyinstaller_app(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    install_root = tmp_path / "ShellAI"
+    app_dir = install_root / "ShellAIApp"
+    internal_dir = app_dir / "_internal"
+    model_dir = install_root / "models" / "tts" / "kokoro"
+    model_dir.mkdir(parents=True)
+    internal_dir.mkdir(parents=True)
+    (model_dir / "kokoro-v1.0.int8.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    fake_kokoro = types.ModuleType("kokoro_onnx")
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", internal_dir)
+    monkeypatch.setattr(shell_offline_tts.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(shell_offline_tts.sys, "executable", str(app_dir / "ShellAI.exe"))
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", fake_kokoro)
+    monkeypatch.setenv("SHELL_OFFLINE_TTS", "1")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_ENGINE", "kokoro")
+    monkeypatch.delenv("SHELL_NATURAL_TTS_MODEL_DIR", raising=False)
+    monkeypatch.delenv("SHELL_OFFLINE_TTS_MODEL_DIR", raising=False)
+
+    status = shell_offline_tts.offline_tts_status()
+
+    assert status["available"] is True
+    assert status["engine"] == "kokoro"
+    assert status["modelDir"] == str(model_dir)
+
+
 def test_kokoro_segments_route_hinglish_clauses(monkeypatch):
     import shell_offline_tts
 
@@ -226,6 +255,38 @@ def test_play_wav_async_rejects_immediate_player_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(shell_offline_tts.time, "sleep", lambda _seconds: None)
 
     assert shell_offline_tts._play_wav_async(wav_path) is None
+
+
+def test_play_wav_async_uses_winsound_on_windows(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    calls = []
+    fake_winsound = types.ModuleType("winsound")
+    fake_winsound.SND_FILENAME = 1
+    fake_winsound.SND_ASYNC = 2
+    fake_winsound.SND_PURGE = 4
+
+    def fake_play_sound(path, flags):
+        calls.append((path, flags))
+
+    fake_winsound.PlaySound = fake_play_sound
+    wav_path = tmp_path / "speech.wav"
+    wav_path.write_bytes(b"wav")
+
+    monkeypatch.setattr(shell_offline_tts.platform, "system", lambda: "Windows")
+    monkeypatch.setitem(sys.modules, "winsound", fake_winsound)
+    monkeypatch.setattr(
+        shell_offline_tts.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("PowerShell fallback should not run")),
+    )
+
+    playback = shell_offline_tts._play_wav_async(wav_path)
+
+    assert playback is not None
+    assert calls == [(str(wav_path), fake_winsound.SND_FILENAME | fake_winsound.SND_ASYNC)]
+    playback.terminate()
+    assert calls[-1] == (None, fake_winsound.SND_PURGE)
 
 
 def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):

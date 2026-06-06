@@ -133,3 +133,76 @@ async def test_generate_image_uses_local_preview_when_cloud_providers_fail(monke
     assert "Provider:** Shell Local Preview" in result
     saved = result.split("`")[1]
     assert img._valid_image_bytes(open(saved, "rb").read())[0] is True
+
+
+@pytest.mark.asyncio
+async def test_generate_image_ignores_cache_by_default(monkeypatch, tmp_path):
+    import shell_image_ai as img
+
+    calls = []
+
+    class GoodProvider(img.ImageProvider):
+        def __init__(self):
+            super().__init__("Good")
+
+        async def generate(self, prompt, width, height, **kwargs):
+            calls.append((prompt, width, height))
+            return PNG_1X1
+
+    monkeypatch.setattr(img, "_build_providers", lambda: [GoodProvider()])
+    monkeypatch.setattr(img.Config, "IMAGE_AUTO_OPEN", False)
+    monkeypatch.setattr(img.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(img, "cache", img.AdvancedCache(str(tmp_path / "cache")))
+    img.rate_limiter.reset()
+
+    first = await img.generate_image_tool.__wrapped__(
+        "fresh shell logo concept",
+        use_ai_enhancement=False,
+    )
+    second = await img.generate_image_tool.__wrapped__(
+        "fresh shell logo concept",
+        use_ai_enhancement=False,
+    )
+
+    first_path = first.split("`")[1]
+    second_path = second.split("`")[1]
+    assert len(calls) == 2
+    assert first_path != second_path
+    assert "Cache Hit" not in second
+
+
+@pytest.mark.asyncio
+async def test_generate_image_cache_reuse_is_explicit_opt_in(monkeypatch, tmp_path):
+    import shell_image_ai as img
+
+    calls = []
+
+    class GoodProvider(img.ImageProvider):
+        def __init__(self):
+            super().__init__("Good")
+
+        async def generate(self, prompt, width, height, **kwargs):
+            calls.append(prompt)
+            return PNG_1X1
+
+    monkeypatch.setattr(img, "_build_providers", lambda: [GoodProvider()])
+    monkeypatch.setattr(img.Config, "IMAGE_AUTO_OPEN", False)
+    monkeypatch.setattr(img.os.path, "expanduser", lambda _p: str(tmp_path))
+    monkeypatch.setattr(img, "cache", img.AdvancedCache(str(tmp_path / "cache")))
+    img.rate_limiter.reset()
+
+    first = await img.generate_image_tool.__wrapped__(
+        "cache opt in shell logo concept",
+        use_ai_enhancement=False,
+    )
+    second = await img.generate_image_tool.__wrapped__(
+        "cache opt in shell logo concept",
+        use_ai_enhancement=False,
+        use_cache=True,
+        force_fresh=False,
+    )
+
+    assert "✅ **Image Generated!**" in first
+    assert "Cache Hit" in second
+    assert img._valid_image_bytes(open(second.split("`")[1], "rb").read())[0] is True
+    assert len(calls) == 1

@@ -251,6 +251,8 @@ def _image_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
             "style": "photorealistic",
             "quality": "excellent",
             "use_ai_enhancement": True,
+            "use_cache": False,
+            "force_fresh": True,
         },
         confidence=0.92,
     )
@@ -432,9 +434,6 @@ def _user_file_save_content(raw: str, filename: str) -> str:
 
 
 def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
-    destination = _user_file_destination(lower)
-    if not destination:
-        return None
     if not re.search(
         r"\b(save|create|make|new|write|generate|banao|bana|banado|banaao|bana\s+do|kar\s+do|karke\s+do)\b",
         lower,
@@ -443,6 +442,11 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
         return None
     if not re.search(r"\b(file|pdf|document|note|notes|text|txt|md|markdown|json|csv|html|report|letter)\b", lower, flags=re.I):
         return None
+    destination = _user_file_destination(lower)
+    if not destination:
+        if not re.search(r"\b(pdf|document|report|letter)\b", lower, flags=re.I):
+            return None
+        destination = "documents"
     filename = _user_file_save_filename(raw)
     file_type = _user_file_type(raw, lower, filename)
     content = _user_file_save_content(raw, filename)

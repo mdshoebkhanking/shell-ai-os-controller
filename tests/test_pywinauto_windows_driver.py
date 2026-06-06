@@ -1,5 +1,6 @@
 import subprocess
 import sys
+import asyncio
 
 
 class FakeRect:
@@ -162,3 +163,72 @@ def test_shell_window_ctrl_routes_reference_pywinauto_flag():
     assert "_get_pywinauto_driver" in source
     assert "_run_pywinauto" in source
     assert "open_app" in source
+
+
+def test_shell_window_ctrl_normalizes_common_app_typos():
+    import shell_window_CTRL as ctrl
+
+    assert ctrl._normalize_app_title("calculater") == "calculator"
+    assert ctrl._normalize_app_title("windows settings app") == "settings"
+    assert ctrl._normalize_app_title("google chrome") == "chrome"
+    assert ctrl._normalize_app_title("note pad") == "notepad"
+
+
+def test_open_app_windows_uses_structured_start_fallback(monkeypatch):
+    import shell_window_CTRL as ctrl
+
+    calls = []
+
+    class FakeProcess:
+        pid = 4321
+
+    async def fake_pywinauto(*_args):
+        return None
+
+    async def fake_focus(_title):
+        return False
+
+    def fake_popen(command, *_args, **_kwargs):
+        calls.append(command)
+        if command == ["mystery"]:
+            raise FileNotFoundError("missing")
+        return FakeProcess()
+
+    monkeypatch.setattr(ctrl.sys, "platform", "win32")
+    monkeypatch.setattr(ctrl, "_run_pywinauto", fake_pywinauto)
+    monkeypatch.setattr(ctrl, "find_app_path", lambda _command: None)
+    monkeypatch.setattr(ctrl, "_find_app_install_path", lambda _title: None)
+    monkeypatch.setattr(ctrl, "focus_window", fake_focus)
+    monkeypatch.setattr(ctrl.subprocess, "Popen", fake_popen)
+
+    result = asyncio.run(ctrl.open_app("mystery"))
+
+    assert calls == [["mystery"], ["cmd", "/c", "start", "", "mystery"]]
+    assert "launch requested" in result
+
+
+def test_open_app_windows_uses_normalized_path_lookup(monkeypatch):
+    import shell_window_CTRL as ctrl
+
+    calls = []
+
+    class FakeProcess:
+        pid = 1234
+
+    async def fake_pywinauto(*_args):
+        return None
+
+    async def fake_focus(_title):
+        return True
+
+    monkeypatch.setattr(ctrl.sys, "platform", "win32")
+    monkeypatch.setattr(ctrl, "_run_pywinauto", fake_pywinauto)
+    monkeypatch.setattr(ctrl, "find_app_path", lambda command: r"C:\Windows\System32\calc.exe" if command == "calc" else None)
+    monkeypatch.setattr(ctrl, "_find_app_install_path", lambda _title: None)
+    monkeypatch.setattr(ctrl, "focus_window", fake_focus)
+    monkeypatch.setattr(ctrl.subprocess, "Popen", lambda command, *_args, **_kwargs: calls.append(command) or FakeProcess())
+
+    result = asyncio.run(ctrl.open_app("calculater"))
+
+    assert calls == [[r"C:\Windows\System32\calc.exe"]]
+    assert "App launched and focused: calculator" in result

@@ -1834,7 +1834,9 @@ async def generate_image_tool(description: str,
                              style: str = "",
                              use_ai_enhancement: bool = True,
                              quality: str = "excellent",
-                             priority: str = "normal") -> str:
+                             priority: str = "normal",
+                             use_cache: bool = False,
+                             force_fresh: bool = True) -> str:
     """
     🎨 MEGA UPGRADE: Generates Ultra-Quality AI Image with 7+ Providers.
     
@@ -1855,6 +1857,8 @@ async def generate_image_tool(description: str,
         use_ai_enhancement: Enable Gemini prompt enhancement
         quality: 'basic', 'good', 'excellent', 'ultimate'
         priority: 'low', 'normal', 'high', 'urgent'
+        use_cache: Reuse a previous matching image only when explicitly enabled
+        force_fresh: Generate a new image even if a matching cached image exists
     
     Returns:
         File path and generation details
@@ -1863,6 +1867,8 @@ async def generate_image_tool(description: str,
         original_prompt = (description or "").strip()
         style = (style or "").strip().lower()
         quality = (quality or "excellent").strip().lower()
+        use_cache = bool(use_cache)
+        force_fresh = bool(force_fresh)
         profile = _dimension_profile(device_type)
         base_width, base_height = profile.base
         final_width, final_height = profile.final
@@ -1890,9 +1896,10 @@ async def generate_image_tool(description: str,
             "quality": quality,
             "enhance": bool(use_ai_enhancement),
         }
-        cached = cache.get(**cache_key)
-        if cached:
-            return f"💾 **Cache Hit!**\n📂 `{cached}`"
+        if use_cache and not force_fresh:
+            cached = cache.get(**cache_key)
+            if cached:
+                return f"💾 **Cache Hit!**\n📂 `{cached}`"
 
         working_prompt = original_prompt
         if style:
@@ -2010,6 +2017,7 @@ async def generate_image_tool(description: str,
                 "provider_dimensions": (provider_width, provider_height),
                 "attempts": attempts,
                 "quality": quality,
+                "cache_policy": "fresh" if force_fresh or not use_cache else "reuse",
             },
         )
         history.add_entry(request, result)

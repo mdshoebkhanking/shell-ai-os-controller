@@ -1,26 +1,14 @@
-import { useState, useEffect } from 'react'
-import Editor, { useMonaco } from '@monaco-editor/react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { FileCode2, ExternalLink, X, Sparkles } from 'lucide-react'
 
+const LiveCodingEditor = lazy(() => import('./LiveCodingEditor'))
+
 export default function LiveCodingWidget() {
-  const monaco = useMonaco()
   const [isVisible, setIsVisible] = useState(false)
   const [filename, setFilename] = useState('')
   const [filePath, setFilePath] = useState('')
   const [code, setCode] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-
-  useEffect(() => {
-    if (monaco) {
-      monaco.editor.defineTheme('shell-dark', {
-        base: 'vs-dark',
-        inherit: true,
-        rules: [{ token: 'comment', foreground: '10b981', fontStyle: 'italic' }],
-        colors: { 'editor.background': '#00000000' }
-      })
-      monaco.editor.setTheme('shell-dark')
-    }
-  }, [monaco])
 
   useEffect(() => {
     const handleStartCoding = async (e: any) => {
@@ -103,18 +91,9 @@ export default function LiveCodingWidget() {
         </div>
 
         <div className="flex-1 relative pt-4 bg-[#050505]">
-          <Editor
-            height="100%"
-            language={filename.endsWith('.py') ? 'python' : 'typescript'}
-            theme="shell-dark"
-            value={code}
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              fontSize: 14,
-              fontFamily: "'Fira Code', monospace"
-            }}
-          />
+          <Suspense fallback={<div className="h-full w-full bg-[#050505]" />}>
+            <LiveCodingEditor code={code} filename={filename} />
+          </Suspense>
         </div>
       </div>
     </div>

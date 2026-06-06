@@ -161,6 +161,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [telegramStatus, setTelegramStatus] = useState('Telegram status not checked yet.')
   const [telegramBusy, setTelegramBusy] = useState('')
   const [apiSaveResult, setApiSaveResult] = useState('')
+  const generalHydratedRef = useRef(false)
+  const keysHydratedRef = useRef(false)
 
   const settingsTabRailRef = useRef<HTMLDivElement | null>(null)
   const settingsTabButtonRefs = useRef<Record<TabType, HTMLButtonElement | null>>({
@@ -184,53 +186,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
 
   useEffect(() => {
     if (window.electron?.ipcRenderer) {
-      window.electron.ipcRenderer.invoke('get-personality').then((res) => {
-        if (res) setPersonality(res)
-      })
       window.electron.ipcRenderer.invoke('get-app-version').then((v) => setAppVersion(v))
-      window.electron.ipcRenderer.invoke('get-settings').then((settings) => {
-        const nextLanguage = normalizeShellLanguage(settings?.shell_language || settings?.language)
-        setLanguage(nextLanguage)
-        localStorage.setItem(SHELL_LANGUAGE_STORAGE_KEY, nextLanguage)
-      }).catch(() => {})
-      window.electron.ipcRenderer.invoke('offline-tts-status').then((status) => {
-        applyOfflineTtsStatus(status)
-      }).catch(() => {})
-      window.electron.ipcRenderer.invoke('offline-llm-status').then((status) => {
-        applyOfflineLlmStatus(status)
-      }).catch(() => {})
-      window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
-        if (!keys || typeof keys !== 'object') return
-        if (keys.geminiKey) {
-          const normalizedGeminiKey = normalizeGeminiApiKey(keys.geminiKey)
-          if (normalizedGeminiKey) {
-            setGeminiKey(normalizedGeminiKey)
-            localStorage.setItem('shell_custom_api_key', normalizedGeminiKey)
-          }
-        }
-        if (keys.groqKey) setGroqKey(keys.groqKey)
-        if (keys.hfKey) setHfKey(keys.hfKey)
-        if (keys.tavilyKey) setTavilyKey(keys.tavilyKey)
-        if (keys.livekitKey) setLivekitKey(keys.livekitKey)
-        if (keys.livekitSecret) setLivekitSecret(keys.livekitSecret)
-        if (keys.livekitUrl) setLivekitUrl(keys.livekitUrl)
-        if (keys.openaiKey) setOpenaiKey(keys.openaiKey)
-        if (keys.openrouterKey) setOpenrouterKey(keys.openrouterKey)
-        if (keys.mistralKey) setMistralKey(keys.mistralKey)
-        if (keys.googleSearchKey) setGoogleSearchKey(keys.googleSearchKey)
-        if (keys.searchEngineId) setSearchEngineId(keys.searchEngineId)
-        if (keys.weatherKey) setWeatherKey(keys.weatherKey)
-        if (keys.telegramToken) setTelegramToken(keys.telegramToken)
-        if (keys.telegramAllowedChatIds) setTelegramAllowedChatIds(keys.telegramAllowedChatIds)
-        if (keys.telegramRemoteControlEnabled !== undefined) {
-          setTelegramRemoteEnabled(String(keys.telegramRemoteControlEnabled) === '1')
-        }
-        if (keys.telegramAllowTerminal !== undefined) {
-          setTelegramAllowTerminal(String(keys.telegramAllowTerminal) === '1')
-        }
-      })
 
-      window.electron.ipcRenderer.on('updater-event', (_e, { status, data, error }) => {
+      const handleUpdaterEvent = (_e: unknown, { status, data, error }: any) => {
         if (status === 'checking') setUpdateStatus('checking')
         if (status === 'available') {
           setUpdateStatus('available')
@@ -250,13 +208,67 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
           setUpdateStatus('error')
           setUpdateNotes(`Error: ${error}`)
         }
-      })
-    }
-    return () => {
-      if (window.electron?.ipcRenderer)
-        window.electron.ipcRenderer.removeAllListeners('updater-event')
+      }
+      window.electron.ipcRenderer.on('updater-event', handleUpdaterEvent)
+      return () => {
+        window.electron?.ipcRenderer?.off?.('updater-event', handleUpdaterEvent)
+      }
     }
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== 'general' || generalHydratedRef.current || !window.electron?.ipcRenderer) return
+    generalHydratedRef.current = true
+    window.electron.ipcRenderer.invoke('get-personality').then((res) => {
+      if (res) setPersonality(res)
+    }).catch(() => {})
+    window.electron.ipcRenderer.invoke('get-settings').then((settings) => {
+      const nextLanguage = normalizeShellLanguage(settings?.shell_language || settings?.language)
+      setLanguage(nextLanguage)
+      localStorage.setItem(SHELL_LANGUAGE_STORAGE_KEY, nextLanguage)
+    }).catch(() => {})
+    window.electron.ipcRenderer.invoke('offline-tts-status').then((status) => {
+      applyOfflineTtsStatus(status)
+    }).catch(() => {})
+    window.electron.ipcRenderer.invoke('offline-llm-status').then((status) => {
+      applyOfflineLlmStatus(status)
+    }).catch(() => {})
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeTab !== 'keys' || keysHydratedRef.current || !window.electron?.ipcRenderer) return
+    keysHydratedRef.current = true
+    window.electron.ipcRenderer.invoke('secure-get-keys').then((keys) => {
+      if (!keys || typeof keys !== 'object') return
+      if (keys.geminiKey) {
+        const normalizedGeminiKey = normalizeGeminiApiKey(keys.geminiKey)
+        if (normalizedGeminiKey) {
+          setGeminiKey(normalizedGeminiKey)
+          localStorage.setItem('shell_custom_api_key', normalizedGeminiKey)
+        }
+      }
+      if (keys.groqKey) setGroqKey(keys.groqKey)
+      if (keys.hfKey) setHfKey(keys.hfKey)
+      if (keys.tavilyKey) setTavilyKey(keys.tavilyKey)
+      if (keys.livekitKey) setLivekitKey(keys.livekitKey)
+      if (keys.livekitSecret) setLivekitSecret(keys.livekitSecret)
+      if (keys.livekitUrl) setLivekitUrl(keys.livekitUrl)
+      if (keys.openaiKey) setOpenaiKey(keys.openaiKey)
+      if (keys.openrouterKey) setOpenrouterKey(keys.openrouterKey)
+      if (keys.mistralKey) setMistralKey(keys.mistralKey)
+      if (keys.googleSearchKey) setGoogleSearchKey(keys.googleSearchKey)
+      if (keys.searchEngineId) setSearchEngineId(keys.searchEngineId)
+      if (keys.weatherKey) setWeatherKey(keys.weatherKey)
+      if (keys.telegramToken) setTelegramToken(keys.telegramToken)
+      if (keys.telegramAllowedChatIds) setTelegramAllowedChatIds(keys.telegramAllowedChatIds)
+      if (keys.telegramRemoteControlEnabled !== undefined) {
+        setTelegramRemoteEnabled(String(keys.telegramRemoteControlEnabled) === '1')
+      }
+      if (keys.telegramAllowTerminal !== undefined) {
+        setTelegramAllowTerminal(String(keys.telegramAllowTerminal) === '1')
+      }
+    }).catch(() => {})
+  }, [activeTab])
 
   const updateSettingsTabIndicator = useCallback(() => {
     const activeButton = settingsTabButtonRefs.current[activeTab]
