@@ -2,11 +2,20 @@
 
 ## Unreleased
 
+## 1.0.11 - Offline voice packaging and tab stability
+
 - Switched future Windows offline LLM staging from Qwen3 1.7B to
   Falcon-H1-1.5B-Deep-Instruct Q4_K_M while keeping legacy Qwen detection as a
   fallback for older installer trees.
 - Added deterministic Shell AI identity answers in the offline LLM path so
   creator questions consistently answer `mdshoebking`.
+- Fixed the Shell Control Center and Settings tab-switch blank/dark-frame issue
+  with stable readable surfaces and no first-frame Settings opacity fade.
+- Added Kokoro/espeak runtime packaging support so the Windows setup bundle can
+  carry offline natural TTS without app-start terminal downloads.
+- Added local artifact and repo-audit exclusions for downloaded GGUF/ONNX model
+  binaries and probe/runtime folders so large third-party assets are staged by
+  release workflows, not committed.
 
 ## 1.0.10 - Offline model packaging and voice orb proof
 
