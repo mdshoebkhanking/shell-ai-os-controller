@@ -287,6 +287,12 @@ def test_backend_bridge_prefers_offline_tts(monkeypatch):
     fake_process = FakeSpeechProcess()
 
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_start_background_task", lambda _name, target: target())
+    monkeypatch.setattr(
+        host,
+        "offline_tts_status",
+        lambda: {"available": True, "engine": "kokoro", "label": "Offline natural voice"},
+    )
     monkeypatch.setattr(
         host,
         "speak_offline_tts",
