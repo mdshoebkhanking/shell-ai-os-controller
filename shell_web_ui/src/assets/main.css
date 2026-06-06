@@ -268,6 +268,7 @@ body {
 
 .shell-windows-perf .shell-tab,
 .shell-windows-perf .shell-control-button,
+.shell-windows-perf .shell-dock-button,
 .shell-windows-perf .shell-settings-input,
 .shell-windows-perf .shell-settings-card {
   transition-duration: 120ms !important;
@@ -280,9 +281,62 @@ body {
 
 .shell-windows-perf .shell-workstream-panel,
 .shell-windows-perf .shell-workstream-panel::after,
+.shell-windows-perf .shell-workstream-orb span,
+.shell-windows-perf .shell-dock-button-main.shell-dock-button-live::after,
+.shell-windows-perf .shell-dock-button-speaking::after,
 .shell-windows-perf .shell-shimmer {
-  animation-duration: 1ms !important;
+  animation: none !important;
   animation-delay: 0ms !important;
+}
+
+.shell-windows-perf .shell-view-layer,
+.shell-windows-perf .shell-view-layer > *,
+.shell-windows-perf .shell-liquid-panel,
+.shell-windows-perf .shell-workstream-panel,
+.shell-windows-perf .shell-session-dock,
+.shell-windows-perf .shell-settings-card {
+  contain: layout paint;
+}
+
+.shell-windows-perf .shell-liquid-panel::before,
+.shell-windows-perf .shell-session-dock::before,
+.shell-windows-perf .shell-workstream-panel::before,
+.shell-windows-perf .shell-workstream-panel::after,
+.shell-windows-perf .shell-control-surface::before,
+.shell-windows-perf .shell-settings-surface::before {
+  display: none !important;
+}
+
+.shell-windows-perf .shell-liquid-panel,
+.shell-windows-perf .shell-session-dock,
+.shell-windows-perf .shell-workstream-panel {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.070), rgba(255, 255, 255, 0.026)),
+    rgba(12, 15, 21, 0.76) !important;
+}
+
+.shell-windows-perf .shell-control-surface,
+.shell-windows-perf .shell-settings-surface {
+  background:
+    linear-gradient(135deg, rgba(8, 10, 15, 0.99), rgba(16, 19, 27, 0.99)) !important;
+}
+
+.shell-windows-perf .shell-notice {
+  backdrop-filter: none !important;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.34) !important;
+}
+
+.shell-windows-perf .shell-logo-glass img,
+.shell-windows-perf .shell-dock-button svg {
+  filter: none !important;
+}
+
+.shell-windows-perf .shell-workstream-progress span,
+.shell-windows-perf .shell-dock-button,
+.shell-windows-perf .shell-dock-button-active,
+.shell-windows-perf .shell-dock-button-speaking,
+.shell-windows-perf .shell-dock-button-main.shell-dock-button-live {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10) !important;
 }
 
 .shell-tabs {
@@ -499,204 +553,75 @@ body {
 .shell-orb-canvas {
   position: absolute !important;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   width: 100% !important;
   height: 100% !important;
   pointer-events: none;
-  opacity: 0.76;
+  opacity: 1;
 }
 
 .shell-orb-fallback {
   position: absolute;
-  inset: 8%;
-  z-index: 2;
+  inset: 14%;
+  z-index: 1;
   border-radius: 999px;
-  opacity: 0.98;
+  opacity: 0.28;
   transform: translate3d(0, 0, 0) scale(var(--shell-orb-scale));
   transition:
     transform 160ms var(--shell-liquid-ease),
     opacity 180ms var(--shell-liquid-ease);
   background:
-    radial-gradient(circle at 47% 38%, rgba(255, 255, 255, 0.90) 0 2%, rgba(255, 255, 255, 0.22) 3% 7%, transparent 15%),
-    radial-gradient(circle at 48% 50%, rgba(255, 255, 255, 0.88) 0 3%, rgba(126, 211, 186, 0.90) 4% 10%, rgba(0, 240, 255, 0.72) 11% 23%, rgba(134, 168, 231, 0.28) 24% 44%, transparent 64%),
-    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.28), transparent 60%);
+    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.13), transparent 62%),
+    radial-gradient(circle at 48% 48%, rgba(8, 24, 21, 0.10), transparent 54%);
   box-shadow:
-    0 0 34px rgba(0, 240, 255, 0.34),
-    0 0 98px rgba(126, 211, 186, 0.16),
-    inset 0 0 28px rgba(248, 251, 255, 0.20);
+    0 0 24px rgba(94, 234, 212, 0.13),
+    inset 0 0 34px rgba(126, 211, 186, 0.08);
   filter: saturate(1.08);
   contain: paint;
-  overflow: visible;
-  animation: shell-orb-glass-breathe 3.4s var(--shell-liquid-ease) infinite;
+  overflow: hidden;
+  animation: shell-orb-glass-breathe 4.8s var(--shell-liquid-ease) infinite;
 }
 
-.shell-orb-fallback span {
+.shell-orb-fallback::before,
+.shell-orb-fallback::after {
+  content: "";
   position: absolute;
+  inset: 0;
   pointer-events: none;
-  border-radius: 999px;
+  border-radius: inherit;
 }
 
-.shell-orb-halo {
-  inset: -22%;
-  background:
-    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.18), transparent 58%),
-    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.18), transparent 68%);
-  filter: blur(1px);
-}
-
-.shell-orb-ring {
-  left: 50%;
-  top: 50%;
-  width: 82%;
-  height: 82%;
-  border: 1px solid rgba(215, 225, 238, 0.28);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.12);
-  transform: translate3d(-50%, -50%, 0) rotate(0deg);
-  animation: shell-orb-ring-drift 10s linear infinite;
-}
-
-.shell-orb-ring-one {
-  height: 33%;
-  border-color: rgba(126, 211, 186, 0.35);
-  animation-duration: 12s;
-}
-
-.shell-orb-ring-two {
-  width: 104%;
-  height: 26%;
-  border-color: rgba(155, 212, 238, 0.22);
-  animation-duration: 16s;
-  animation-direction: reverse;
-}
-
-.shell-orb-ring-three {
-  width: 118%;
-  height: 20%;
-  border-color: rgba(244, 247, 251, 0.18);
-  animation-duration: 22s;
-}
-
-.shell-orb-core {
-  inset: 31%;
-  background:
-    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.12) 22%, transparent 36%),
-    radial-gradient(circle at 58% 62%, rgba(0, 240, 255, 0.84), rgba(126, 211, 186, 0.74) 36%, rgba(134, 168, 231, 0.42) 66%, transparent 72%);
-  box-shadow:
-    0 0 28px rgba(0, 240, 255, 0.46),
-    inset 0 1px 12px rgba(255, 255, 255, 0.36),
-    inset 0 -10px 22px rgba(5, 6, 9, 0.28);
-}
-
-.shell-orb-blob {
-  width: 26%;
-  height: 26%;
-  left: 50%;
-  top: 50%;
-  opacity: 0.56;
-  mix-blend-mode: screen;
-  filter: blur(0.5px);
-}
-
-.shell-orb-blob-one {
-  background: radial-gradient(circle, rgba(0, 240, 255, 0.72), transparent 68%);
-  transform: translate3d(-78%, -62%, 0);
-}
-
-.shell-orb-blob-two {
-  width: 30%;
-  height: 30%;
-  background: radial-gradient(circle, rgba(126, 211, 186, 0.66), transparent 70%);
-  transform: translate3d(-18%, -16%, 0);
-}
-
-.shell-orb-blob-three {
-  width: 24%;
-  height: 24%;
-  background: radial-gradient(circle, rgba(185, 201, 238, 0.62), transparent 70%);
-  transform: translate3d(16%, -72%, 0);
-}
-
-.shell-orb-blob-four {
-  width: 22%;
-  height: 22%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.42), transparent 68%);
-  transform: translate3d(-52%, 8%, 0);
-}
-
-.shell-orb-wisp {
-  --shell-wisp-radius: 44%;
-  left: 50%;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  background: rgba(248, 251, 255, 0.86);
-  box-shadow:
-    0 0 12px rgba(248, 251, 255, 0.62),
-    0 0 24px rgba(0, 240, 255, 0.28);
-  transform: translate3d(-50%, -50%, 0) rotate(0deg) translateX(var(--shell-wisp-radius));
-  animation: shell-orb-wisp-orbit 8s linear infinite;
-}
-
-.shell-orb-wisp-two {
-  --shell-wisp-radius: 53%;
-  width: 5px;
-  height: 5px;
-  animation-duration: 11s;
-  animation-direction: reverse;
-}
-
-.shell-orb-wisp-three {
-  --shell-wisp-radius: 38%;
-  width: 4px;
-  height: 4px;
-  animation-duration: 14s;
-}
-
-.shell-orb-particle-field {
-  left: 50%;
-  top: 50%;
-  width: 88%;
-  height: 88%;
-  opacity: 0.78;
-  transform: translate3d(-50%, -50%, 0);
+.shell-orb-fallback::before {
   background-image:
-    radial-gradient(circle, rgba(255, 255, 255, 0.84) 0 1px, transparent 1.7px),
-    radial-gradient(circle, rgba(126, 211, 186, 0.75) 0 1px, transparent 1.8px),
-    radial-gradient(circle, rgba(0, 240, 255, 0.72) 0 1.1px, transparent 1.9px);
+    radial-gradient(circle, rgba(236, 253, 245, 0.88) 0 0.8px, transparent 1.45px),
+    radial-gradient(circle, rgba(126, 211, 186, 0.76) 0 0.95px, transparent 1.65px),
+    radial-gradient(circle, rgba(94, 234, 212, 0.58) 0 0.9px, transparent 1.7px);
   background-position:
     12% 18%, 29% 11%, 45% 16%, 61% 12%, 79% 22%,
     18% 38%, 34% 31%, 52% 36%, 69% 34%, 84% 42%,
     12% 58%, 28% 67%, 47% 61%, 65% 70%, 81% 60%;
-  background-size: 37px 37px, 43px 43px, 31px 31px;
-  box-shadow: inset 0 0 0 1px rgba(244, 247, 251, 0.09);
-  animation: shell-orb-particle-drift 4.8s var(--shell-liquid-ease) infinite;
+  background-size: 31px 31px, 37px 37px, 43px 43px;
+  opacity: 0.9;
+}
+
+.shell-orb-fallback::after {
+  border: 1px solid rgba(126, 211, 186, 0.12);
+  background:
+    radial-gradient(circle at 42% 38%, rgba(236, 253, 245, 0.10), transparent 18%),
+    radial-gradient(circle at 50% 52%, transparent 34%, rgba(3, 8, 5, 0.46) 78%);
+  box-shadow:
+    inset -14px -18px 34px rgba(0, 0, 0, 0.26),
+    inset 10px 12px 28px rgba(126, 211, 186, 0.08);
+  opacity: 0.52;
 }
 
 .shell-orb-stage:not(.shell-orb-stage-active) .shell-orb-fallback {
-  opacity: 0.86;
+  opacity: 0.22;
 }
 
 .shell-orb-stage-speaking .shell-orb-fallback {
-  opacity: 1;
-  filter: saturate(1.24);
-}
-
-.shell-orb-stage-speaking .shell-orb-halo {
-  background:
-    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.30), transparent 58%),
-    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.28), transparent 68%);
-}
-
-.shell-orb-stage-speaking .shell-orb-blob {
-  opacity: 0.74;
-}
-
-.shell-orb-css-only .shell-orb-fallback {
-  inset: 6%;
-}
-
-.shell-orb-css-only .shell-orb-canvas {
-  display: none !important;
+  opacity: 0.42;
+  filter: saturate(1.25);
 }
 
 .shell-liquid-dock {

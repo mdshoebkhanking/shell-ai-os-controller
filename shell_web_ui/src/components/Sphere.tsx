@@ -3,13 +3,17 @@ import { useRef, useMemo, type CSSProperties } from 'react'
 import * as THREE from 'three'
 import { shellService } from '@renderer/services/shell-voice-ai'
 
-const ORB_BASE_COLOR = '#00F0FF'
-const ORB_AUDIO_COLOR = '#33db12'
-const ORB_PEAK_COLOR = '#FFFFFF'
-const ORB_PARTICLE_SIZE = 0.012
+const ORB_BASE_COLOR = '#7ED3BA'
+const ORB_AUDIO_COLOR = '#5EEAD4'
+const ORB_PEAK_COLOR = '#ECFDF5'
+const ORB_PARTICLE_RADIUS = 1.93
+const ORB_PARTICLE_SIZE = 0.011
 const ORB_OPACITY = 0.9
 const ORB_EXPANSION_STRENGTH = 0.4
 const ORB_TARGET_FRAME_MS = 1000 / 30
+const ORB_ROTATION_X_SPEED = 0.018
+const ORB_ROTATION_Y_SPEED = 0.14
+const ORB_ROTATION_Z_SPEED = 0.032
 
 type SphereProps = {
   voiceLevel?: number
@@ -56,7 +60,8 @@ const CustomParticleSphere = ({
 
   const dataArray = useMemo(() => new Uint8Array(128), [])
 
-  const colorStart = useMemo(() => new THREE.Color(ORB_AUDIO_COLOR), [])
+  const colorStart = useMemo(() => new THREE.Color(ORB_BASE_COLOR), [])
+  const colorMid = useMemo(() => new THREE.Color(ORB_AUDIO_COLOR), [])
   const colorEnd = useMemo(() => new THREE.Color(ORB_PEAK_COLOR), [])
   const colorTarget = useMemo(() => new THREE.Color(), [])
 
@@ -82,7 +87,7 @@ const CustomParticleSphere = ({
       const z = Math.random() * 2 - 1
 
       const vector = new THREE.Vector3(x, y, z)
-      vector.normalize().multiplyScalar(2)
+      vector.normalize().multiplyScalar(ORB_PARTICLE_RADIUS)
 
       pos[i * 3] = vector.x
       pos[i * 3 + 1] = vector.y
@@ -100,8 +105,9 @@ const CustomParticleSphere = ({
     if (nowMs - lastFrameMsRef.current < ORB_TARGET_FRAME_MS) return
     lastFrameMsRef.current = nowMs
 
-    mesh.current.rotation.y += delta * 0.05
-    mesh.current.rotation.z += delta * 0.05
+    mesh.current.rotation.x += delta * ORB_ROTATION_X_SPEED
+    mesh.current.rotation.y += delta * ORB_ROTATION_Y_SPEED
+    mesh.current.rotation.z += delta * ORB_ROTATION_Z_SPEED
 
     let liveVolume = 0
     if (speaking && shellService.analyser) {
@@ -123,7 +129,11 @@ const CustomParticleSphere = ({
     smoothedVolumeRef.current += (targetVolume - smoothedVolumeRef.current) * Math.min(1, delta * 9)
     const volume = smoothedVolumeRef.current
 
-    colorTarget.lerpColors(colorStart, colorEnd, volume)
+    if (volume < 0.55) {
+      colorTarget.lerpColors(colorStart, colorMid, volume / 0.55)
+    } else {
+      colorTarget.lerpColors(colorMid, colorEnd, (volume - 0.55) / 0.45)
+    }
 
     const uniforms = materialRef.current.uniforms
     uniforms.uVolume.value = volume
@@ -152,8 +162,6 @@ const CustomParticleSphere = ({
 }
 
 const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProps) => {
-  const cssOnlyOrb =
-    typeof document !== 'undefined' && document.documentElement.classList.contains('shell-windows-perf')
   const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0.22)) : 0
   const fallbackScale = 0.92 + fallbackLevel * 0.1
   const stageStyle = {
@@ -165,38 +173,22 @@ const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProp
 
   return (
     <div
-      className={`shell-orb-stage ${active ? 'shell-orb-stage-active' : ''} ${speaking ? 'shell-orb-stage-speaking' : ''} ${cssOnlyOrb ? 'shell-orb-css-only' : ''}`}
+      className={`shell-orb-stage ${active ? 'shell-orb-stage-active' : ''} ${speaking ? 'shell-orb-stage-speaking' : ''}`}
       style={stageStyle}
       aria-hidden="true"
     >
-      <div className="shell-orb-fallback">
-        <span className="shell-orb-halo" />
-        <span className="shell-orb-ring shell-orb-ring-one" />
-        <span className="shell-orb-ring shell-orb-ring-two" />
-        <span className="shell-orb-ring shell-orb-ring-three" />
-        <span className="shell-orb-core" />
-        <span className="shell-orb-blob shell-orb-blob-one" />
-        <span className="shell-orb-blob shell-orb-blob-two" />
-        <span className="shell-orb-blob shell-orb-blob-three" />
-        <span className="shell-orb-blob shell-orb-blob-four" />
-        <span className="shell-orb-wisp shell-orb-wisp-one" />
-        <span className="shell-orb-wisp shell-orb-wisp-two" />
-        <span className="shell-orb-wisp shell-orb-wisp-three" />
-        <span className="shell-orb-particle-field" />
-      </div>
-      {!cssOnlyOrb && (
-        <Canvas
-          className="shell-orb-canvas"
-          camera={{ position: [0, 0, 4.5] }}
-          dpr={[1, 1.2]}
-          performance={{ min: 0.5 }}
-          gl={{ antialias: false, powerPreference: 'default', alpha: true }}
-          resize={{ scroll: false, debounce: { scroll: 80, resize: 160 } }}
-        >
-          <ambientLight intensity={0.6} />
-          <CustomParticleSphere active={active} speaking={speaking} voiceLevel={voiceLevel} />
-        </Canvas>
-      )}
+      <div className="shell-orb-fallback" />
+      <Canvas
+        className="shell-orb-canvas"
+        camera={{ position: [0, 0, 4.5] }}
+        dpr={[1, 1.2]}
+        performance={{ min: 0.5 }}
+        gl={{ antialias: false, powerPreference: 'default', alpha: true }}
+        resize={{ scroll: false, debounce: { scroll: 80, resize: 160 } }}
+      >
+        <ambientLight intensity={0.6} />
+        <CustomParticleSphere active={active} speaking={speaking} voiceLevel={voiceLevel} />
+      </Canvas>
     </div>
   )
 }

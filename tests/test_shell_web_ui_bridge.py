@@ -211,6 +211,106 @@ def test_offline_fallback_prompt_includes_memory_and_project_rag(monkeypatch, tm
     assert "memory, and Project RAG context" in seen["system_prompt"]
 
 
+def test_offline_chat_filters_stale_provider_fallback_history(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    seen = {}
+
+    class FakeResult:
+        success = True
+        reply = "4"
+
+    stale = {
+        "role": "model",
+        "parts": [
+            {
+                "text": (
+                    "Mujhe sawaal mil gaya, lekin AI provider abhi available nahi hai. "
+                    "API key set karoge to main is par proper detailed jawab de paungi."
+                )
+            }
+        ],
+    }
+    useful = {"role": "user", "parts": [{"text": "pehla useful sawal"}]}
+
+    def fake_generate(_prompt, system_prompt="", previous_messages=None):
+        assert system_prompt == "short"
+        seen["previous_messages"] = list(previous_messages or [])
+        return FakeResult()
+
+    monkeypatch.setattr(host, "generate_offline_reply", fake_generate)
+
+    reply = bridge._offline_chat_reply("2 plus 2?", "short", [useful, stale])
+    context = bridge._history_context_snippet([useful, stale])
+
+    assert reply == "4"
+    assert seen["previous_messages"] == [useful]
+    assert "AI provider abhi available" not in context
+
+
+def test_offline_chat_retries_when_model_repeats_stale_fallback(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    calls = []
+
+    class FakeResult:
+        def __init__(self, reply):
+            self.success = True
+            self.reply = reply
+
+    def fake_generate(_prompt, system_prompt="", previous_messages=None):
+        assert system_prompt == "short"
+        calls.append(list(previous_messages or []))
+        if previous_messages:
+            return FakeResult(
+                "Mujhe sawaal mil gaya, lekin AI provider abhi available nahi hai. API key set karoge."
+            )
+        return FakeResult("Offline answer ready.")
+
+    monkeypatch.setattr(host, "generate_offline_reply", fake_generate)
+
+    history = [{"role": "user", "parts": [{"text": "old context"}]}]
+    reply = bridge._offline_chat_reply("offline answer do", "short", history)
+
+    assert reply == "Offline answer ready."
+    assert calls == [history, []]
+
+
+def test_brain_fallback_retries_offline_llm_with_raw_prompt_after_context_poison(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    calls = []
+
+    def fake_offline(prompt, _system_prompt, previous_messages):
+        calls.append((prompt, list(previous_messages or [])))
+        if "Recent conversation:" in prompt:
+            return ""
+        return "Raw offline answer."
+
+    monkeypatch.setattr(bridge, "_offline_chat_reply", fake_offline)
+    monkeypatch.setattr(bridge, "_memory_context_snippet", lambda _query: "")
+    monkeypatch.setattr(bridge, "_project_rag_context_snippet", lambda _query: "")
+
+    reply = bridge._brain_chat_fallback(
+        "2 plus 2?",
+        previous_messages=[{"role": "user", "parts": [{"text": "old context"}]}],
+    )
+
+    assert reply == "Raw offline answer."
+    assert len(calls) == 2
+    assert "Recent conversation:" in calls[0][0]
+    assert calls[1] == ("2 plus 2?", [])
+
+
 def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 

@@ -119,6 +119,51 @@ def test_generate_offline_reply_uses_packaged_llama_runtime(monkeypatch, tmp_pat
     assert calls["completion"]["max_tokens"] >= 32
 
 
+def test_generate_offline_reply_skips_stale_provider_fallback_history(monkeypatch, tmp_path):
+    import shell_offline_llm
+
+    shell_offline_llm._reset_cached_model_for_tests()
+    model_dir = tmp_path / "models" / "llm" / "falcon-h1-1.5b-deep"
+    model_dir.mkdir(parents=True)
+    (model_dir / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").write_bytes(b"gguf-probe")
+    monkeypatch.setattr(shell_offline_llm, "PROJECT_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+    calls = {}
+
+    class FakeLlama:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_chat_completion(self, **kwargs):
+            calls["messages"] = kwargs["messages"]
+            return {"choices": [{"message": {"content": "Offline answer."}}]}
+
+    monkeypatch.setattr(shell_offline_llm, "_load_llama_class", lambda: (FakeLlama, ""))
+    stale = {
+        "role": "model",
+        "parts": [
+            {
+                "text": (
+                    "Mujhe sawaal mil gaya, lekin AI provider abhi available nahi hai. "
+                    "API key set karoge to main is par proper detailed jawab de paungi."
+                )
+            }
+        ],
+    }
+    useful = {"role": "user", "parts": [{"text": "old useful context"}]}
+
+    result = shell_offline_llm.generate_offline_reply(
+        "new question",
+        previous_messages=[useful, stale],
+    )
+
+    assert result.success is True
+    assert [message["content"] for message in calls["messages"] if message["role"] != "system"] == [
+        "old useful context",
+        "new question",
+    ]
+
+
 def test_windows_performance_mode_caps_offline_llm_defaults(monkeypatch):
     import shell_offline_llm
 

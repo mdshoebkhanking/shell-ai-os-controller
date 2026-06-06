@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 1.0.13 - Windows EXE orb, offline voice, and smoothness
+
+- Restored the original Canvas particle orb in packaged Windows mode with
+  UI-matched mint/teal color, voice-reactive expansion, subtle rotation, and
+  no stray fallback particles.
+- Reduced Windows Web UI paint and render pressure with stricter containment,
+  simpler packaged-mode effects, lower face-scan frequency, and throttled voice
+  amplitude updates for smoother tab switching and dock interaction.
+- Hardened offline voice chat so stale API-key/provider fallback replies do not
+  poison the local Falcon GGUF context; offline voice-origin messages now retry
+  with the raw prompt and still queue Kokoro speech.
+- Revalidated local offline command routing, Kokoro bilingual synthesis, and
+  packaged Falcon/Kokoro/sherpa-onnx readiness for no-API/no-network use.
+
 ## 1.0.12 - Windows EXE offline voice and smoothness
 
 - Added Windows balanced performance defaults across launch, install, repair,

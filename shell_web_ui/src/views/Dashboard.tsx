@@ -79,7 +79,9 @@ const glassPanel = 'shell-liquid-panel'
 const MAX_CHAT_ATTACHMENTS = 4
 const WINDOWS_OR_LOW_CORE_DEVICE =
   /Windows/i.test(navigator.userAgent || '') || (navigator.hardwareConcurrency || 0) <= 4
-const FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 500 : 250
+const FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 900 : 250
+const VOICE_AMPLITUDE_MIN_PAINT_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 48 : 32
+const VOICE_AMPLITUDE_MIN_DELTA = 0.035
 const MAX_CHAT_ATTACHMENT_BYTES = 5 * 1024 * 1024
 const MAX_TEXT_ATTACHMENT_CHARS = 26000
 
@@ -232,6 +234,8 @@ function DashboardView({
   const speechReactionTimersRef = useRef<number[]>([])
   const faceScanInterval = useRef<NodeJS.Timeout | null>(null)
   const faceApiRef = useRef<FaceApiModule | null>(null)
+  const voiceAmplitudePaintAtRef = useRef(0)
+  const voiceAmplitudeValueRef = useRef(0)
   const lastSpokenRef = useRef('')
   const transcriptPinnedRef = useRef(true)
 
@@ -250,6 +254,21 @@ function DashboardView({
 
   const readTranscriptPrompt = () => (transcriptPrompt || transcriptInputRef.current?.value || '').trim()
 
+  const updateVoiceAmplitude = useCallback((value: unknown, force = false) => {
+    const next = clampSpeechLevel(value)
+    const now = performance.now()
+    if (
+      !force &&
+      now - voiceAmplitudePaintAtRef.current < VOICE_AMPLITUDE_MIN_PAINT_MS &&
+      Math.abs(next - voiceAmplitudeValueRef.current) < VOICE_AMPLITUDE_MIN_DELTA
+    ) {
+      return
+    }
+    voiceAmplitudePaintAtRef.current = now
+    voiceAmplitudeValueRef.current = next
+    setVoiceAmplitude(next)
+  }, [])
+
   const clearSpeechReaction = useCallback(() => {
     speechReactionTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     speechReactionTimersRef.current = []
@@ -266,7 +285,7 @@ function DashboardView({
     if (frames.length) {
       frames.forEach((level: number, index: number) => {
         const timer = window.setTimeout(() => {
-          setVoiceAmplitude(Math.max(0.08, Math.min(1, level)))
+          updateVoiceAmplitude(Math.max(0.08, Math.min(1, level)))
         }, index * frameMs)
         speechReactionTimersRef.current.push(timer)
       })
@@ -276,19 +295,19 @@ function DashboardView({
         const timer = window.setTimeout(() => {
           const wave = Math.abs(Math.sin(index * 0.9)) * 0.42
           const consonants = Math.abs(Math.sin(index * 0.37 + fallbackText.length * 0.11)) * 0.22
-          setVoiceAmplitude(Math.min(1, 0.14 + wave + consonants))
+          updateVoiceAmplitude(Math.min(1, 0.14 + wave + consonants))
         }, index * frameMs)
         speechReactionTimersRef.current.push(timer)
       }
     }
 
     const finishTimer = window.setTimeout(() => {
-      setVoiceAmplitude(0)
+      updateVoiceAmplitude(0, true)
       setSpeechState('VOICE OUT')
       speechReactionTimersRef.current = []
     }, durationMs + 180)
     speechReactionTimersRef.current.push(finishTimer)
-  }, [clearSpeechReaction])
+  }, [clearSpeechReaction, updateVoiceAmplitude])
 
   const onTranscriptScroll = () => {
     const node = scrollRef.current
@@ -300,7 +319,7 @@ function DashboardView({
     const speechText = compactForSpeech(text)
     if (!speechText) return
     clearSpeechReaction()
-    setVoiceAmplitude(0)
+    updateVoiceAmplitude(0, true)
     setSpeechState('VOICE QUEUED')
     try {
       if (voiceRuntime === 'gemini' && speakRealVoice) {
@@ -319,7 +338,7 @@ function DashboardView({
       const result = await window.shellAPI?.speakText?.(speechText)
       if (result && (result as any)?.success !== false) {
         if ((result as any)?.queued) {
-          setVoiceAmplitude(0)
+          updateVoiceAmplitude(0, true)
           setSpeechState('VOICE QUEUED')
           return
         }
@@ -329,14 +348,14 @@ function DashboardView({
       }
 
       clearSpeechReaction()
-      setVoiceAmplitude(0)
+      updateVoiceAmplitude(0, true)
       setSpeechState('VOICE ERR')
     } catch {
       clearSpeechReaction()
-      setVoiceAmplitude(0)
+      updateVoiceAmplitude(0, true)
       setSpeechState('VOICE ERR')
     }
-  }, [clearSpeechReaction, runSpeechReaction, speakRealVoice, voiceRuntime])
+  }, [clearSpeechReaction, runSpeechReaction, speakRealVoice, updateVoiceAmplitude, voiceRuntime])
 
   useEffect(() => {
     if (scrollRef.current && transcriptPinnedRef.current) {
@@ -356,15 +375,15 @@ function DashboardView({
     let amplitudeDecayTimer: number | undefined
     const onVoiceAmplitude = (_event: unknown, payload?: any) => {
       const value = Math.max(0, Math.min(1, Number(payload?.value || 0)))
-      setVoiceAmplitude(value)
+      updateVoiceAmplitude(value)
       if (amplitudeDecayTimer) window.clearTimeout(amplitudeDecayTimer)
-      amplitudeDecayTimer = window.setTimeout(() => setVoiceAmplitude(0), 240)
+      amplitudeDecayTimer = window.setTimeout(() => updateVoiceAmplitude(0, true), 240)
     }
     const onSpeechStatus = (_event: unknown, payload?: any) => {
       const state = String(payload?.state || 'ready').toUpperCase()
       if (state === 'QUEUED') {
         clearSpeechReaction()
-        setVoiceAmplitude(0)
+        updateVoiceAmplitude(0, true)
         setSpeechState('VOICE QUEUED')
         return
       }
@@ -374,7 +393,7 @@ function DashboardView({
         return
       }
       clearSpeechReaction()
-      setVoiceAmplitude(0)
+      updateVoiceAmplitude(0, true)
       setSpeechState(state === 'ERROR' ? 'VOICE ERR' : 'VOICE OUT')
     }
     const onChatUpdated = (_event: unknown, payload?: any) => {
@@ -396,7 +415,7 @@ function DashboardView({
       window.shellAPI?.off('speech-status', onSpeechStatus)
       window.shellAPI?.off('chat-updated', onChatUpdated)
     }
-  }, [clearSpeechReaction, runSpeechReaction, speakShell])
+  }, [clearSpeechReaction, runSpeechReaction, speakShell, updateVoiceAmplitude])
 
   useEffect(() => {
     const normalizePrompt = (value: unknown, fallback = 'Shell AI task') =>

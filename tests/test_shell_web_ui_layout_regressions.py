@@ -37,7 +37,7 @@ def test_dashboard_queued_tts_does_not_start_orb_reaction():
     speech_status = dashboard.split("const onSpeechStatus", 1)[1].split("const onChatUpdated", 1)[0]
 
     assert "setSpeechState('VOICE QUEUED')" in speak_shell
-    assert "setVoiceAmplitude(0)" in queued_branch
+    assert "updateVoiceAmplitude(0, true)" in queued_branch
     assert "runSpeechReaction" not in queued_branch
     assert "state === 'QUEUED'" in speech_status
     assert speech_status.index("state === 'QUEUED'") < speech_status.index("state === 'SPEAKING'")

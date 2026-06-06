@@ -1306,9 +1306,34 @@ class ShellBackendBridge(QObject):
         for message in previous_messages[-limit:]:
             role = str(message.get("role") or "") if isinstance(message, dict) else ""
             text = self._history_text(message)
+            if role == "model" and self._is_stale_provider_fallback_reply(text):
+                continue
             if role and text:
                 rows.append(f"{role}: {text[:220]}")
         return "\n".join(rows)
+
+    @staticmethod
+    def _is_stale_provider_fallback_reply(text: str) -> bool:
+        normalized = " ".join(str(text or "").lower().split())
+        markers = (
+            "ai provider abhi available nahi hai",
+            "api key set karoge",
+            "provider is not available",
+            "set an api key",
+        )
+        return any(marker in normalized for marker in markers)
+
+    def _offline_llm_history(self, previous_messages: list[Any] | None) -> list[Any]:
+        clean: list[Any] = []
+        for message in previous_messages or []:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "").strip().lower()
+            text = self._history_text(message)
+            if role == "model" and self._is_stale_provider_fallback_reply(text):
+                continue
+            clean.append(message)
+        return clean[-8:]
 
     @staticmethod
     def _env_flag_enabled(name: str, *, default: bool = True) -> bool:
@@ -1479,14 +1504,27 @@ class ShellBackendBridge(QObject):
         system_prompt: str,
         previous_messages: list[Any] | None = None,
     ) -> str:
+        clean_previous_messages = self._offline_llm_history(previous_messages)
         try:
             result = generate_offline_reply(
                 prompt,
                 system_prompt=system_prompt,
-                previous_messages=previous_messages or [],
+                previous_messages=clean_previous_messages,
             )
             if getattr(result, "success", False) and getattr(result, "reply", ""):
-                return self._compact_chat_reply(str(result.reply), limit=700)
+                reply = self._compact_chat_reply(str(result.reply), limit=700)
+                if not self._is_stale_provider_fallback_reply(reply):
+                    return reply
+                if clean_previous_messages:
+                    retry = generate_offline_reply(
+                        prompt,
+                        system_prompt=system_prompt,
+                        previous_messages=[],
+                    )
+                    if getattr(retry, "success", False) and getattr(retry, "reply", ""):
+                        retry_reply = self._compact_chat_reply(str(retry.reply), limit=700)
+                        if not self._is_stale_provider_fallback_reply(retry_reply):
+                            return retry_reply
         except Exception:
             pass
         return ""
@@ -1522,6 +1560,10 @@ class ShellBackendBridge(QObject):
         offline_reply = self._offline_chat_reply(prompt, system_prompt, previous_messages)
         if offline_reply:
             return offline_reply
+        if context_block:
+            offline_reply = self._offline_chat_reply(text, system_prompt, [])
+            if offline_reply:
+                return offline_reply
 
         return self._local_chat_answer(text)
 

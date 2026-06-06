@@ -35,6 +35,13 @@ _MODEL_LOCK = threading.Lock()
 _CACHED_MODEL: Any | None = None
 _CACHED_MODEL_PATH: Path | None = None
 _CACHED_MODEL_LOAD_MS: float | None = None
+_STALE_PROVIDER_FALLBACK_MARKERS = (
+    "ai provider abhi available nahi hai",
+    "api key set karoge",
+    "api key set karoge to main",
+    "provider is not available",
+    "set an api key",
+)
 
 
 @dataclass(frozen=True)
@@ -325,6 +332,11 @@ def _clean_reply(text: str) -> str:
     return cleaned
 
 
+def _is_stale_provider_fallback(text: str) -> bool:
+    normalized = " ".join(str(text or "").lower().split())
+    return any(marker in normalized for marker in _STALE_PROVIDER_FALLBACK_MARKERS)
+
+
 def _identity_reply(prompt: str) -> str:
     normalized = str(prompt or "").strip().lower()
     if not normalized:
@@ -392,6 +404,8 @@ def generate_offline_reply(
             content = str(parts[0].get("text") or "").strip()
         if role == "model":
             role = "assistant"
+        if role == "assistant" and _is_stale_provider_fallback(content):
+            continue
         if role in {"user", "assistant"} and content:
             messages.append({"role": role, "content": content[:800]})
     messages.append({"role": "user", "content": prompt})

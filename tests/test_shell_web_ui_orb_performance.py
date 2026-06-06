@@ -15,13 +15,15 @@ def test_sphere_matches_original_voice_reactive_orb():
     assert "count = 2000" in sphere
     assert "voiceLevel = 0" in sphere
     assert "speaking = false" in sphere
-    assert "const ORB_AUDIO_COLOR = '#33db12'" in sphere
-    assert "const ORB_PEAK_COLOR = '#FFFFFF'" in sphere
-    assert "const ORB_BASE_COLOR = '#00F0FF'" in sphere
+    assert "const ORB_BASE_COLOR = '#7ED3BA'" in sphere
+    assert "const ORB_AUDIO_COLOR = '#5EEAD4'" in sphere
+    assert "const ORB_PEAK_COLOR = '#ECFDF5'" in sphere
     assert "shellService.analyser.getByteFrequencyData" in sphere
     assert "liveVolume = sum / len / 128" in sphere
     assert "const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))" in sphere
     assert "const speechPulse = speaking ?" in sphere
+    assert "colorTarget.lerpColors(colorStart, colorMid" in sphere
+    assert "colorTarget.lerpColors(colorMid, colorEnd" in sphere
 
 
 def test_sphere_preserves_original_particle_expansion_on_gpu():
@@ -30,7 +32,9 @@ def test_sphere_preserves_original_particle_expansion_on_gpu():
     assert "spreadFactors" in sphere
     assert "attribute float spreadFactor" in sphere
     assert "const ORB_EXPANSION_STRENGTH = 0.4" in sphere
+    assert "const ORB_PARTICLE_RADIUS = 1.93" in sphere
     assert "position * (1.0 + uVolume * spreadFactor * uExpansionStrength)" in sphere
+    assert "vector.normalize().multiplyScalar(ORB_PARTICLE_RADIUS)" in sphere
     assert "geometry.attributes.position.needsUpdate = true" not in sphere
     assert "currentPos[ix]" not in sphere
     assert "originalPositions" not in sphere
@@ -44,7 +48,9 @@ def test_sphere_uses_windows_friendly_canvas_runtime_settings():
     assert "performance={{ min: 0.5 }}" in sphere
     assert "powerPreference: 'default'" in sphere
     assert "if (document.hidden) return" in sphere
-    assert "const ORB_PARTICLE_SIZE = 0.012" in sphere
+    assert "const ORB_PARTICLE_SIZE = 0.011" in sphere
+    assert "const ORB_ROTATION_Y_SPEED = 0.14" in sphere
+    assert "mesh.current.rotation.y += delta * ORB_ROTATION_Y_SPEED" in sphere
     assert "shaderMaterial" in sphere
     assert "uScale" in sphere
     assert "uSize" in sphere
@@ -59,7 +65,7 @@ def test_dashboard_uses_original_orb_wrapper():
     assert "shell-sphere-shell" not in dashboard
 
 
-def test_sphere_uses_desktop_style_css_orb_for_packaged_windows():
+def test_sphere_preserves_desktop_particle_orb_for_packaged_windows():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
     css = read_project_file("shell_web_ui/src/assets/main.css")
     main = read_project_file("shell_web_ui/src/main.tsx")
@@ -67,12 +73,17 @@ def test_sphere_uses_desktop_style_css_orb_for_packaged_windows():
 
     assert "shell-windows-perf" in main
     assert "shell_perf=windows" in host
-    assert "const cssOnlyOrb" in sphere
-    assert "!cssOnlyOrb &&" in sphere
-    assert "shell-orb-blob shell-orb-blob-one" in sphere
-    assert "shell-orb-wisp shell-orb-wisp-one" in sphere
-    assert ".shell-orb-core" in css
-    assert ".shell-orb-ring" in css
+    assert "const cssOnlyOrb" not in sphere
+    assert "<Canvas" in sphere
+    assert "shell-orb-canvas" in sphere
+    assert "shell-orb-fallback\" />" in sphere
+    assert "shell-orb-blob" not in sphere
+    assert "shell-orb-wisp" not in sphere
+    assert ".shell-orb-fallback::before" in css
+    assert "rgba(126, 211, 186" in css
+    assert "rgba(94, 234, 212" in css
+    assert ".shell-orb-particle-drift" not in css[css.index(".shell-orb-stage") : css.index(".shell-liquid-dock")]
+    assert "rgba(0, 240, 255" not in css[css.index(".shell-orb-stage") : css.index(".shell-liquid-dock")]
     assert ".shell-windows-perf .shell-liquid-panel" in css
 
 
@@ -81,8 +92,26 @@ def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
 
     assert "WINDOWS_OR_LOW_CORE_DEVICE" in dashboard
     assert "/Windows/i.test(navigator.userAgent || '')" in dashboard
-    assert "FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 500 : 250" in dashboard
+    assert "FACE_SCAN_INTERVAL_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 900 : 250" in dashboard
+    assert "VOICE_AMPLITUDE_MIN_PAINT_MS = WINDOWS_OR_LOW_CORE_DEVICE ? 48 : 32" in dashboard
+    assert "VOICE_AMPLITUDE_MIN_DELTA = 0.035" in dashboard
+    assert "const updateVoiceAmplitude = useCallback" in dashboard
     assert "}, FACE_SCAN_INTERVAL_MS)" in dashboard
+
+
+def test_windows_perf_mode_removes_expensive_paint_effects():
+    css = read_project_file("shell_web_ui/src/assets/main.css")
+    perf_css = css[css.index(".shell-windows-perf .shell-ui-root") : css.index(".shell-tabs {")]
+
+    assert ".shell-windows-perf .shell-liquid-panel::before" in perf_css
+    assert ".shell-windows-perf .shell-workstream-panel::after" in perf_css
+    assert ".shell-windows-perf .shell-control-surface::before" in perf_css
+    assert "display: none !important" in perf_css
+    assert ".shell-windows-perf .shell-logo-glass img" in perf_css
+    assert ".shell-windows-perf .shell-dock-button svg" in perf_css
+    assert "filter: none !important" in perf_css
+    assert "contain: layout paint" in perf_css
+    assert "animation: none !important" in perf_css
 
 
 def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
