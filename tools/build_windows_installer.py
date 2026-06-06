@@ -52,6 +52,14 @@ APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 TTS_MODEL_STAGE = APP_STAGE / "models" / "tts"
 LLM_MODEL_STAGE = APP_STAGE / "models" / "llm"
+PRIMARY_LLM_MODEL_FAMILY = "Falcon-H1-1.5B-Deep-Instruct-GGUF"
+PRIMARY_LLM_MODEL_REPO = "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
+PRIMARY_LLM_MODEL_FILE = "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf"
+PRIMARY_LLM_MODEL_LICENSE = "Falcon-LLM License"
+PRIMARY_LLM_MODEL_LICENSE_URL = "https://falconllm.tii.ae/falcon-terms-and-conditions.html"
+LEGACY_LLM_MODEL_FAMILY = "Qwen3-1.7B-GGUF"
+LEGACY_LLM_MODEL_REPO = "ggml-org/Qwen3-1.7B-GGUF"
+LEGACY_LLM_MODEL_FILE = "Qwen3-1.7B-Q4_K_M.gguf"
 ICON_SOURCE = ROOT / "shell_web_ui" / "src" / "public" / "shell-logo.png"
 ICON_BUILD_DIR = STAGING_ROOT / "build_assets"
 ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
@@ -249,8 +257,12 @@ def offline_tts_stage_report() -> dict[str, object]:
 def offline_llm_stage_report() -> dict[str, object]:
     model_files = [path for path in LLM_MODEL_STAGE.rglob("*.gguf") if path.is_file()] if LLM_MODEL_STAGE.exists() else []
     total_bytes = sum(path.stat().st_size for path in model_files)
-    qwen_ready = any(path.name.lower().startswith("qwen3-1.7b") for path in model_files)
-    status = "ready" if qwen_ready else "fallback"
+    falcon_ready = any(path.name.lower() == PRIMARY_LLM_MODEL_FILE.lower() for path in model_files)
+    qwen_ready = any(path.name.lower() == LEGACY_LLM_MODEL_FILE.lower() for path in model_files)
+    ready = falcon_ready or qwen_ready
+    status = "ready" if ready else "fallback"
+    active_family = PRIMARY_LLM_MODEL_FAMILY if falcon_ready else LEGACY_LLM_MODEL_FAMILY if qwen_ready else PRIMARY_LLM_MODEL_FAMILY
+    active_repo = PRIMARY_LLM_MODEL_REPO if falcon_ready else LEGACY_LLM_MODEL_REPO if qwen_ready else PRIMARY_LLM_MODEL_REPO
     reason = (
         "Packaged offline LLM model assets detected."
         if status == "ready"
@@ -263,15 +275,22 @@ def offline_llm_stage_report() -> dict[str, object]:
         "model_file_count": len(model_files),
         "total_size_bytes": total_bytes,
         "recommended_engine": "llama-cpp-python",
-        "model_family": "Qwen3-1.7B-GGUF",
-        "model_repo": "ggml-org/Qwen3-1.7B-GGUF",
+        "model_family": active_family,
+        "model_repo": active_repo,
+        "primary_model_family": PRIMARY_LLM_MODEL_FAMILY,
+        "primary_model_repo": PRIMARY_LLM_MODEL_REPO,
+        "primary_model_license": PRIMARY_LLM_MODEL_LICENSE,
+        "primary_model_license_url": PRIMARY_LLM_MODEL_LICENSE_URL,
         "language_support": ["english", "hinglish", "hindi"],
         "runtime_downloads": False,
         "engines": {
             "llama_cpp_python": {
-                "ready": qwen_ready,
-                "expected_files": ["Qwen3-1.7B-Q4_K_M.gguf"],
-                "model_family": "Qwen3-1.7B-GGUF",
+                "ready": ready,
+                "primary_ready": falcon_ready,
+                "legacy_qwen_ready": qwen_ready,
+                "expected_files": [PRIMARY_LLM_MODEL_FILE],
+                "fallback_files": [LEGACY_LLM_MODEL_FILE],
+                "model_family": active_family,
             },
         },
     }

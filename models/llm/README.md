@@ -6,25 +6,29 @@ installer workflow.
 
 Default model:
 
-- Family: `Qwen3-1.7B-GGUF`
-- Source repo: `ggml-org/Qwen3-1.7B-GGUF`
-- File: `Qwen3-1.7B-Q4_K_M.gguf`
+- Family: `Falcon-H1-1.5B-Deep-Instruct-GGUF`
+- Source repo: `tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF`
+- File: `Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf`
 - Runtime: `llama-cpp-python`
 - Languages: English, Hinglish, Hindi
+- License: Falcon-LLM License
 
 Expected release layout:
 
 ```text
-models/llm/qwen3/
-  Qwen3-1.7B-Q4_K_M.gguf
-  qwen-offline-llm-assets.json
+models/llm/falcon-h1-1.5b-deep/
+  Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf
+  falcon-offline-llm-assets.json
 ```
 
 Build-time staging:
 
 ```bash
-python tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml
+python tools/stage_falcon_offline_llm_assets.py --variant q4_k_m
 ```
+
+Legacy Qwen3 assets under `models/llm/qwen3/` are still detected as fallback
+assets for older installer trees, but new release builds stage Falcon-H1.
 
 Runtime overrides:
 

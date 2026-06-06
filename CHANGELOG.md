@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Switched future Windows offline LLM staging from Qwen3 1.7B to
+  Falcon-H1-1.5B-Deep-Instruct Q4_K_M while keeping legacy Qwen detection as a
+  fallback for older installer trees.
+- Added deterministic Shell AI identity answers in the offline LLM path so
+  creator questions consistently answer `mdshoebking`.
+
 ## 1.0.10 - Offline model packaging and voice orb proof
 
 - Added offline Qwen LLM packaging support with build-time staging, installer

@@ -156,7 +156,7 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
     assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
-    assert "tools\\stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml" in exe_builder
+    assert "tools\\stage_falcon_offline_llm_assets.py --variant q4_k_m" in exe_builder
     assert "llama-cpp-python" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in public_release
     assert "EnableDelayedExpansion" in public_release
@@ -276,18 +276,38 @@ def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_
     assert fallback["status"] == "fallback"
     assert fallback["model_file_count"] == 0
 
-    qwen = llm_root / "qwen3"
-    qwen.mkdir(parents=True)
-    (qwen / "Qwen3-1.7B-Q4_K_M.gguf").write_bytes(b"model")
+    falcon = llm_root / "falcon-h1-1.5b-deep"
+    falcon.mkdir(parents=True)
+    (falcon / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").write_bytes(b"model")
 
     ready = build_windows_installer.offline_llm_stage_report()
     assert ready["status"] == "ready"
     assert ready["model_file_count"] == 1
     assert ready["recommended_engine"] == "llama-cpp-python"
-    assert ready["model_family"] == "Qwen3-1.7B-GGUF"
+    assert ready["model_family"] == "Falcon-H1-1.5B-Deep-Instruct-GGUF"
+    assert ready["model_repo"] == "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
     assert ready["language_support"] == ["english", "hinglish", "hindi"]
     assert ready["runtime_downloads"] is False
     assert ready["engines"]["llama_cpp_python"]["ready"] is True
+    assert ready["engines"]["llama_cpp_python"]["primary_ready"] is True
+
+
+def test_windows_installer_reports_legacy_qwen_offline_llm_assets(monkeypatch, tmp_path):
+    build_windows_installer = load_tool_module("build_windows_installer")
+
+    llm_root = tmp_path / "models" / "llm"
+    monkeypatch.setattr(build_windows_installer, "LLM_MODEL_STAGE", llm_root)
+
+    qwen = llm_root / "qwen3"
+    qwen.mkdir(parents=True)
+    (qwen / "Qwen3-1.7B-Q4_K_M.gguf").write_bytes(b"model")
+
+    ready = build_windows_installer.offline_llm_stage_report()
+
+    assert ready["status"] == "ready"
+    assert ready["model_family"] == "Qwen3-1.7B-GGUF"
+    assert ready["engines"]["llama_cpp_python"]["primary_ready"] is False
+    assert ready["engines"]["llama_cpp_python"]["legacy_qwen_ready"] is True
 
 
 def test_kokoro_asset_staging_helper_dry_run(tmp_path):
@@ -315,6 +335,19 @@ def test_qwen_offline_llm_asset_staging_helper_dry_run(tmp_path):
     assert not (tmp_path / "Qwen3-1.7B-Q4_K_M.gguf").exists()
 
 
+def test_falcon_offline_llm_asset_staging_helper_dry_run(tmp_path):
+    stage_falcon = load_tool_module("stage_falcon_offline_llm_assets")
+
+    report = stage_falcon.stage_assets(output_dir=tmp_path, variant="q4_k_m", dry_run=True, force=False)
+
+    assert report["status"] == "dry-run"
+    assert report["model_family"] == "Falcon-H1-1.5B-Deep-Instruct-GGUF"
+    assert report["model_repo"] == "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
+    assert report["variant"] == "q4_k_m"
+    assert [asset["name"] for asset in report["assets"]] == ["Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf"]
+    assert not (tmp_path / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").exists()
+
+
 def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 
@@ -322,8 +355,8 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "tools/stage_kokoro_tts_assets.py --variant int8" in workflow
     assert "models/tts/kokoro" in workflow
     assert "llama-cpp-python" in workflow
-    assert "tools/stage_qwen_offline_llm_assets.py --variant q4_k_m_ggml" in workflow
-    assert "models/llm/qwen3" in workflow
+    assert "tools/stage_falcon_offline_llm_assets.py --variant q4_k_m" in workflow
+    assert "models/llm/falcon-h1-1.5b-deep" in workflow
     assert "choco install innosetup" in workflow
     assert "--installer-engine inno" in workflow
 

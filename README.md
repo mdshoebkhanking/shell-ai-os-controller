@@ -238,11 +238,14 @@ latency notes are tracked in
   `SHELL_LOCAL_STT_PRIMARY=1` tries local STT first and falls back to the
   current API path if local model loading fails.
 - `SHELL_OFFLINE_LLM=1` (default when packaged assets exist) enables the
-  local offline chat brain. Release builds stage `Qwen3-1.7B-GGUF` under
-  `models/llm/qwen3/` and use `llama-cpp-python` for typed chat, chart text,
-  and voice-originated replies when cloud providers are unavailable. Runtime
-  code does not download the model; if the GGUF/runtime is missing, Settings
-  reports `FALLBACK` and Shell keeps the smaller deterministic local answers.
+  local offline chat brain. Release builds stage
+  `Falcon-H1-1.5B-Deep-Instruct-GGUF` under
+  `models/llm/falcon-h1-1.5b-deep/` and use `llama-cpp-python` for typed chat,
+  chart text, and voice-originated replies when cloud providers are
+  unavailable. Runtime code does not download the model; if the GGUF/runtime is
+  missing, Settings reports `FALLBACK` and Shell keeps the smaller
+  deterministic local answers. The model is transparently reported in release
+  metadata and is distributed under the Falcon-LLM License.
 - `SHELL_PROJECT_RAG_ENABLED=0` (default) keeps project indexing off. Set
   `SHELL_PROJECT_RAG_ENABLED=1` to enable incremental local codebase indexing
   and `project_rag_query_tool` / `project_rag_index_tool`. Optional
