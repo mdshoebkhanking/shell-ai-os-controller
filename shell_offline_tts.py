@@ -12,6 +12,7 @@ import platform
 import re
 import shutil
 import subprocess
+import sys
 import time
 import wave
 from dataclasses import dataclass
@@ -527,6 +528,53 @@ def _join_kokoro_audio(rendered_segments: list[tuple[Any, int]]) -> tuple[Any, i
     return np.concatenate(pieces), sample_rate
 
 
+def _kokoro_espeak_config() -> Any | None:
+    try:
+        import espeakng_loader
+        from kokoro_onnx.config import EspeakConfig
+
+        if hasattr(espeakng_loader, "make_library_available"):
+            espeakng_loader.make_library_available()
+        data_path = Path(str(espeakng_loader.get_data_path()))
+        library_path = Path(str(espeakng_loader.get_library_path()))
+        _prepare_kokoro_espeak_data_layout(data_path)
+        os.environ.setdefault("PHONEMIZER_ESPEAK_LIBRARY", str(library_path))
+        os.environ.setdefault("PHONEMIZER_ESPEAK_DATA_PATH", str(data_path))
+        return EspeakConfig(
+            lib_path=str(library_path),
+            data_path=str(data_path),
+        )
+    except Exception:
+        return None
+
+
+def _prepare_kokoro_espeak_data_layout(data_path: Path) -> None:
+    if not data_path.exists() or not (data_path / "phontab").exists():
+        return
+    compat_root = data_path.parent.parent
+    if (compat_root / "phontab").exists():
+        return
+    # PyInstaller copies this layout during build. For source/dev runs, create
+    # the same compatibility layout expected by the packaged espeak library.
+    if getattr(sys, "frozen", False):
+        return
+    for item in data_path.iterdir():
+        target = compat_root / item.name
+        if target.exists():
+            continue
+        try:
+            relative = Path(data_path.name) / item.name if data_path.parent == compat_root else item
+            target.symlink_to(relative, target_is_directory=item.is_dir())
+        except Exception:
+            try:
+                if item.is_dir():
+                    shutil.copytree(item, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, target)
+            except Exception:
+                continue
+
+
 def _speak_kokoro(text: str) -> dict[str, Any]:
     model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
     if not model or not voices:
@@ -539,7 +587,11 @@ def _speak_kokoro(text: str) -> dict[str, Any]:
     speed = float(os.environ.get("SHELL_NATURAL_TTS_SPEED", "1.0") or "1.0")
     wav_path = _tts_audio_path("kokoro")
 
-    engine = Kokoro(str(model), str(voices))
+    espeak_config = _kokoro_espeak_config()
+    try:
+        engine = Kokoro(str(model), str(voices), espeak_config=espeak_config)
+    except TypeError:
+        engine = Kokoro(str(model), str(voices))
     segments = _prepare_kokoro_segments(text)
     rendered_segments = [
         engine.create(segment.text, voice=segment.voice, speed=speed, lang=segment.locale) for segment in segments

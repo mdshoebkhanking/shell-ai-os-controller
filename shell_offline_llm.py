@@ -251,6 +251,7 @@ def _runtime_settings() -> dict[str, Any]:
         "n_ctx": max(512, min(32768, int(float(os.environ.get("SHELL_OFFLINE_LLM_CONTEXT", "4096"))))),
         "n_threads": max(1, min(12, int(float(os.environ.get("SHELL_OFFLINE_LLM_THREADS", str(min(cpu_count, 6))))))),
         "n_batch": max(32, min(2048, int(float(os.environ.get("SHELL_OFFLINE_LLM_BATCH", "256"))))),
+        "n_gpu_layers": max(0, min(999, int(float(os.environ.get("SHELL_OFFLINE_LLM_GPU_LAYERS", "0"))))),
         "verbose": str(os.environ.get("SHELL_OFFLINE_LLM_VERBOSE", "0")).strip().lower() in {"1", "true", "yes", "on"},
     }
 
@@ -324,21 +325,24 @@ def generate_offline_reply(
     system_prompt: str = "",
     previous_messages: list[Any] | None = None,
 ) -> OfflineLLMResult:
-    status = offline_llm_status()
-    if not status.get("available"):
-        return OfflineLLMResult(False, "", "offline-llm", str(status.get("reason") or ""), status)
-
     prompt = str(text or "").strip()
     if not prompt:
+        status = offline_llm_status()
         return OfflineLLMResult(False, "", "offline-llm", "Prompt is empty.", status)
 
-    model_path = Path(str(status.get("modelPath") or ""))
     deterministic_reply = _identity_reply(prompt)
     if deterministic_reply:
+        status = offline_llm_status()
         metadata = dict(status)
         metadata["used"] = True
         metadata["identityGuard"] = True
         return OfflineLLMResult(True, deterministic_reply, "offline-llm", "", metadata)
+
+    status = offline_llm_status()
+    if not status.get("available"):
+        return OfflineLLMResult(False, "", "offline-llm", str(status.get("reason") or ""), status)
+
+    model_path = Path(str(status.get("modelPath") or ""))
 
     messages: list[dict[str, str]] = []
     base_system = (

@@ -78,18 +78,29 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "shell_ui.splash_screen",
     "shell_web_ui.host",
     "socketio",
+    "kokoro_onnx",
+    "kokoro_onnx.config",
     "llama_cpp",
+    "espeakng_loader",
+    "phonemizer",
+    "phonemizer.backend.espeak.wrapper",
     "PyQt6.QtGui",
     "PyQt6.QtWebChannel",
     "PyQt6.QtWebEngineCore",
     "PyQt6.QtWebEngineWidgets",
 ]
+PYINSTALLER_COLLECT_ALL = [
+    "espeakng_loader",
+    "kokoro_onnx",
+]
 PYINSTALLER_COPY_METADATA = [
     "aiohttp",
     "aiohttp-cors",
     "google-genai",
+    "kokoro-onnx",
     "livekit",
     "llama-cpp-python",
+    "phonemizer-fork",
     "psutil",
     "PyQt6",
     "PyQt6-WebEngine",
@@ -110,6 +121,40 @@ def _available_pyinstaller_copy_metadata() -> list[str]:
             continue
         available.append(package)
     return available
+
+
+def _copy_espeak_data_contents(source: Path, target: Path) -> int:
+    copied = 0
+    target.mkdir(parents=True, exist_ok=True)
+    for item in source.iterdir():
+        destination = target / item.name
+        if item.is_dir():
+            shutil.copytree(item, destination, dirs_exist_ok=True)
+        else:
+            shutil.copy2(item, destination)
+        copied += 1
+    return copied
+
+
+def _ensure_espeak_data_compat_layout(app_bundle_dir: Path) -> dict[str, object]:
+    """Kokoro's espeak loader may look beside the bundled library for phontab."""
+    staged: list[dict[str, object]] = []
+    for source in app_bundle_dir.rglob("espeak-ng-data"):
+        if not source.is_dir() or not (source / "phontab").exists():
+            continue
+        compat_root = source.parent.parent
+        if not compat_root.exists():
+            continue
+        copied = _copy_espeak_data_contents(source, compat_root)
+        staged.append(
+            {
+                "source": str(source),
+                "target": str(compat_root),
+                "files": copied,
+                "phontab": str(compat_root / "phontab"),
+            }
+        )
+    return {"ready": bool(staged), "layouts": staged}
 
 
 def _safe_clear_staging() -> None:
@@ -341,6 +386,11 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
     ]
     for hidden_import in PYINSTALLER_HIDDEN_IMPORTS:
         cmd.extend(["--hidden-import", hidden_import])
+    for package in PYINSTALLER_COLLECT_ALL:
+        if importlib.util.find_spec(package) is None:
+            print(f"Skipping PyInstaller collect-all for missing optional package: {package}")
+            continue
+        cmd.extend(["--collect-all", package])
     for package in _available_pyinstaller_copy_metadata():
         cmd.extend(["--copy-metadata", package])
     if app_icon and app_icon.exists():
@@ -352,11 +402,13 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
     if not built_exe.exists():
         raise RuntimeError(f"PyInstaller finished but bundled app is missing: {built_exe}")
     shutil.move(str(built), str(APP_BUNDLE_DIR))
+    espeak_layout = _ensure_espeak_data_compat_layout(APP_BUNDLE_DIR)
     return {
         "app_dir": str(APP_BUNDLE_DIR),
         "app_exe": str(APP_BUNDLE_EXE),
         "app_icon": str(app_icon) if app_icon else "",
         "installed_icon": str(APP_ICON_STAGE) if APP_ICON_STAGE.exists() else "",
+        "espeak_data_layout": espeak_layout,
         "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
     }
 

@@ -35,7 +35,7 @@ interface CapabilityPayload {
   error?: string
 }
 
-const glassPanel = 'bg-zinc-950/40 backdrop-blur-xl border border-white/5 rounded-2xl shadow-xl'
+const glassPanel = 'shell-control-panel backdrop-blur-xl rounded-2xl shadow-xl'
 
 const defaultArgsFor = (tool: ToolItem | null) => {
   if (!tool?.params?.length) return '{}'
@@ -120,7 +120,7 @@ const ControlCenter = () => {
   const summary = payload.summary || {}
 
   return (
-    <div className="h-full w-full p-4 bg-white/2 grid grid-cols-12 gap-4 overflow-hidden">
+    <div className="shell-control-surface h-full w-full p-4 grid grid-cols-12 gap-4 overflow-hidden">
       <div className="col-span-12 md:col-span-4 flex flex-col gap-4 min-h-0">
         <div className={`${glassPanel} p-4 shrink-0`}>
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
@@ -143,7 +143,7 @@ const ControlCenter = () => {
               ['AGENTS', summary.agents ?? 0],
               ['ACTIONS', summary.actions ?? 0]
             ].map(([label, value]) => (
-              <div key={label} className="rounded-xl bg-black/40 border border-white/5 p-3">
+              <div key={label} className="shell-control-stat rounded-xl border p-3">
                 <div className="text-[8px] font-mono text-zinc-600 tracking-widest">{label}</div>
                 <div className="text-lg font-black text-emerald-300 font-mono">{String(value)}</div>
               </div>

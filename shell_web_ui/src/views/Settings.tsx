@@ -651,19 +651,19 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .join('  ')
 
   const cardClass =
-    'bg-[#0f0f13] border border-white/10 p-6 md:p-8 rounded-2xl flex flex-col gap-5 hover:border-white/20 transition-all shadow-lg'
+    'shell-settings-card border p-6 md:p-8 rounded-2xl flex flex-col gap-5 transition-all shadow-lg'
   const inputContainerClass =
-    'flex items-center bg-[#050505] border border-white/10 rounded-lg px-4 py-3 focus-within:border-white/30 focus-within:bg-black transition-all duration-300 w-full'
+    'shell-settings-input flex items-center border rounded-lg px-4 py-3 transition-all duration-300 w-full'
   const titleClass = 'text-sm font-semibold text-white flex items-center gap-2'
 
   return (
-    <div className="h-full min-h-0 p-4 md:p-8 lg:p-10 flex flex-col items-center bg-black text-zinc-100 overflow-hidden">
+    <div className="shell-settings-surface h-full min-h-0 p-4 md:p-8 lg:p-10 flex flex-col items-center text-zinc-100 overflow-hidden">
       <motion.div
         className="w-full max-w-4xl h-full min-h-0 flex flex-col gap-6 md:gap-8"
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
       >
-        <div className="shrink-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/10 bg-black/95 pb-6 pt-1 backdrop-blur-xl">
+        <div className="shell-settings-header shrink-0 z-30 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b pb-6 pt-1 backdrop-blur-xl">
           <div className="flex items-center gap-5">
             <div className="p-4 bg-[#111] rounded-2xl border border-white/10 flex items-center justify-center shadow-[0_0_15px_rgba(255,255,255,0.03)]">
               <GiArtificialIntelligence size={36} className="text-white" />
@@ -711,7 +711,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
             {activeTab === 'updates' && (
               <motion.div
                 key="updates"
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
@@ -806,7 +806,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
             {activeTab === 'general' && (
               <motion.div
                 key="general"
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}
@@ -1080,7 +1080,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
             {activeTab === 'keys' && (
               <motion.div
                 key="keys"
-                initial={{ opacity: 0, y: 10 }}
+                initial={false}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={{ duration: 0.2 }}

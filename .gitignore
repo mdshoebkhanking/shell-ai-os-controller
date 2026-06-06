@@ -18,6 +18,7 @@ venv/
 env/
 .venv/
 .codex_ui_venv/
+.codex_runtime_venv/
 .shellai_venv/
 
 # Logs
@@ -81,6 +82,14 @@ shell.v1.0-main-main/
 shell_downloads/
 shell_projects/
 shell_workspace/
+
+# Locally staged offline model assets. Release workflows download/cache these
+# during packaging; do not commit large third-party binaries.
+models/llm/**/*.gguf
+models/llm/**/*-assets.json
+models/tts/**/*.onnx
+models/tts/**/*.bin
+models/tts/**/*-assets.json
 
 # Local UI/probe captures and scratch artifacts
 _ui_cyber/
