@@ -23,7 +23,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_TTS_DIR = PROJECT_ROOT / ".shell_runtime" / "tts_audio"
-DEFAULT_ENGINE_ORDER = ("kokoro", "piper")
+DEFAULT_ENGINE_ORDER = ("kokoro",)
 PLAYBACK_STARTUP_GRACE_S = 0.12
 SUPPORTED_SHELL_LANGUAGE_ORDER = ("hinglish", "english", "hindi")
 SUPPORTED_SHELL_LANGUAGES = set(SUPPORTED_SHELL_LANGUAGE_ORDER)
@@ -499,7 +499,9 @@ def _piper_status() -> OfflineTTSCandidate:
 
 
 def _candidate_statuses() -> list[OfflineTTSCandidate]:
-    return [_kokoro_status(), _piper_status()]
+    # Shell's packaged offline voice is Kokoro. Do not silently switch to
+    # platform/system voices because they steal focus in the Windows EXE.
+    return [_kokoro_status()]
 
 
 def offline_tts_status() -> dict[str, Any]:
@@ -551,11 +553,11 @@ def offline_tts_status() -> dict[str, Any]:
     return {
         "success": True,
         "available": False,
-        "engine": "fallback",
-        "label": "OS TTS fallback",
+        "engine": "kokoro",
+        "label": "Kokoro offline voice unavailable",
         "language": _shell_language(),
         "locale": _tts_locale(),
-        "reason": "No packaged natural offline TTS model is ready; Shell will use local OS voice fallback.",
+        "reason": "Kokoro offline voice is not ready. Shell will not use local OS TTS fallback.",
         "candidates": [candidate.as_dict() for candidate in candidates],
     }
 
@@ -566,16 +568,7 @@ def _playback_command(wav_path: Path) -> list[str] | None:
         afplay = shutil.which("afplay") or ("/usr/bin/afplay" if Path("/usr/bin/afplay").exists() else "")
         return [afplay, str(wav_path)] if afplay else None
     if system == "windows":
-        powershell = shutil.which("powershell") or shutil.which("powershell.exe")
-        if not powershell:
-            return None
-        escaped = str(wav_path).replace("'", "''")
-        script = (
-            f"$player = New-Object Media.SoundPlayer '{escaped}'; "
-            "$player.Load(); "
-            "$player.PlaySync()"
-        )
-        return [powershell, "-NoProfile", "-Command", script]
+        return None
     for exe_name in ("paplay", "aplay", "pw-play"):
         exe = shutil.which(exe_name)
         if exe:
@@ -1037,8 +1030,6 @@ def speak_offline_tts(text: str) -> dict[str, Any]:
     try:
         if engine == "kokoro":
             return _speak_kokoro(speech_text)
-        if engine == "piper":
-            return _speak_piper(speech_text)
     except Exception as exc:
         return {"success": False, "available": True, "engine": engine, "message": str(exc)}
 

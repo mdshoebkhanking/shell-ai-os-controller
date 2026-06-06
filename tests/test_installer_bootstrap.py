@@ -229,6 +229,8 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "shell_hub" in builder
     assert "shell_local_stt" in builder
     assert "sherpa_onnx" in builder
+    assert "onnxruntime" in builder
+    assert "soundfile" in builder
     assert "aiohttp_cors" in builder
     assert "engineio.async_drivers.aiohttp" in builder
     assert "_available_pyinstaller_copy_metadata" in builder
@@ -242,7 +244,7 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "offline_stt_stage_report" in builder
     assert '"offline_stt": offline_stt_report' in builder
     assert "copy_staged_model_assets_to_stage" in builder
-    assert "No packaged natural offline TTS model assets detected" in builder
+    assert "Windows EXE build requires packaged Kokoro offline TTS assets" in builder
     assert "No packaged GGUF offline LLM model assets detected" in builder
     assert "No packaged sherpa-onnx STT model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
@@ -287,9 +289,15 @@ def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_
     tts_root = tmp_path / "models" / "tts"
     monkeypatch.setattr(build_windows_installer, "TTS_MODEL_STAGE", tts_root)
 
-    fallback = build_windows_installer.offline_tts_stage_report()
-    assert fallback["status"] == "fallback"
-    assert fallback["model_file_count"] == 0
+    blocked = build_windows_installer.offline_tts_stage_report()
+    assert blocked["status"] == "blocked"
+    assert blocked["model_file_count"] == 0
+    try:
+        build_windows_installer.require_packaged_kokoro_tts(blocked)
+    except RuntimeError as exc:
+        assert "requires packaged Kokoro offline TTS assets" in str(exc)
+    else:
+        raise AssertionError("Missing Kokoro assets must block Windows EXE builds.")
 
     kokoro = tts_root / "kokoro" / "english"
     kokoro.mkdir(parents=True)
@@ -304,6 +312,7 @@ def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_
     assert ready["language_support"] == ["english", "hinglish", "hindi"]
     assert ready["engines"]["kokoro"]["ready"] is True
     assert ready["engines"]["kokoro"]["model_family"] == "Kokoro-82M"
+    build_windows_installer.require_packaged_kokoro_tts(ready)
 
 
 def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_path):

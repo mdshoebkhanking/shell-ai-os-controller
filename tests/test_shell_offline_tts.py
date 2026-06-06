@@ -47,7 +47,7 @@ def test_offline_tts_status_reports_disabled(monkeypatch):
     assert status["engine"] == "disabled"
 
 
-def test_offline_tts_status_falls_back_without_packaged_model(monkeypatch, tmp_path):
+def test_offline_tts_status_reports_kokoro_unavailable_without_packaged_model(monkeypatch, tmp_path):
     import shell_offline_tts
 
     monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
@@ -59,9 +59,9 @@ def test_offline_tts_status_falls_back_without_packaged_model(monkeypatch, tmp_p
 
     assert status["success"] is True
     assert status["available"] is False
-    assert status["engine"] == "fallback"
-    assert "OS voice fallback" in status["reason"]
-    assert {candidate["engine"] for candidate in status["candidates"]} == {"kokoro", "piper"}
+    assert status["engine"] == "kokoro"
+    assert "will not use local OS TTS fallback" in status["reason"]
+    assert {candidate["engine"] for candidate in status["candidates"]} == {"kokoro"}
 
 
 def test_offline_tts_status_tracks_shell_language(monkeypatch, tmp_path):
@@ -560,14 +560,13 @@ def test_backend_bridge_cloud_error_falls_back_to_offline_tts(monkeypatch):
     assert bridge._speech_process is fake_process
 
 
-def test_backend_bridge_falls_back_to_os_tts_when_offline_model_missing(monkeypatch):
+def test_backend_bridge_blocks_os_tts_when_offline_model_missing(monkeypatch):
     import shell_web_ui.host as host
 
     QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     popen_calls = []
-    fake_process = FakeSpeechProcess()
 
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
     monkeypatch.setattr(
@@ -576,8 +575,8 @@ def test_backend_bridge_falls_back_to_os_tts_when_offline_model_missing(monkeypa
         lambda: {
             "success": True,
             "available": False,
-            "engine": "fallback",
-            "reason": "No packaged model.",
+            "engine": "kokoro",
+            "reason": "Kokoro missing.",
         },
     )
     monkeypatch.setattr(
@@ -586,17 +585,18 @@ def test_backend_bridge_falls_back_to_os_tts_when_offline_model_missing(monkeypa
         lambda _text: {
             "success": False,
             "available": False,
-            "engine": "fallback",
-            "message": "No packaged model.",
+            "engine": "kokoro",
+            "message": "Kokoro missing.",
         },
     )
     monkeypatch.setattr(bridge, "_tts_command", lambda text: ["fake-local-tts", text])
-    monkeypatch.setattr(host.subprocess, "Popen", lambda command, **_kwargs: popen_calls.append(command) or fake_process)
+    monkeypatch.setattr(host.subprocess, "Popen", lambda command, **_kwargs: popen_calls.append(command) or FakeSpeechProcess())
 
     result = bridge._speak_text(["Fallback voice test"])
 
-    assert result["success"] is True
-    assert result["source"] == "os-tts"
-    assert popen_calls == [["fake-local-tts", "Fallback voice test"]]
+    assert result["success"] is False
+    assert result["source"] == "kokoro-unavailable"
+    assert popen_calls == []
     assert emitted[-1][0] == "speech-status"
-    assert emitted[-1][1]["engine"] == "os"
+    assert emitted[-1][1]["engine"] == "kokoro"
+    assert emitted[-1][1]["state"] == "error"

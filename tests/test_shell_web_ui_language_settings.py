@@ -41,19 +41,21 @@ def test_language_setting_reaches_browser_bridge_and_gemini_live_prompt():
     assert "languageReply" in bridge
     assert "selfIdentityReply" in bridge
     assert "tum\\s+kon" in bridge
-    assert "utterance.lang = shellSpeechLocale()" in bridge
+    assert "Browser speech fallback is disabled" in bridge
     assert "Current Shell language setting" in voice
     assert "shellLanguageInstruction" in voice
     assert "shellSpeechInstruction()" in root
-    assert "utterance.lang = shellSpeechLocale()" in dashboard
+    assert "speechSynthesis" not in dashboard
 
 
-def test_dashboard_local_voice_prefers_backend_before_browser_speech():
+def test_dashboard_local_voice_does_not_fall_back_to_browser_speech():
     dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
     speak_shell = dashboard.split("const speakShell = useCallback", 1)[1].split("}, [speakRealVoice, voiceRuntime])", 1)[0]
 
     assert "window.shellAPI?.speakText?.(speechText)" in speak_shell
-    assert speak_shell.index("window.shellAPI?.speakText?.(speechText)") < speak_shell.index("speakWithBrowser(speechText)")
+    assert "speakWithBrowser" not in dashboard
+    assert "browser-speech" not in dashboard
+    assert "setSpeechState('VOICE ERR')" in speak_shell
     assert "let didSendToRealVoice = false" in speak_shell
     assert "didSendToRealVoice = await speakRealVoice(speechText)" in speak_shell
 
@@ -100,7 +102,9 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     assert "offlineTtsVoice" in settings
     assert "offlineTtsCandidateSummary" in settings
     assert "offlineLlmCandidateSummary" in settings
-    assert "Browser speech fallback" in bridge
+    assert "Shell will use local OS voice fallback" not in settings
+    assert "will not use local OS TTS fallback" in settings
+    assert "Browser speech fallback is disabled" in bridge
     assert "case 'offline-tts-status'" in bridge
     assert "case 'offline-llm-status'" in bridge
     assert "settingsTabs = [" in settings

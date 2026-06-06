@@ -424,7 +424,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       setOfflineTtsMessage(`${status.label || status.engine || 'Offline TTS'} ready.${voiceLabel}`)
       return
     }
-    setOfflineTtsMessage(status.reason || 'No packaged offline TTS model is ready; Shell will use local OS voice fallback.')
+    setOfflineTtsMessage(status.reason || 'Kokoro offline voice is not ready. Shell will not use local OS TTS fallback.')
   }
 
   const refreshOfflineTtsStatus = async () => {

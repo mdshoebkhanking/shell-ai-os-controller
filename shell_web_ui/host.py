@@ -39,7 +39,7 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
         return {
             "success": True,
             "available": False,
-            "engine": "fallback",
+            "engine": "kokoro",
             "reason": "Offline TTS service could not be imported.",
             "candidates": [],
         }
@@ -1715,30 +1715,9 @@ class ShellBackendBridge(QObject):
         self._speech_process = None
 
     def _start_os_tts(self, text: str, *, job_id: int | None = None) -> dict[str, Any]:
-        command = self._tts_command(text)
-        if not command:
-            self.emit_event("speech-status", {"state": "error", "message": "No local TTS engine found"})
-            return {"success": False, "message": "No local TTS engine found"}
-
-        try:
-            process = subprocess.Popen(
-                command,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                stdin=subprocess.DEVNULL,
-            )
-            if job_id is not None and job_id != self._current_speech_job_id():
-                try:
-                    process.terminate()
-                except Exception:
-                    pass
-                return {"success": False, "message": "Speech request was superseded.", "stale": True}
-            self._speech_process = process
-            self.emit_event("speech-status", {"state": "speaking", "engine": "os", "chars": len(text)})
-            return {"success": True, "message": "Speech started", "chars": len(text), "source": "os-tts"}
-        except Exception as exc:
-            self.emit_event("speech-status", {"state": "error", "message": str(exc)})
-            return {"success": False, "message": str(exc)}
+        message = "Kokoro offline voice is unavailable and OS TTS fallback is disabled."
+        self.emit_event("speech-status", {"state": "error", "engine": "kokoro", "message": message})
+        return {"success": False, "message": message, "source": "kokoro-unavailable", "engine": "kokoro"}
 
     @staticmethod
     def _offline_tts_ready() -> tuple[bool, dict[str, Any]]:
@@ -1785,12 +1764,18 @@ class ShellBackendBridge(QObject):
                 self.emit_event(
                     "speech-status",
                     {
-                        "state": "fallback",
+                        "state": "error",
                         "engine": offline_result.get("engine", "offline"),
-                        "message": offline_result.get("message", "Offline TTS failed; using OS fallback."),
+                        "message": offline_result.get("message", "Kokoro offline voice failed."),
                     },
                 )
-            self._start_os_tts(text, job_id=job_id)
+                return
+            message = (
+                offline_result.get("message", "Kokoro offline voice is unavailable.")
+                if isinstance(offline_result, dict)
+                else "Kokoro offline voice is unavailable."
+            )
+            self.emit_event("speech-status", {"state": "error", "engine": "kokoro", "message": message})
 
         self._start_background_task("ShellOfflineTTS", run)
         return {
@@ -1924,33 +1909,16 @@ class ShellBackendBridge(QObject):
         if offline_ready:
             self._queue_offline_tts(text, fallback_from="gemini")
             return
-        self._start_os_tts(text)
+        self.emit_event(
+            "speech-status",
+            {
+                "state": "error",
+                "engine": "kokoro",
+                "message": "Gemini voice failed and Kokoro offline voice is unavailable.",
+            },
+        )
 
     def _tts_command(self, text: str) -> list[str] | None:
-        system = platform.system().lower()
-        if system == "darwin":
-            say_bin = shutil.which("say") or ("/usr/bin/say" if Path("/usr/bin/say").exists() else "")
-            if not say_bin:
-                return None
-            voice = os.environ.get("SHELL_TTS_VOICE", "").strip()
-            return [say_bin, "-v", voice, text] if voice else [say_bin, text]
-
-        if system == "windows":
-            powershell = shutil.which("powershell") or shutil.which("powershell.exe")
-            if not powershell:
-                return None
-            safe_text = text.replace("'", "''")
-            script = (
-                "Add-Type -AssemblyName System.Speech; "
-                "$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-                f"$s.Speak('{safe_text}')"
-            )
-            return [powershell, "-NoProfile", "-Command", script]
-
-        for exe_name in ("spd-say", "espeak"):
-            exe = shutil.which(exe_name)
-            if exe:
-                return [exe, text]
         return None
 
     def _offline_tts_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
@@ -1992,7 +1960,16 @@ class ShellBackendBridge(QObject):
             queued["label"] = status.get("label", "Offline natural voice")
             return queued
 
-        return self._start_os_tts(text)
+        message = str(status.get("reason") or "Kokoro offline voice is unavailable.")
+        self.emit_event("speech-status", {"state": "error", "engine": "kokoro", "message": message})
+        return {
+            "success": False,
+            "available": False,
+            "engine": "kokoro",
+            "source": "kokoro-unavailable",
+            "message": message,
+            "status": status,
+        }
 
     def _stop_speech(self, _args: list[Any]) -> dict[str, Any]:
         self._stop_speech_process()

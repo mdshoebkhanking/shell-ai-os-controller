@@ -230,7 +230,7 @@ def check_agent_probe(py: Path) -> Check:
 def check_voice_runtime(py: Path) -> Check:
     code = (
         "import importlib.util, json; "
-        "mods=['pyttsx3','edge_tts','kokoro_onnx','sounddevice','speech_recognition']; "
+        "mods=['pyttsx3','edge_tts','kokoro_onnx','onnxruntime','soundfile','sounddevice','speech_recognition']; "
         "print(json.dumps({m: bool(importlib.util.find_spec(m)) for m in mods}, sort_keys=True))"
     )
     result = run_cmd([py, "-c", code], name="voice dependency probe", timeout=30)
@@ -264,9 +264,9 @@ def check_offline_tts_status(py: Path) -> Check:
         return result
     return Check(
         "offline TTS status probe",
-        True,
-        "WARN",
-        result.message or "Offline TTS status unavailable; Shell should still use OS TTS fallback.",
+        False,
+        "FAIL",
+        result.message or "Offline TTS status unavailable; Shell must not use OS TTS fallback.",
         result.details,
     )
 
@@ -474,16 +474,22 @@ def check_local_tts_command(py: Path) -> Check:
         "QCoreApplication.instance() or QCoreApplication([]); "
         "cmd=ShellBackendBridge()._tts_command('Shell voice test'); "
         "print(json.dumps({'available': bool(cmd), 'command': cmd[0] if cmd else ''}, sort_keys=True)); "
-        "raise SystemExit(0 if cmd else 1)"
+        "raise SystemExit(1 if cmd else 0)"
     )
-    result = run_cmd([py, "-c", code], name="local TTS command probe", timeout=30)
+    result = run_cmd([py, "-c", code], name="OS TTS fallback blocked probe", timeout=30)
     if result.ok:
-        return result
+        return Check(
+            "OS TTS fallback blocked probe",
+            True,
+            "PASS",
+            result.message or "OS TTS fallback is blocked by default.",
+            result.details,
+        )
     return Check(
-        "local TTS command probe",
-        True,
-        "WARN",
-        result.message or "No local TTS command detected; audible voice remains a manual UI check.",
+        "OS TTS fallback blocked probe",
+        False,
+        "FAIL",
+        result.message or "OS TTS fallback command is still available by default.",
         result.details,
     )
 

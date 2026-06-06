@@ -20,7 +20,6 @@ import {
   RiFileTextLine
 } from 'react-icons/ri'
 import { VisionMode } from '@renderer/IndexRoot'
-import { shellSpeechLocale } from '@renderer/services/language-settings'
 import { normalizeGeminiApiKey } from '@renderer/services/api-key-utils'
 
 interface ShellProps {
@@ -188,38 +187,6 @@ const compactForSpeech = (value: string, limit = 240) => {
   return `${cleaned.slice(0, limit).replace(/\s+\S*$/, '')}...`
 }
 
-const speakWithBrowser = (text: string) =>
-  new Promise<boolean>((resolve) => {
-    if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
-      resolve(false)
-      return
-    }
-
-    try {
-      window.speechSynthesis.cancel()
-      const utterance = new SpeechSynthesisUtterance(text)
-      utterance.lang = shellSpeechLocale()
-      utterance.rate = 0.92
-      utterance.pitch = 1
-      utterance.volume = 1
-      const voices = window.speechSynthesis.getVoices()
-      const preferredVoice =
-        voices.find((voice) => /rishi|samantha|daniel|reed|flo/i.test(voice.name)) || voices[0]
-      if (preferredVoice) utterance.voice = preferredVoice
-
-      let started = false
-      utterance.onstart = () => {
-        started = true
-        resolve(true)
-      }
-      utterance.onerror = () => resolve(started)
-      window.speechSynthesis.speak(utterance)
-      window.setTimeout(() => resolve(window.speechSynthesis.speaking || started), 250)
-    } catch {
-      resolve(false)
-    }
-  })
-
 const hasBrowserGeminiVoiceKey = () => {
   try {
     return Boolean(normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key')))
@@ -361,15 +328,9 @@ function DashboardView({
         return
       }
 
-      const spokeInBrowser = await speakWithBrowser(speechText)
-      if (spokeInBrowser) {
-        setSpeechState('SPEAKING')
-        runSpeechReaction({ source: 'browser-speech' }, speechText)
-      } else {
-        clearSpeechReaction()
-        setVoiceAmplitude(0)
-        setSpeechState('VOICE ERR')
-      }
+      clearSpeechReaction()
+      setVoiceAmplitude(0)
+      setSpeechState('VOICE ERR')
     } catch {
       clearSpeechReaction()
       setVoiceAmplitude(0)
@@ -1083,7 +1044,7 @@ function DashboardView({
           />
         </div>
 
-        <div className="shell-orb-dock-anchor absolute z-50">
+        <div className="shell-orb-dock-anchor absolute">
           <div
             className="shell-liquid-dock shell-session-dock flex items-center"
           >

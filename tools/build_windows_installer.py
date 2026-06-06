@@ -84,7 +84,11 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "socketio",
     "kokoro_onnx",
     "kokoro_onnx.config",
+    "numpy",
+    "onnxruntime",
+    "scipy",
     "sherpa_onnx",
+    "soundfile",
     "llama_cpp",
     "espeakng_loader",
     "phonemizer",
@@ -97,6 +101,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
 PYINSTALLER_COLLECT_ALL = [
     "espeakng_loader",
     "kokoro_onnx",
+    "onnxruntime",
     "sherpa_onnx",
 ]
 PYINSTALLER_COPY_METADATA = [
@@ -106,6 +111,8 @@ PYINSTALLER_COPY_METADATA = [
     "kokoro-onnx",
     "livekit",
     "llama-cpp-python",
+    "numpy",
+    "onnxruntime",
     "phonemizer-fork",
     "psutil",
     "PyQt6",
@@ -114,7 +121,9 @@ PYINSTALLER_COPY_METADATA = [
     "python-engineio",
     "python-socketio",
     "requests",
+    "scipy",
     "sherpa-onnx",
+    "soundfile",
 ]
 
 
@@ -330,11 +339,11 @@ def offline_tts_stage_report() -> dict[str, object]:
         ("*.onnx.json", "*.json"),
     )
     model_files = [path for path in TTS_MODEL_STAGE.rglob("*") if path.is_file()] if TTS_MODEL_STAGE.exists() else []
-    status = "ready" if kokoro_ready or piper_ready else "fallback"
+    status = "ready" if kokoro_ready else "blocked"
     reason = (
-        "Packaged offline TTS model assets detected."
+        "Packaged Kokoro offline TTS model assets detected."
         if status == "ready"
-        else "No packaged natural offline TTS model assets detected; installer will rely on OS/browser speech fallback."
+        else "Packaged Kokoro offline TTS assets are required; Windows EXE build must not rely on OS/browser speech fallback."
     )
     return {
         "status": status,
@@ -355,6 +364,17 @@ def offline_tts_stage_report() -> dict[str, object]:
             "piper": {"ready": piper_ready},
         },
     }
+
+
+def require_packaged_kokoro_tts(report: dict[str, object]) -> None:
+    engines = report.get("engines") if isinstance(report, dict) else {}
+    kokoro = engines.get("kokoro") if isinstance(engines, dict) else {}
+    if isinstance(kokoro, dict) and kokoro.get("ready") is True:
+        return
+    raise RuntimeError(
+        "Windows EXE build requires packaged Kokoro offline TTS assets. "
+        "Run tools\\stage_kokoro_tts_assets.py --variant int8 before building."
+    )
 
 
 def offline_llm_stage_report() -> dict[str, object]:
@@ -610,6 +630,7 @@ def build_windows_installer(
     marker = stage_release_files()
     model_assets_report = copy_staged_model_assets_to_stage()
     offline_tts_report = offline_tts_stage_report()
+    require_packaged_kokoro_tts(offline_tts_report)
     offline_llm_report = offline_llm_stage_report()
     offline_stt_report = offline_stt_stage_report()
     if not dry_run:

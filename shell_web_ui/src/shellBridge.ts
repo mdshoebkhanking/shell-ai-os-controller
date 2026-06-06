@@ -527,27 +527,22 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
     }
     case 'speak-text': {
       const text = String(args[0] || '').trim()
-      const synth = window.speechSynthesis
-      if (!text || !synth) return { success: false, error: 'Speech synthesis unavailable.' }
-      synth.cancel()
-      const utterance = new SpeechSynthesisUtterance(text.slice(0, 320))
-      utterance.lang = shellSpeechLocale()
-      utterance.rate = 1
-      utterance.pitch = 1
-      synth.speak(utterance)
-      return { success: true, source: 'web-speech' }
+      if (!text) return { success: false, error: 'No speech text provided.' }
+      return {
+        success: false,
+        source: 'kokoro-unavailable',
+        error: 'Kokoro offline voice requires the Shell backend bridge. Browser speech fallback is disabled.'
+      }
     }
     case 'offline-tts-status':
       return {
         success: true,
-        available: Boolean(window.speechSynthesis),
-        engine: 'web-speech',
-        label: 'Browser speech fallback',
+        available: false,
+        engine: 'kokoro',
+        label: 'Kokoro offline voice unavailable',
         language: readShellLanguage(),
         locale: shellSpeechLocale(),
-        reason: window.speechSynthesis
-          ? 'Backend bridge is offline; browser speech fallback is available.'
-          : 'Backend bridge is offline and browser speech synthesis is unavailable.',
+        reason: 'Backend bridge is offline; Kokoro voice status cannot be verified. Browser speech fallback is disabled.',
         candidates: []
       }
     case 'offline-llm-status':
@@ -564,8 +559,7 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
         candidates: []
       }
     case 'stop-speech':
-      window.speechSynthesis?.cancel()
-      return { success: true, source: 'web-speech' }
+      return { success: true, source: 'shell-speech-stop' }
     case 'set-personality':
       localStorage.setItem('shell_personality', String(args[0] || ''))
       return true
@@ -670,18 +664,13 @@ const connectPythonBridge = async () => {
   })
 }
 
-const speakWithBrowser = async (speechText: string) => {
-  const synth = window.speechSynthesis
-  if (!speechText || !synth || typeof SpeechSynthesisUtterance === 'undefined') {
-    return { success: false, error: 'Speech synthesis unavailable.' }
+const blockedBrowserSpeech = async (speechText: string) => {
+  if (!speechText) return { success: false, error: 'No speech text provided.' }
+  return {
+    success: false,
+    source: 'kokoro-unavailable',
+    error: 'Kokoro offline voice requires the Shell backend bridge. Browser speech fallback is disabled.'
   }
-  synth.cancel()
-  const utterance = new SpeechSynthesisUtterance(speechText.slice(0, 320))
-  utterance.lang = shellSpeechLocale()
-  utterance.rate = 0.92
-  utterance.volume = 1
-  synth.speak(utterance)
-  return { success: true, source: 'browser-speech' }
 }
 
 const shellAPI = {
@@ -695,10 +684,9 @@ const shellAPI = {
       const bridgeResult = (await callPython('speak-text', [speechText])) as any
       if (bridgeResult?.success) return bridgeResult
     }
-    return speakWithBrowser(speechText)
+    return blockedBrowserSpeech(speechText)
   },
   stopSpeech: async () => {
-    window.speechSynthesis?.cancel()
     return callPython('stop-speech', [])
   },
   executeCommand: (command: string) => callPython('execute-command', [command]),

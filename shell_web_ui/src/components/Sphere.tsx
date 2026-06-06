@@ -1,5 +1,5 @@
 import { Canvas, useFrame } from '@react-three/fiber'
-import { useRef, useMemo } from 'react'
+import { useRef, useMemo, type CSSProperties } from 'react'
 import * as THREE from 'three'
 import { shellService } from '@renderer/services/shell-voice-ai'
 
@@ -151,17 +151,33 @@ const CustomParticleSphere = ({
   )
 }
 
-const Sphere = (props: SphereProps) => {
+const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProps) => {
+  const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0.22)) : 0
+  const fallbackScale = 0.92 + fallbackLevel * 0.1
+  const stageStyle = {
+    '--shell-orb-level': fallbackLevel.toFixed(3),
+    '--shell-orb-scale': fallbackScale.toFixed(3),
+  } as CSSProperties
+
   return (
-    <Canvas
-      camera={{ position: [0, 0, 4.5] }}
-      dpr={[1, 1.2]}
-      performance={{ min: 0.5 }}
-      gl={{ antialias: false, powerPreference: 'default' }}
+    <div
+      className={`shell-orb-stage ${active ? 'shell-orb-stage-active' : ''} ${speaking ? 'shell-orb-stage-speaking' : ''}`}
+      style={stageStyle}
+      aria-hidden="true"
     >
-      <ambientLight intensity={0.6} />
-      <CustomParticleSphere {...props} />
-    </Canvas>
+      <div className="shell-orb-fallback" />
+      <Canvas
+        className="shell-orb-canvas"
+        camera={{ position: [0, 0, 4.5] }}
+        dpr={[1, 1.2]}
+        performance={{ min: 0.5 }}
+        gl={{ antialias: false, powerPreference: 'default', alpha: true }}
+        resize={{ scroll: false, debounce: { scroll: 80, resize: 160 } }}
+      >
+        <ambientLight intensity={0.6} />
+        <CustomParticleSphere active={active} speaking={speaking} voiceLevel={voiceLevel} />
+      </Canvas>
+    </div>
   )
 }
 

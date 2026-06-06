@@ -85,13 +85,21 @@ def test_primary_tabs_can_scroll_inside_tight_windows():
 def test_orb_session_dock_keeps_accessible_icon_controls():
     dashboard = (ROOT / "shell_web_ui" / "src" / "views" / "Dashboard.tsx").read_text(encoding="utf-8")
     css = (ROOT / "shell_web_ui" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
+    sphere = (ROOT / "shell_web_ui" / "src" / "components" / "Sphere.tsx").read_text(encoding="utf-8")
 
     assert "shell-orb-dock-anchor" in dashboard
     assert dashboard.count('type="button"') >= 4
     assert "aria-pressed={isSystemActive}" in dashboard
     assert "aria-pressed={!isMicMuted}" in dashboard
+    assert "shell-orb-fallback" in sphere
+    assert "shell-orb-stage-speaking" in sphere
+    assert "resize={{ scroll: false" in sphere
+    assert ".shell-orb-fallback" in css
+    assert ".shell-orb-canvas" in css
     assert ".shell-orb-dock-anchor" in css
+    assert "bottom: clamp(72px, 8vh, 118px)" in css
     assert "touch-action: manipulation" in css
+    assert "min-width: 50px" in css
     assert ".shell-dock-button:focus-visible" in css
     assert ".shell-dock-button svg" in css
     assert ".shell-dock-button-main.shell-dock-button-live" in css

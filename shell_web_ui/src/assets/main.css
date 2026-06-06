@@ -405,6 +405,58 @@ body {
   z-index: 1;
 }
 
+.shell-orb-stage {
+  --shell-orb-level: 0;
+  --shell-orb-scale: 0.92;
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 260px;
+  pointer-events: none;
+  contain: layout paint;
+  isolation: isolate;
+}
+
+.shell-orb-canvas {
+  position: absolute !important;
+  inset: 0;
+  z-index: 2;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+}
+
+.shell-orb-fallback {
+  position: absolute;
+  inset: 14%;
+  z-index: 1;
+  border-radius: 999px;
+  opacity: 0.86;
+  transform: translate3d(0, 0, 0) scale(var(--shell-orb-scale));
+  transition:
+    transform 160ms var(--shell-liquid-ease),
+    opacity 180ms var(--shell-liquid-ease),
+    filter 180ms var(--shell-liquid-ease);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(248, 251, 255, 0.96) 0 3%, rgba(51, 219, 18, 0.90) 4% 9%, rgba(0, 240, 255, 0.78) 10% 21%, rgba(0, 104, 255, 0.34) 22% 42%, transparent 64%),
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.32), transparent 58%);
+  box-shadow:
+    0 0 22px rgba(0, 240, 255, 0.34),
+    0 0 64px rgba(51, 219, 18, 0.10),
+    inset 0 0 28px rgba(248, 251, 255, 0.20);
+  filter: saturate(1.08);
+}
+
+.shell-orb-stage:not(.shell-orb-stage-active) .shell-orb-fallback {
+  opacity: 0.56;
+  filter: saturate(0.75) grayscale(0.2);
+}
+
+.shell-orb-stage-speaking .shell-orb-fallback {
+  opacity: 0.96;
+  filter: saturate(1.2);
+}
+
 .shell-liquid-dock {
   position: relative;
   overflow: hidden;
@@ -423,12 +475,15 @@ body {
 .shell-session-dock {
   width: fit-content;
   max-width: calc(100vw - 28px);
-  padding: 7px;
-  gap: 7px;
+  min-height: 68px;
+  padding: 8px;
+  gap: 8px;
   border-radius: 999px;
   justify-content: center;
   pointer-events: auto;
   isolation: isolate;
+  transform: translate3d(0, 0, 0);
+  -webkit-tap-highlight-color: transparent;
 }
 
 .shell-session-dock::before {
@@ -444,11 +499,13 @@ body {
 
 .shell-orb-dock-anchor {
   inset-inline: 0;
-  bottom: clamp(14px, 4vh, 42px);
+  bottom: clamp(72px, 8vh, 118px);
+  z-index: 80;
   display: flex;
   justify-content: center;
   padding-inline: 14px;
   pointer-events: none;
+  transform: translate3d(0, 0, 0);
 }
 
 .shell-workstream-anchor {
@@ -895,8 +952,10 @@ body {
   position: relative;
   display: grid;
   flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
+  width: 50px;
+  height: 50px;
+  min-width: 50px;
+  min-height: 50px;
   place-items: center;
   border: 1px solid rgba(215, 225, 238, 0.12);
   border-radius: 999px;
@@ -909,7 +968,8 @@ body {
     0 8px 18px rgba(0, 0, 0, 0.20);
   outline: none;
   touch-action: manipulation;
-  z-index: 1;
+  z-index: 2;
+  user-select: none;
 }
 
 .shell-dock-button svg {
@@ -956,8 +1016,10 @@ body {
 }
 
 .shell-dock-button-main {
-  width: 52px;
-  height: 52px;
+  width: 58px;
+  height: 58px;
+  min-width: 58px;
+  min-height: 58px;
   margin-inline: 3px;
   color: #f8fbff;
   border-color: rgba(215, 225, 238, 0.24);
@@ -1021,23 +1083,28 @@ body {
 
 @media (max-width: 767px) {
   .shell-orb-dock-anchor {
-    bottom: 12px;
+    bottom: 68px;
     padding-inline: 10px;
   }
 
   .shell-session-dock {
-    padding: 6px;
+    min-height: 64px;
+    padding: 7px;
     gap: 6px;
   }
 
   .shell-dock-button {
-    width: 42px;
-    height: 42px;
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
   }
 
   .shell-dock-button-main {
-    width: 48px;
-    height: 48px;
+    width: 54px;
+    height: 54px;
+    min-width: 54px;
+    min-height: 54px;
     margin-inline: 2px;
   }
 }
