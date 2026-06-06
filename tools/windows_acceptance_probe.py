@@ -445,7 +445,12 @@ def check_frozen_runtime_probe() -> Check:
         "frozen EXE runtime probe",
         False,
         "FAIL",
-        f"Frozen EXE runtime incomplete: tts_ready={tts_ready}, llm_ready={llm_ready}, exit={proc.returncode}",
+        (
+            f"Frozen EXE runtime incomplete: tts_ready={tts_ready}"
+            f" ({tts.get('reason') if isinstance(tts, dict) else 'unknown'}), "
+            f"llm_ready={llm_ready} ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
+            f"exit={proc.returncode}"
+        ),
         details,
     )
 

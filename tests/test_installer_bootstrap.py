@@ -232,6 +232,9 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "onnxruntime" in builder
     assert '"llama_cpp"' in builder
     assert "soundfile" in builder
+    assert '"phonemizer"' in builder
+    assert "phonemizer.backend.espeak.api" in builder
+    assert "phonemizer.backend.espeak.voice" in builder
     assert "aiohttp_cors" in builder
     assert "engineio.async_drivers.aiohttp" in builder
     assert "_available_pyinstaller_copy_metadata" in builder

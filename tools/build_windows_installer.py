@@ -92,6 +92,13 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "llama_cpp",
     "espeakng_loader",
     "phonemizer",
+    "phonemizer.backend.espeak.api",
+    "phonemizer.backend.espeak.base",
+    "phonemizer.backend.espeak.espeak",
+    "phonemizer.backend.espeak.language_switch",
+    "phonemizer.backend.espeak.mbrola",
+    "phonemizer.backend.espeak.voice",
+    "phonemizer.backend.espeak.words_mismatch",
     "phonemizer.backend.espeak.wrapper",
     "PyQt6.QtGui",
     "PyQt6.QtWebChannel",
@@ -103,6 +110,7 @@ PYINSTALLER_COLLECT_ALL = [
     "kokoro_onnx",
     "llama_cpp",
     "onnxruntime",
+    "phonemizer",
     "sherpa_onnx",
 ]
 PYINSTALLER_COPY_METADATA = [

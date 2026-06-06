@@ -159,4 +159,5 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     assert "check_frozen_offline_llm_path" in source
     assert "check_frozen_runtime_probe" in source
     assert "--shell-ai-runtime-probe" in source
+    assert "tts.get('reason')" in source
     assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry
