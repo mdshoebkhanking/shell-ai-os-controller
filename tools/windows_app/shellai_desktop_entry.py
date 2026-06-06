@@ -30,6 +30,9 @@ for candidate in (ROOT, ROOT / "shell_ui", ROOT / "shell_web_ui"):
 
 LOG_DIR = ROOT / ".shell_runtime" / "logs"
 PORT_HINT = ROOT / ".shell_hub_port"
+KOKORO_MODEL_DIR = ROOT / "models" / "tts" / "kokoro"
+OFFLINE_LLM_MODEL_DIR = ROOT / "models" / "llm"
+LOCAL_STT_MODEL_DIR = ROOT / "models" / "stt" / "sherpa-onnx"
 
 os.environ.setdefault("PYTHONUTF8", "1")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -38,8 +41,20 @@ os.environ.setdefault("SHELL_V2_STREAM", "1")
 os.environ.setdefault("SHELL_IMAGE_LOCAL_FALLBACK", "1")
 os.environ.setdefault("SHELL_DESKTOP_BUNDLED", "1")
 os.environ.setdefault("SHELL_TTS_ENGINE", "fast")
+os.environ.setdefault("SHELL_VOICE_MODE", "auto")
 os.environ.setdefault("SHELL_V2_TIMEOUT_S", "12")
 os.environ.setdefault("SHELL_AI_PROVIDER_TIMEOUT_S", "18")
+os.environ.setdefault("SHELL_APP_ROOT", str(ROOT))
+os.environ.setdefault("SHELL_INSTALL_ROOT", str(ROOT))
+os.environ.setdefault("SHELL_RUNTIME_DIR", str(ROOT / ".shell_runtime"))
+os.environ.setdefault("SHELL_OFFLINE_TTS", "1")
+os.environ.setdefault("SHELL_NATURAL_TTS_ENGINE", "kokoro")
+os.environ.setdefault("SHELL_OFFLINE_TTS_ENGINE", "kokoro")
+os.environ.setdefault("SHELL_NATURAL_TTS_MODEL_DIR", str(KOKORO_MODEL_DIR))
+os.environ.setdefault("SHELL_OFFLINE_TTS_MODEL_DIR", str(KOKORO_MODEL_DIR))
+os.environ.setdefault("SHELL_OFFLINE_LLM_MODEL_DIR", str(OFFLINE_LLM_MODEL_DIR))
+os.environ.setdefault("SHELL_LOCAL_STT_ENABLED", "1")
+os.environ.setdefault("SHELL_LOCAL_STT_MODEL_DIR", str(LOCAL_STT_MODEL_DIR))
 
 
 _LOG_STREAMS: list[TextIO] = []
@@ -144,11 +159,33 @@ def _run_runtime_probe_mode() -> None:
         "root": str(ROOT),
         "executable": sys.executable,
         "frozen": bool(getattr(sys, "frozen", False)),
+        "env": {
+            "SHELL_APP_ROOT": os.environ.get("SHELL_APP_ROOT", ""),
+            "SHELL_INSTALL_ROOT": os.environ.get("SHELL_INSTALL_ROOT", ""),
+            "SHELL_NATURAL_TTS_ENGINE": os.environ.get("SHELL_NATURAL_TTS_ENGINE", ""),
+            "SHELL_NATURAL_TTS_MODEL_DIR": os.environ.get("SHELL_NATURAL_TTS_MODEL_DIR", ""),
+            "SHELL_OFFLINE_LLM_MODEL_DIR": os.environ.get("SHELL_OFFLINE_LLM_MODEL_DIR", ""),
+            "SHELL_LOCAL_STT_MODEL_DIR": os.environ.get("SHELL_LOCAL_STT_MODEL_DIR", ""),
+            "SHELL_VOICE_MODE": os.environ.get("SHELL_VOICE_MODE", ""),
+        },
+        "paths": {
+            "kokoroModelDirExists": KOKORO_MODEL_DIR.exists(),
+            "kokoroModelFiles": sorted(path.name for path in KOKORO_MODEL_DIR.glob("*") if path.is_file())[:12]
+            if KOKORO_MODEL_DIR.exists()
+            else [],
+            "offlineLlmDirExists": OFFLINE_LLM_MODEL_DIR.exists(),
+            "localSttDirExists": LOCAL_STT_MODEL_DIR.exists(),
+        },
     }
     exit_code = 0
     try:
+        import shell_offline_tts
         from shell_offline_tts import offline_tts_status
 
+        payload["offline_tts_module"] = {
+            "file": getattr(shell_offline_tts, "__file__", ""),
+            "projectRoot": str(getattr(shell_offline_tts, "PROJECT_ROOT", "")),
+        }
         tts_status = offline_tts_status()
         payload["offline_tts"] = tts_status
         if not tts_status.get("available"):

@@ -159,5 +159,28 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     assert "check_frozen_offline_llm_path" in source
     assert "check_frozen_runtime_probe" in source
     assert "--shell-ai-runtime-probe" in source
-    assert "tts.get('reason')" in source
+    assert "_candidate_failure_summary(tts)" in source
     assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry
+    assert "offline_tts_module" in desktop_entry
+    assert "kokoroModelFiles" in desktop_entry
+
+
+def test_windows_acceptance_summarizes_offline_tts_candidates():
+    from tools.windows_acceptance_probe import _candidate_failure_summary
+
+    summary = _candidate_failure_summary(
+        {
+            "reason": "Kokoro offline voice is not ready.",
+            "candidates": [
+                {
+                    "engine": "kokoro",
+                    "reason": "kokoro_onnx runtime is not installed in the app bundle.",
+                    "modelDir": r"C:\Users\me\AppData\Local\Programs\ShellAI\models\tts\kokoro",
+                }
+            ],
+        }
+    )
+
+    assert "Kokoro offline voice is not ready." in summary
+    assert "kokoro_onnx runtime is not installed" in summary
+    assert r"models\tts\kokoro" in summary

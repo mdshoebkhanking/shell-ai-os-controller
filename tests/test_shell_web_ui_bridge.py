@@ -176,6 +176,81 @@ def test_chat_offline_network_skips_provider_even_with_api_key(monkeypatch, tmp_
     assert result["reply"] == "Offline network answer."
 
 
+def test_voice_tts_offline_network_skips_gemini_and_queues_kokoro(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("GEMINI_API_KEY", "g" * 32)
+    monkeypatch.setenv("SHELL_VOICE_MODE", "auto")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: False)
+    monkeypatch.setattr(
+        host,
+        "offline_tts_status",
+        lambda: {"available": True, "engine": "kokoro", "label": "Kokoro offline voice", "reason": "ready"},
+    )
+    monkeypatch.setattr(
+        bridge,
+        "_queue_offline_tts",
+        lambda text: {"success": True, "queued": True, "source": "offline-tts", "engine": "offline", "text": text},
+    )
+
+    result = bridge._speak_text(["offline voice reply"])
+
+    assert result["success"] is True
+    assert result["source"] == "offline-tts"
+    assert result["engine"] == "kokoro"
+
+
+def test_voice_tts_online_gemini_key_uses_cloud_voice(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    class _Signal:
+        def connect(self, _callback):
+            return None
+
+    class _FakeSpeaker:
+        instances = []
+
+        def __init__(self, _bridge):
+            self.speech_error = _Signal()
+            self.speaking_finished = _Signal()
+            self.calls = []
+            self._engine = ""
+            self.__class__.instances.append(self)
+
+        def start(self):
+            self.calls.append(("start", ""))
+
+        def set_voice(self, voice):
+            self.calls.append(("voice", voice))
+
+        def speak(self, text, force=False):
+            self.calls.append(("speak", text, force))
+
+        def voice_identity_snapshot(self):
+            return {"gemini_voice": "Aoede"}
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+    monkeypatch.setenv("SHELL_VOICE_MODE", "auto")
+    monkeypatch.setattr(host, "TTSSpeaker", _FakeSpeaker)
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+
+    result = bridge._speak_text(["cloud voice reply"])
+
+    assert result["success"] is True
+    assert result["engine"] == "gemini"
+    assert _FakeSpeaker.instances[-1].calls[-1] == ("speak", "cloud voice reply", True)
+
+
 def test_offline_fallback_prompt_includes_memory_and_project_rag(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 

@@ -421,6 +421,7 @@ def test_backend_bridge_uses_gemini_voice_when_cloud_key_configured(monkeypatch)
     monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
     monkeypatch.setattr(host, "TTSSpeaker", FakeCloudSpeaker)
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
     monkeypatch.setattr(
         host,

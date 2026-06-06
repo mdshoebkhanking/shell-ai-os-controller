@@ -447,12 +447,29 @@ def check_frozen_runtime_probe() -> Check:
         "FAIL",
         (
             f"Frozen EXE runtime incomplete: tts_ready={tts_ready}"
-            f" ({tts.get('reason') if isinstance(tts, dict) else 'unknown'}), "
+            f" ({_candidate_failure_summary(tts) if isinstance(tts, dict) else 'unknown'}), "
             f"llm_ready={llm_ready} ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
             f"exit={proc.returncode}"
         ),
         details,
     )
+
+
+def _candidate_failure_summary(status: dict[str, Any]) -> str:
+    reason = str(status.get("reason") or "unknown")
+    candidates = status.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        return reason
+    parts: list[str] = []
+    for candidate in candidates[:3]:
+        if not isinstance(candidate, dict):
+            continue
+        engine = str(candidate.get("engine") or "candidate")
+        candidate_reason = str(candidate.get("reason") or "unknown")
+        model_dir = str(candidate.get("modelDir") or "")
+        suffix = f" at {model_dir}" if model_dir else ""
+        parts.append(f"{engine}: {candidate_reason}{suffix}")
+    return f"{reason}; " + "; ".join(parts) if parts else reason
 
 
 def check_windows_app_open_smoke(py: Path) -> Check:

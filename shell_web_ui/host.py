@@ -1839,10 +1839,22 @@ class ShellBackendBridge(QObject):
             "your_gemini_api_key",
         } and not low.startswith(("your_", "replace_"))
 
+    def _configured_gemini_voice_key(self) -> str:
+        direct = os.environ.get("GOOGLE_API_KEY", "") or os.environ.get("GEMINI_API_KEY", "")
+        if self._looks_configured_secret(direct):
+            return direct
+        try:
+            from shell_api_manager import get_configured_secret_value
+
+            value = str(get_configured_secret_value("GOOGLE_API_KEY", "GEMINI_API_KEY") or "")
+        except Exception:
+            value = ""
+        if self._looks_configured_secret(value):
+            return value
+        return ""
+
     def _gemini_voice_configured(self) -> bool:
-        return self._looks_configured_secret(os.environ.get("GOOGLE_API_KEY", "")) or self._looks_configured_secret(
-            os.environ.get("GEMINI_API_KEY", "")
-        )
+        return bool(self._configured_gemini_voice_key())
 
     def _cloud_voice_requested(self) -> bool:
         mode = os.environ.get("SHELL_VOICE_MODE", "").strip().lower()
@@ -1854,9 +1866,18 @@ class ShellBackendBridge(QObject):
         return mode == "auto" and self._gemini_voice_configured()
 
     def _cloud_tts_source(self) -> str:
-        if not self._cloud_voice_requested() or not self._gemini_voice_configured():
+        if not self._cloud_voice_requested():
+            return ""
+        gemini_key = self._configured_gemini_voice_key()
+        if not gemini_key:
             return ""
         if TTSSpeaker is None:
+            return ""
+        if not os.environ.get("GOOGLE_API_KEY"):
+            os.environ["GOOGLE_API_KEY"] = gemini_key
+        if not os.environ.get("GEMINI_API_KEY"):
+            os.environ["GEMINI_API_KEY"] = gemini_key
+        if not self._chat_provider_network_ready(["GOOGLE_API_KEY"]):
             return ""
         return "gemini-live"
 
@@ -1911,8 +1932,11 @@ class ShellBackendBridge(QObject):
         if speaker is None:
             return {"success": False, "available": False, "engine": "gemini", "message": "Gemini voice runtime is unavailable."}
         try:
-            if not os.environ.get("GOOGLE_API_KEY") and os.environ.get("GEMINI_API_KEY"):
-                os.environ["GOOGLE_API_KEY"] = os.environ.get("GEMINI_API_KEY", "")
+            gemini_key = self._configured_gemini_voice_key()
+            if gemini_key and not os.environ.get("GOOGLE_API_KEY"):
+                os.environ["GOOGLE_API_KEY"] = gemini_key
+            if gemini_key and not os.environ.get("GEMINI_API_KEY"):
+                os.environ["GEMINI_API_KEY"] = gemini_key
             speaker.set_voice(os.environ.get("VOICE_NAME") or os.environ.get("VOICE_PERSONA") or "Aoede")
             self._cloud_tts_fallback_text = text
             speaker.speak(text, force=True)

@@ -228,6 +228,12 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "--windowed" in builder
     assert "shell_hub" in builder
     assert "shell_local_stt" in builder
+    assert 'os.environ.setdefault("SHELL_VOICE_MODE", "auto")' in desktop_entry
+    assert 'os.environ.setdefault("SHELL_NATURAL_TTS_ENGINE", "kokoro")' in desktop_entry
+    assert 'os.environ.setdefault("SHELL_NATURAL_TTS_MODEL_DIR", str(KOKORO_MODEL_DIR))' in desktop_entry
+    assert 'os.environ.setdefault("SHELL_OFFLINE_LLM_MODEL_DIR", str(OFFLINE_LLM_MODEL_DIR))' in desktop_entry
+    assert 'os.environ.setdefault("SHELL_LOCAL_STT_ENABLED", "1")' in desktop_entry
+    assert 'os.environ.setdefault("SHELL_LOCAL_STT_MODEL_DIR", str(LOCAL_STT_MODEL_DIR))' in desktop_entry
     assert "sherpa_onnx" in builder
     assert "onnxruntime" in builder
     assert '"llama_cpp"' in builder
