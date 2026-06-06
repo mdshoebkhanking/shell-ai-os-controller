@@ -152,31 +152,51 @@ const CustomParticleSphere = ({
 }
 
 const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProps) => {
+  const cssOnlyOrb =
+    typeof document !== 'undefined' && document.documentElement.classList.contains('shell-windows-perf')
   const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0.22)) : 0
   const fallbackScale = 0.92 + fallbackLevel * 0.1
   const stageStyle = {
     '--shell-orb-level': fallbackLevel.toFixed(3),
     '--shell-orb-scale': fallbackScale.toFixed(3),
+    '--shell-orb-peak-scale': (fallbackScale + fallbackLevel * 0.055).toFixed(3),
+    '--shell-orb-particle-scale': (1 + fallbackLevel * 0.08).toFixed(3),
   } as CSSProperties
 
   return (
     <div
-      className={`shell-orb-stage ${active ? 'shell-orb-stage-active' : ''} ${speaking ? 'shell-orb-stage-speaking' : ''}`}
+      className={`shell-orb-stage ${active ? 'shell-orb-stage-active' : ''} ${speaking ? 'shell-orb-stage-speaking' : ''} ${cssOnlyOrb ? 'shell-orb-css-only' : ''}`}
       style={stageStyle}
       aria-hidden="true"
     >
-      <div className="shell-orb-fallback" />
-      <Canvas
-        className="shell-orb-canvas"
-        camera={{ position: [0, 0, 4.5] }}
-        dpr={[1, 1.2]}
-        performance={{ min: 0.5 }}
-        gl={{ antialias: false, powerPreference: 'default', alpha: true }}
-        resize={{ scroll: false, debounce: { scroll: 80, resize: 160 } }}
-      >
-        <ambientLight intensity={0.6} />
-        <CustomParticleSphere active={active} speaking={speaking} voiceLevel={voiceLevel} />
-      </Canvas>
+      <div className="shell-orb-fallback">
+        <span className="shell-orb-halo" />
+        <span className="shell-orb-ring shell-orb-ring-one" />
+        <span className="shell-orb-ring shell-orb-ring-two" />
+        <span className="shell-orb-ring shell-orb-ring-three" />
+        <span className="shell-orb-core" />
+        <span className="shell-orb-blob shell-orb-blob-one" />
+        <span className="shell-orb-blob shell-orb-blob-two" />
+        <span className="shell-orb-blob shell-orb-blob-three" />
+        <span className="shell-orb-blob shell-orb-blob-four" />
+        <span className="shell-orb-wisp shell-orb-wisp-one" />
+        <span className="shell-orb-wisp shell-orb-wisp-two" />
+        <span className="shell-orb-wisp shell-orb-wisp-three" />
+        <span className="shell-orb-particle-field" />
+      </div>
+      {!cssOnlyOrb && (
+        <Canvas
+          className="shell-orb-canvas"
+          camera={{ position: [0, 0, 4.5] }}
+          dpr={[1, 1.2]}
+          performance={{ min: 0.5 }}
+          gl={{ antialias: false, powerPreference: 'default', alpha: true }}
+          resize={{ scroll: false, debounce: { scroll: 80, resize: 160 } }}
+        >
+          <ambientLight intensity={0.6} />
+          <CustomParticleSphere active={active} speaking={speaking} voiceLevel={voiceLevel} />
+        </Canvas>
+      )}
     </div>
   )
 }

@@ -26,6 +26,18 @@ RAM_WARN_MB = 1400
 RAM_FAIL_MB = 2200
 
 
+def configure_probe_root(root: Path) -> None:
+    global ROOT, REPORT_PATH, SCREENS_DIR, APP_EXE, APP_ICON
+
+    ROOT = root.resolve()
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    REPORT_PATH = ROOT / ".shell_runtime" / "windows_acceptance_report.json"
+    SCREENS_DIR = ROOT / ".shell_runtime" / "windows_acceptance_screens"
+    APP_EXE = ROOT / "ShellAIApp" / "ShellAI.exe"
+    APP_ICON = ROOT / "shell-ai.ico"
+
+
 def env_flag(name: str) -> bool:
     return str(os.environ.get(name) or "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -340,6 +352,104 @@ print(json.dumps(shell_offline_tts.offline_tts_status(), sort_keys=True))
     )
 
 
+def check_frozen_offline_llm_path(py: Path) -> Check:
+    if not APP_EXE.exists():
+        return Check("frozen offline LLM path", False, "WARN", "Skipped because ShellAIApp/ShellAI.exe is not installed.")
+    code = rf"""
+import json
+import sys
+from pathlib import Path
+import shell_offline_llm
+
+sys.frozen = True
+sys.executable = {str(APP_EXE)!r}
+setattr(sys, "_MEIPASS", str(Path({str(APP_EXE)!r}).parent / "_internal"))
+shell_offline_llm.PROJECT_ROOT = Path(getattr(sys, "_MEIPASS"))
+print(json.dumps(shell_offline_llm.offline_llm_status(), sort_keys=True))
+"""
+    result = run_cmd([py, "-c", code], name="frozen offline LLM path", timeout=30)
+    if not result.ok:
+        return result
+    try:
+        payload = json.loads(result.message.splitlines()[-1])
+    except Exception:
+        return Check("frozen offline LLM path", False, "FAIL", result.message, result.details)
+    if payload.get("available"):
+        return Check(
+            "frozen offline LLM path",
+            True,
+            "PASS",
+            f"Offline LLM resolved from {payload.get('modelPath')}",
+            {**result.details, "status": payload},
+        )
+    return Check(
+        "frozen offline LLM path",
+        False,
+        "FAIL",
+        f"Frozen EXE layout cannot resolve offline LLM: {payload.get('reason')}",
+        {**result.details, "status": payload},
+    )
+
+
+def check_frozen_runtime_probe() -> Check:
+    if not platform.system().lower().startswith("win"):
+        return Check("frozen EXE runtime probe", False, "BLOCKED", "Must run on Windows.")
+    if not APP_EXE.exists():
+        return Check("frozen EXE runtime probe", False, "WARN", f"Skipped because {APP_EXE} is not installed.")
+    log_path = ROOT / ".shell_runtime" / "logs" / "runtime_probe.log"
+    previous_log_size = log_path.stat().st_size if log_path.exists() else 0
+    try:
+        proc = subprocess.run(
+            [str(APP_EXE), "--shell-ai-runtime-probe"],
+            cwd=str(ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return Check("frozen EXE runtime probe", False, "FAIL", "Runtime probe timed out.", {"log": str(log_path)})
+    except Exception as exc:
+        return Check("frozen EXE runtime probe", False, "FAIL", str(exc), {"log": str(log_path)})
+
+    details: dict[str, Any] = {
+        "returncode": proc.returncode,
+        "log": str(log_path),
+        "stdout": (proc.stdout or "")[-1000:],
+    }
+    marker = ""
+    if log_path.exists():
+        log_text = log_path.read_text(encoding="utf-8", errors="replace")
+        if previous_log_size and len(log_text) >= previous_log_size:
+            log_text = log_text[previous_log_size:]
+        for line in reversed(log_text.splitlines()):
+            if line.startswith("SHELL_RUNTIME_PROBE_JSON="):
+                marker = line.split("=", 1)[1]
+                break
+    if not marker:
+        return Check("frozen EXE runtime probe", False, "FAIL", "Runtime probe did not write a status payload.", details)
+    try:
+        payload = json.loads(marker)
+    except Exception as exc:
+        details["payload"] = marker[-1200:]
+        return Check("frozen EXE runtime probe", False, "FAIL", f"Runtime probe payload is invalid JSON: {exc}", details)
+    details["payload"] = payload
+    tts = payload.get("offline_tts") if isinstance(payload, dict) else {}
+    llm = payload.get("offline_llm") if isinstance(payload, dict) else {}
+    tts_ready = isinstance(tts, dict) and tts.get("available") is True
+    llm_ready = isinstance(llm, dict) and llm.get("available") is True
+    if proc.returncode == 0 and tts_ready and llm_ready:
+        return Check("frozen EXE runtime probe", True, "PASS", "Frozen EXE resolved Kokoro TTS and offline LLM.", details)
+    return Check(
+        "frozen EXE runtime probe",
+        False,
+        "FAIL",
+        f"Frozen EXE runtime incomplete: tts_ready={tts_ready}, llm_ready={llm_ready}, exit={proc.returncode}",
+        details,
+    )
+
+
 def check_windows_app_open_smoke(py: Path) -> Check:
     if not platform.system().lower().startswith("win"):
         return Check("Windows app-open smoke", False, "BLOCKED", "Must run on Windows.")
@@ -409,7 +519,7 @@ def check_bundled_exe_memory() -> Check:
 
     env = os.environ.copy()
     env.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
-    env.setdefault("SHELL_WEBENGINE_RENDERER", "auto")
+    env.setdefault("SHELL_WEBENGINE_RENDERER", "safe-software")
     started = time.perf_counter()
     proc = subprocess.Popen([str(APP_EXE)], cwd=str(ROOT), env=env)
     samples: list[dict[str, Any]] = []
@@ -591,10 +701,14 @@ def print_summary(report: dict[str, Any]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run Windows fresh-install and non-developer acceptance probes.")
+    parser.add_argument("--app-root", type=Path, help="Installed or staged Shell AI app root to validate.")
+    parser.add_argument("--runtime-only", action="store_true", help="Skip UI/hub launch probes and validate packaged runtime gates only.")
     parser.add_argument("--visible-ui-probe", action="store_true", help="Run the PyQt UI probe on the visible display.")
     parser.add_argument("--include-agents", action="store_true", help="Also drive all registered agents through chat UI.")
     parser.add_argument("--allow-non-windows", action="store_true", help="Developer-only: run probes even when the target OS is not Windows.")
     args = parser.parse_args(argv)
+    if args.app_root:
+        configure_probe_root(args.app_root)
 
     py = managed_python()
     checks: list[Check] = []
@@ -603,13 +717,17 @@ def main(argv: list[str] | None = None) -> int:
     is_windows = platform.system().lower().startswith("win")
     if is_windows or args.allow_non_windows:
         checks.append(check_installed_bundled_app_layout())
-        checks.append(check_hub(py))
-        checks.append(check_ui_probe(py, visible=args.visible_ui_probe))
+        if not args.runtime_only:
+            checks.append(check_hub(py))
+            checks.append(check_ui_probe(py, visible=args.visible_ui_probe))
         checks.append(check_voice_runtime(py))
         checks.append(check_offline_tts_status(py))
         checks.append(check_frozen_offline_tts_path(py))
-        checks.append(check_windows_app_open_smoke(py))
-        checks.append(check_bundled_exe_memory())
+        checks.append(check_frozen_offline_llm_path(py))
+        checks.append(check_frozen_runtime_probe())
+        if not args.runtime_only:
+            checks.append(check_windows_app_open_smoke(py))
+            checks.append(check_bundled_exe_memory())
         checks.append(check_local_tts_command(py))
         checks.append(check_hard_task_routes(py))
         if args.include_agents:

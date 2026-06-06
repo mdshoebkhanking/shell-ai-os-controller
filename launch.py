@@ -5,6 +5,9 @@ os.environ.setdefault('MKL_NUM_THREADS', '1')
 os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
 if sys.platform.startswith('win'):
     os.environ.setdefault('SHELL_WINDOWS_PERFORMANCE_MODE', 'balanced')
+    if getattr(sys, "frozen", False) or os.environ.get("SHELL_DESKTOP_BUNDLED") == "1":
+        os.environ.setdefault("SHELL_WEBENGINE_RENDERER", "safe-software")
+        os.environ.setdefault("QT_OPENGL", "software")
 
 def _default_webengine_flags():
     renderer = os.environ.get("SHELL_WEBENGINE_RENDERER", "balanced").strip().lower()
@@ -12,7 +15,7 @@ def _default_webengine_flags():
     if renderer in {"compat", "force-gpu"}:
         flags.append("--ignore-gpu-blocklist")
     elif renderer in {"software", "safe-software"}:
-        flags.extend(["--disable-gpu", "--disable-gpu-compositing"])
+        flags.extend(["--disable-gpu", "--disable-gpu-compositing", "--disable-zero-copy"])
     return " ".join(flags)
 
 

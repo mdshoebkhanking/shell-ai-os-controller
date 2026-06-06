@@ -146,3 +146,17 @@ def test_hard_task_probe_covers_pdf_and_fresh_image_routes():
     assert "cat ke photo generate karo" in source
     assert '"force_fresh": True' in source
     assert '"use_cache": False' in source
+
+
+def test_windows_acceptance_covers_packaged_runtime_probe():
+    source = (Path(__file__).resolve().parents[1] / "tools" / "windows_acceptance_probe.py").read_text(encoding="utf-8")
+    desktop_entry = (Path(__file__).resolve().parents[1] / "tools" / "windows_app" / "shellai_desktop_entry.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "--app-root" in source
+    assert "--runtime-only" in source
+    assert "check_frozen_offline_llm_path" in source
+    assert "check_frozen_runtime_probe" in source
+    assert "--shell-ai-runtime-probe" in source
+    assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry

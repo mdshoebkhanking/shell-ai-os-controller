@@ -2427,7 +2427,10 @@ class ShellWebUI(QMainWindow):
             self.view.load(QUrl(dev_url))
             return
         if WEB_DIST_INDEX.exists():
-            self.view.load(QUrl.fromLocalFile(str(WEB_DIST_INDEX)))
+            url = QUrl.fromLocalFile(str(WEB_DIST_INDEX))
+            if platform.system().lower().startswith("win") or os.environ.get("SHELL_DESKTOP_BUNDLED") == "1":
+                url.setQuery("shell_host=pyqt&shell_perf=windows")
+            self.view.load(url)
             return
         icon_path = _brand_icon_path()
         icon_src = icon_path.as_uri() if icon_path is not None else ""

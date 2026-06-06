@@ -1035,7 +1035,7 @@ function DashboardView({
         </div>
 
         <div
-          className={`w-[60vh] h-[60vh] max-w-full transition-all duration-1000 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-85 scale-90 grayscale'}`}
+          className={`w-[60vh] h-[60vh] max-w-full transition-opacity duration-300 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-92 scale-95'}`}
         >
           <Sphere
             active={isSystemActive}

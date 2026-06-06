@@ -230,6 +230,7 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "shell_local_stt" in builder
     assert "sherpa_onnx" in builder
     assert "onnxruntime" in builder
+    assert '"llama_cpp"' in builder
     assert "soundfile" in builder
     assert "aiohttp_cors" in builder
     assert "engineio.async_drivers.aiohttp" in builder
@@ -245,6 +246,9 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert '"offline_stt": offline_stt_report' in builder
     assert "copy_staged_model_assets_to_stage" in builder
     assert "Windows EXE build requires packaged Kokoro offline TTS assets" in builder
+    assert "Windows EXE build requires packaged offline LLM GGUF assets" in builder
+    assert "Bundled ShellAI.exe has no extractable icon resource" in builder
+    assert "Windows setup EXE has no extractable icon resource" in builder
     assert "No packaged GGUF offline LLM model assets detected" in builder
     assert "No packaged sherpa-onnx STT model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
@@ -278,6 +282,7 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "Inno Setup compiler not found" in builder
     assert "SolidCompression=no" in iss
     assert "--shell-ai-hub" in desktop_entry
+    assert "--shell-ai-runtime-probe" in desktop_entry
     assert "SHELL_HUB_URL" in desktop_entry
     assert "CREATE_NO_WINDOW" in desktop_entry
     assert "installer/bootstrap.py launch" not in desktop_entry
@@ -324,6 +329,12 @@ def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_
     fallback = build_windows_installer.offline_llm_stage_report()
     assert fallback["status"] == "fallback"
     assert fallback["model_file_count"] == 0
+    try:
+        build_windows_installer.require_packaged_offline_llm(fallback)
+    except RuntimeError as exc:
+        assert "Windows EXE build requires packaged offline LLM GGUF assets" in str(exc)
+    else:
+        raise AssertionError("Missing offline LLM assets must block Windows EXE builds.")
 
     falcon = llm_root / "falcon-h1-1.5b-deep"
     falcon.mkdir(parents=True)
@@ -339,6 +350,7 @@ def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_
     assert ready["runtime_downloads"] is False
     assert ready["engines"]["llama_cpp_python"]["ready"] is True
     assert ready["engines"]["llama_cpp_python"]["primary_ready"] is True
+    build_windows_installer.require_packaged_offline_llm(ready)
 
 
 def test_windows_installer_reports_legacy_qwen_offline_llm_assets(monkeypatch, tmp_path):
@@ -466,6 +478,7 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "models/stt/sherpa-onnx" in workflow
     assert "choco install innosetup" in workflow
     assert "--installer-engine inno" in workflow
+    assert "tools/windows_acceptance_probe.py --app-root .shell_runtime/windows_installer_staging/ShellAI --runtime-only" in workflow
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():
@@ -473,12 +486,14 @@ def test_shell_brand_logo_is_used_across_windows_app_surfaces():
     host = open("shell_web_ui/host.py", encoding="utf-8").read()
     index = open("shell_web_ui/index.html", encoding="utf-8").read()
     builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+    desktop_entry = open("tools/windows_app/shellai_desktop_entry.py", encoding="utf-8").read()
 
     for content in (launch, host, index, builder):
         assert "shell-logo.png" in content
     assert "setWindowIcon" in launch
     assert "setWindowIcon" in host
     assert 'rel="icon"' in index
+    assert "--shell-ai-runtime-probe" in desktop_entry
 
 
 def test_mac_launchers_use_bootstrap_directly():

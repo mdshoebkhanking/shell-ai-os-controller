@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import runpy
 import subprocess
@@ -137,6 +138,40 @@ def _run_hub_mode() -> None:
     _run_script("shell_hub.py")
 
 
+def _run_runtime_probe_mode() -> None:
+    _attach_windowed_log("runtime_probe.log")
+    payload: dict[str, object] = {
+        "root": str(ROOT),
+        "executable": sys.executable,
+        "frozen": bool(getattr(sys, "frozen", False)),
+    }
+    exit_code = 0
+    try:
+        from shell_offline_tts import offline_tts_status
+
+        tts_status = offline_tts_status()
+        payload["offline_tts"] = tts_status
+        if not tts_status.get("available"):
+            exit_code = 2
+    except Exception as exc:
+        payload["offline_tts"] = {"available": False, "reason": str(exc)}
+        exit_code = 2
+
+    try:
+        from shell_offline_llm import offline_llm_status
+
+        llm_status = offline_llm_status()
+        payload["offline_llm"] = llm_status
+        if not llm_status.get("available"):
+            exit_code = 2
+    except Exception as exc:
+        payload["offline_llm"] = {"available": False, "reason": str(exc)}
+        exit_code = 2
+
+    print("SHELL_RUNTIME_PROBE_JSON=" + json.dumps(payload, sort_keys=True, default=str), flush=True)
+    raise SystemExit(exit_code)
+
+
 def _run_app_mode() -> None:
     _attach_windowed_log("app.log")
     hub, port = _start_bundled_hub()
@@ -157,5 +192,7 @@ def _run_app_mode() -> None:
 
 if "--shell-ai-hub" in sys.argv[1:]:
     _run_hub_mode()
+elif "--shell-ai-runtime-probe" in sys.argv[1:]:
+    _run_runtime_probe_mode()
 else:
     _run_app_mode()

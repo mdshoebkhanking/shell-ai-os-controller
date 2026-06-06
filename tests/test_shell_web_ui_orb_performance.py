@@ -53,9 +53,27 @@ def test_sphere_uses_windows_friendly_canvas_runtime_settings():
 def test_dashboard_uses_original_orb_wrapper():
     dashboard = read_project_file("shell_web_ui/src/views/Dashboard.tsx")
 
-    assert "w-[60vh] h-[60vh] max-w-full transition-all duration-1000" in dashboard
-    assert "opacity-85 scale-90 grayscale" in dashboard
+    assert "w-[60vh] h-[60vh] max-w-full transition-opacity duration-300" in dashboard
+    assert "opacity-92 scale-95" in dashboard
+    assert "grayscale" not in dashboard
     assert "shell-sphere-shell" not in dashboard
+
+
+def test_sphere_uses_desktop_style_css_orb_for_packaged_windows():
+    sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
+    css = read_project_file("shell_web_ui/src/assets/main.css")
+    main = read_project_file("shell_web_ui/src/main.tsx")
+    host = read_project_file("shell_web_ui/host.py")
+
+    assert "shell-windows-perf" in main
+    assert "shell_perf=windows" in host
+    assert "const cssOnlyOrb" in sphere
+    assert "!cssOnlyOrb &&" in sphere
+    assert "shell-orb-blob shell-orb-blob-one" in sphere
+    assert "shell-orb-wisp shell-orb-wisp-one" in sphere
+    assert ".shell-orb-core" in css
+    assert ".shell-orb-ring" in css
+    assert ".shell-windows-perf .shell-liquid-panel" in css
 
 
 def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
@@ -70,6 +88,9 @@ def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
 def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
 
+    assert "const PRELOAD_TAB_GAP_MS = 180" in shell_ai
+    assert "new URLSearchParams(window.location.search).get('shell_perf')" in shell_ai
+    assert "if (shellPerfMode === 'windows') return true" in shell_ai
     assert "HISTORY_ACTIVE_POLL_MS = 900" in shell_ai
     assert "HISTORY_IDLE_POLL_MS = 2500" in shell_ai
     assert "HISTORY_BACKGROUND_POLL_MS = 6000" in shell_ai

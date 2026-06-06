@@ -101,6 +101,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
 PYINSTALLER_COLLECT_ALL = [
     "espeakng_loader",
     "kokoro_onnx",
+    "llama_cpp",
     "onnxruntime",
     "sherpa_onnx",
 ]
@@ -419,6 +420,17 @@ def offline_llm_stage_report() -> dict[str, object]:
     }
 
 
+def require_packaged_offline_llm(report: dict[str, object]) -> None:
+    engines = report.get("engines") if isinstance(report, dict) else {}
+    llama_cpp = engines.get("llama_cpp_python") if isinstance(engines, dict) else {}
+    if isinstance(llama_cpp, dict) and llama_cpp.get("ready") is True:
+        return
+    raise RuntimeError(
+        "Windows EXE build requires packaged offline LLM GGUF assets. "
+        "Run tools\\stage_falcon_offline_llm_assets.py --variant q4_k_m before building."
+    )
+
+
 def offline_stt_stage_report() -> dict[str, object]:
     model_root = STT_MODEL_STAGE / "sherpa-onnx-streaming-zipformer-en-20M-2023-02-17"
     expected = {
@@ -632,6 +644,7 @@ def build_windows_installer(
     offline_tts_report = offline_tts_stage_report()
     require_packaged_kokoro_tts(offline_tts_report)
     offline_llm_report = offline_llm_stage_report()
+    require_packaged_offline_llm(offline_llm_report)
     offline_stt_report = offline_stt_stage_report()
     if not dry_run:
         copy_web_ui_dist_to_stage()
@@ -676,6 +689,8 @@ def build_windows_installer(
         else:
             app_report = build_bundled_desktop_app(app_icon)
             app_report["status"] = "success"
+            if int(app_report.get("app_exe_icon_count") or 0) <= 0:
+                raise RuntimeError("Bundled ShellAI.exe has no extractable icon resource.")
             report["bundled_app"] = app_report
         if installer_engine == "nsis":
             if not makensis:
@@ -685,12 +700,15 @@ def build_windows_installer(
             if not iscc:
                 raise RuntimeError("Inno Setup compiler not found. Install Inno Setup 6 or set INNO_SETUP_COMPILER.")
             installer = compile_inno_setup(iscc, app_icon)
+        installer_icon_count = windows_icon_resource_count(installer)
+        if installer_icon_count <= 0:
+            raise RuntimeError("Windows setup EXE has no extractable icon resource.")
         report.update(
             {
                 "status": "success",
                 "path": str(installer),
                 "size_bytes": installer.stat().st_size,
-                "installer_icon_count": windows_icon_resource_count(installer),
+                "installer_icon_count": installer_icon_count,
             }
         )
     DIST_DIR.mkdir(parents=True, exist_ok=True)

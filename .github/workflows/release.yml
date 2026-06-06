@@ -206,6 +206,9 @@ jobs:
       - name: Build Windows setup EXE
         run: python tools/build_windows_installer.py --skip-release-check --installer-engine inno
 
+      - name: Run packaged Windows runtime acceptance
+        run: python tools/windows_acceptance_probe.py --app-root .shell_runtime/windows_installer_staging/ShellAI --runtime-only
+
       - name: Create Windows installer checksum
         shell: pwsh
         run: |
@@ -312,6 +315,9 @@ jobs:
 
       - name: Build Windows setup EXE
         run: python tools/build_windows_installer.py --skip-release-check --installer-engine inno
+
+      - name: Run packaged Windows runtime acceptance
+        run: python tools/windows_acceptance_probe.py --app-root .shell_runtime/windows_installer_staging/ShellAI --runtime-only
 
       - name: Create Windows installer checksum
         shell: pwsh

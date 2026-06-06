@@ -45,7 +45,7 @@ const shellTabViewLoaders = [
   loadPhoneView
 ]
 
-const PRELOAD_TAB_GAP_MS = 120
+const PRELOAD_TAB_GAP_MS = 180
 const HISTORY_ACTIVE_POLL_MS = 900
 const HISTORY_IDLE_POLL_MS = 2500
 const HISTORY_BACKGROUND_POLL_MS = 6000
@@ -59,6 +59,8 @@ const shouldPreloadShellTabs = () => {
   const preference = localStorage.getItem('shell_preload_tabs')
   if (preference === '1') return true
   if (preference === '0') return false
+  const shellPerfMode = new URLSearchParams(window.location.search).get('shell_perf')
+  if (shellPerfMode === 'windows') return true
   return !/Windows/i.test(navigator.userAgent)
 }
 

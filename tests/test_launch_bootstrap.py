@@ -16,6 +16,8 @@ def test_launcher_keeps_webengine_renderer_fallback_safe():
 
     assert "_default_webengine_flags" in source
     assert "--enable-unsafe-swiftshader" in source
+    assert '"SHELL_WEBENGINE_RENDERER", "safe-software"' in source
+    assert '"QT_OPENGL", "software"' in source
     assert "--disable-software-rasterizer-fallback-when-hardware-fails" not in source
     assert "renderer in {\"compat\", \"force-gpu\"}" in source
 

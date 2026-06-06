@@ -116,6 +116,40 @@ body {
   }
 }
 
+@keyframes shell-orb-glass-breathe {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(var(--shell-orb-scale));
+  }
+  50% {
+    transform: translate3d(0, -1px, 0) scale(var(--shell-orb-peak-scale));
+  }
+}
+
+@keyframes shell-orb-ring-drift {
+  to {
+    transform: translate3d(-50%, -50%, 0) rotate(360deg);
+  }
+}
+
+@keyframes shell-orb-wisp-orbit {
+  to {
+    transform: translate3d(-50%, -50%, 0) rotate(360deg) translateX(var(--shell-wisp-radius));
+  }
+}
+
+@keyframes shell-orb-particle-drift {
+  0%,
+  100% {
+    opacity: 0.62;
+    transform: translate3d(-50%, -50%, 0) rotate(-5deg) scale(1);
+  }
+  50% {
+    opacity: 0.92;
+    transform: translate3d(-50%, -50%, 0) rotate(5deg) scale(var(--shell-orb-particle-scale));
+  }
+}
+
 .animate-in {
   animation-name: shell-enter;
   animation-duration: 220ms;
@@ -204,6 +238,51 @@ body {
 
 .shell-logo-glass img {
   filter: drop-shadow(0 0 10px rgba(215, 225, 238, 0.30));
+}
+
+.shell-windows-perf .shell-ui-root,
+.shell-windows-perf .shell-app-frame,
+.shell-windows-perf .shell-page-surface {
+  background:
+    radial-gradient(circle at 48% 18%, rgba(215, 225, 238, 0.032), transparent 34%),
+    linear-gradient(135deg, var(--shell-bg-0), var(--shell-bg-1) 58%, var(--shell-bg-2));
+}
+
+.shell-windows-perf .shell-topbar,
+.shell-windows-perf .shell-tabs,
+.shell-windows-perf .shell-liquid-panel,
+.shell-windows-perf .shell-liquid-dock,
+.shell-windows-perf .shell-workstream-panel,
+.shell-windows-perf .shell-settings-header {
+  backdrop-filter: none !important;
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.30),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.shell-windows-perf .shell-tab-indicator {
+  transition:
+    transform 170ms var(--shell-liquid-ease),
+    width 170ms var(--shell-liquid-ease);
+}
+
+.shell-windows-perf .shell-tab,
+.shell-windows-perf .shell-control-button,
+.shell-windows-perf .shell-settings-input,
+.shell-windows-perf .shell-settings-card {
+  transition-duration: 120ms !important;
+}
+
+.shell-windows-perf .shell-control-button:hover,
+.shell-windows-perf .shell-tab:hover {
+  transform: translate3d(0, 0, 0);
+}
+
+.shell-windows-perf .shell-workstream-panel,
+.shell-windows-perf .shell-workstream-panel::after,
+.shell-windows-perf .shell-shimmer {
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
 }
 
 .shell-tabs {
@@ -420,41 +499,204 @@ body {
 .shell-orb-canvas {
   position: absolute !important;
   inset: 0;
-  z-index: 2;
+  z-index: 1;
   width: 100% !important;
   height: 100% !important;
   pointer-events: none;
+  opacity: 0.76;
 }
 
 .shell-orb-fallback {
   position: absolute;
-  inset: 14%;
-  z-index: 1;
+  inset: 8%;
+  z-index: 2;
   border-radius: 999px;
-  opacity: 0.86;
+  opacity: 0.98;
   transform: translate3d(0, 0, 0) scale(var(--shell-orb-scale));
   transition:
     transform 160ms var(--shell-liquid-ease),
-    opacity 180ms var(--shell-liquid-ease),
-    filter 180ms var(--shell-liquid-ease);
+    opacity 180ms var(--shell-liquid-ease);
   background:
-    radial-gradient(circle at 50% 48%, rgba(248, 251, 255, 0.96) 0 3%, rgba(51, 219, 18, 0.90) 4% 9%, rgba(0, 240, 255, 0.78) 10% 21%, rgba(0, 104, 255, 0.34) 22% 42%, transparent 64%),
-    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.32), transparent 58%);
+    radial-gradient(circle at 47% 38%, rgba(255, 255, 255, 0.90) 0 2%, rgba(255, 255, 255, 0.22) 3% 7%, transparent 15%),
+    radial-gradient(circle at 48% 50%, rgba(255, 255, 255, 0.88) 0 3%, rgba(126, 211, 186, 0.90) 4% 10%, rgba(0, 240, 255, 0.72) 11% 23%, rgba(134, 168, 231, 0.28) 24% 44%, transparent 64%),
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.28), transparent 60%);
   box-shadow:
-    0 0 22px rgba(0, 240, 255, 0.34),
-    0 0 64px rgba(51, 219, 18, 0.10),
+    0 0 34px rgba(0, 240, 255, 0.34),
+    0 0 98px rgba(126, 211, 186, 0.16),
     inset 0 0 28px rgba(248, 251, 255, 0.20);
   filter: saturate(1.08);
+  contain: paint;
+  overflow: visible;
+  animation: shell-orb-glass-breathe 3.4s var(--shell-liquid-ease) infinite;
+}
+
+.shell-orb-fallback span {
+  position: absolute;
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+.shell-orb-halo {
+  inset: -22%;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.18), transparent 58%),
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.18), transparent 68%);
+  filter: blur(1px);
+}
+
+.shell-orb-ring {
+  left: 50%;
+  top: 50%;
+  width: 82%;
+  height: 82%;
+  border: 1px solid rgba(215, 225, 238, 0.28);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.12);
+  transform: translate3d(-50%, -50%, 0) rotate(0deg);
+  animation: shell-orb-ring-drift 10s linear infinite;
+}
+
+.shell-orb-ring-one {
+  height: 33%;
+  border-color: rgba(126, 211, 186, 0.35);
+  animation-duration: 12s;
+}
+
+.shell-orb-ring-two {
+  width: 104%;
+  height: 26%;
+  border-color: rgba(155, 212, 238, 0.22);
+  animation-duration: 16s;
+  animation-direction: reverse;
+}
+
+.shell-orb-ring-three {
+  width: 118%;
+  height: 20%;
+  border-color: rgba(244, 247, 251, 0.18);
+  animation-duration: 22s;
+}
+
+.shell-orb-core {
+  inset: 31%;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.12) 22%, transparent 36%),
+    radial-gradient(circle at 58% 62%, rgba(0, 240, 255, 0.84), rgba(126, 211, 186, 0.74) 36%, rgba(134, 168, 231, 0.42) 66%, transparent 72%);
+  box-shadow:
+    0 0 28px rgba(0, 240, 255, 0.46),
+    inset 0 1px 12px rgba(255, 255, 255, 0.36),
+    inset 0 -10px 22px rgba(5, 6, 9, 0.28);
+}
+
+.shell-orb-blob {
+  width: 26%;
+  height: 26%;
+  left: 50%;
+  top: 50%;
+  opacity: 0.56;
+  mix-blend-mode: screen;
+  filter: blur(0.5px);
+}
+
+.shell-orb-blob-one {
+  background: radial-gradient(circle, rgba(0, 240, 255, 0.72), transparent 68%);
+  transform: translate3d(-78%, -62%, 0);
+}
+
+.shell-orb-blob-two {
+  width: 30%;
+  height: 30%;
+  background: radial-gradient(circle, rgba(126, 211, 186, 0.66), transparent 70%);
+  transform: translate3d(-18%, -16%, 0);
+}
+
+.shell-orb-blob-three {
+  width: 24%;
+  height: 24%;
+  background: radial-gradient(circle, rgba(185, 201, 238, 0.62), transparent 70%);
+  transform: translate3d(16%, -72%, 0);
+}
+
+.shell-orb-blob-four {
+  width: 22%;
+  height: 22%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.42), transparent 68%);
+  transform: translate3d(-52%, 8%, 0);
+}
+
+.shell-orb-wisp {
+  --shell-wisp-radius: 44%;
+  left: 50%;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  background: rgba(248, 251, 255, 0.86);
+  box-shadow:
+    0 0 12px rgba(248, 251, 255, 0.62),
+    0 0 24px rgba(0, 240, 255, 0.28);
+  transform: translate3d(-50%, -50%, 0) rotate(0deg) translateX(var(--shell-wisp-radius));
+  animation: shell-orb-wisp-orbit 8s linear infinite;
+}
+
+.shell-orb-wisp-two {
+  --shell-wisp-radius: 53%;
+  width: 5px;
+  height: 5px;
+  animation-duration: 11s;
+  animation-direction: reverse;
+}
+
+.shell-orb-wisp-three {
+  --shell-wisp-radius: 38%;
+  width: 4px;
+  height: 4px;
+  animation-duration: 14s;
+}
+
+.shell-orb-particle-field {
+  left: 50%;
+  top: 50%;
+  width: 88%;
+  height: 88%;
+  opacity: 0.78;
+  transform: translate3d(-50%, -50%, 0);
+  background-image:
+    radial-gradient(circle, rgba(255, 255, 255, 0.84) 0 1px, transparent 1.7px),
+    radial-gradient(circle, rgba(126, 211, 186, 0.75) 0 1px, transparent 1.8px),
+    radial-gradient(circle, rgba(0, 240, 255, 0.72) 0 1.1px, transparent 1.9px);
+  background-position:
+    12% 18%, 29% 11%, 45% 16%, 61% 12%, 79% 22%,
+    18% 38%, 34% 31%, 52% 36%, 69% 34%, 84% 42%,
+    12% 58%, 28% 67%, 47% 61%, 65% 70%, 81% 60%;
+  background-size: 37px 37px, 43px 43px, 31px 31px;
+  box-shadow: inset 0 0 0 1px rgba(244, 247, 251, 0.09);
+  animation: shell-orb-particle-drift 4.8s var(--shell-liquid-ease) infinite;
 }
 
 .shell-orb-stage:not(.shell-orb-stage-active) .shell-orb-fallback {
-  opacity: 0.56;
-  filter: saturate(0.75) grayscale(0.2);
+  opacity: 0.86;
 }
 
 .shell-orb-stage-speaking .shell-orb-fallback {
-  opacity: 0.96;
-  filter: saturate(1.2);
+  opacity: 1;
+  filter: saturate(1.24);
+}
+
+.shell-orb-stage-speaking .shell-orb-halo {
+  background:
+    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.30), transparent 58%),
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.28), transparent 68%);
+}
+
+.shell-orb-stage-speaking .shell-orb-blob {
+  opacity: 0.74;
+}
+
+.shell-orb-css-only .shell-orb-fallback {
+  inset: 6%;
+}
+
+.shell-orb-css-only .shell-orb-canvas {
+  display: none !important;
 }
 
 .shell-liquid-dock {
