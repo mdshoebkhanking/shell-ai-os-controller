@@ -122,6 +122,22 @@ def test_creator_identity_reply_is_deterministic_for_chat_and_voice(monkeypatch,
     assert [payload["voice"] for channel, payload in emitted if channel == "chat-updated"][1] is True
 
 
+def test_who_are_you_identity_does_not_return_creator(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "")
+
+    result = bridge._chat_message(["tum kon ho?", {"source": "text"}])
+
+    assert result["reply"] == "Main Shell AI hoon, tumhara desktop OS controller aur assistant."
+    assert "mdshoebking" not in result["reply"]
+
+
 def test_deep_research_chat_emits_activity_events(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 

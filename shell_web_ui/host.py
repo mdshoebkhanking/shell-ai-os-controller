@@ -759,73 +759,77 @@ class ShellBackendBridge(QObject):
             if identity_reply:
                 reply = identity_reply
             else:
-                recall_reply = self._conversation_recall_reply(text, previous_messages)
-                if recall_reply:
-                    reply = recall_reply
-                elif self._is_telemetry_chart_prompt(text, entry=entry):
-                    reply = self._chart_summary_reply(text)
+                self_identity_reply = self._self_identity_reply(text)
+                if self_identity_reply:
+                    reply = self_identity_reply
                 else:
-                    from shell_nl_router import route_natural_command
-
-                    route = route_natural_command(text)
-                    if not (route and route.get("tool")):
-                        image_prompt = self._extract_image_generation_prompt(text)
-                        if image_prompt:
-                            route = self._image_generation_route(image_prompt)
-                    if route and route.get("tool"):
-                        if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
-                            image_prompt = (
-                                self._clean_image_prompt(self._route_image_prompt(route))
-                                or self._extract_image_generation_prompt(text)
-                                or text
-                            )
-                            route_args = dict(route.get("args") or {})
-                            route_args["description"] = image_prompt
-                            route = {**route, "args": route_args}
-                            image_generation_started = True
-                            self.emit_event(
-                                "image-gen",
-                                {
-                                    "prompt": image_prompt,
-                                    "loading": True,
-                                    "url": "",
-                                    "source": source,
-                                    "entry": entry,
-                                },
-                            )
-                        activity_descriptor = self._activity_descriptor(
-                            text,
-                            route,
-                            image_prompt=image_prompt,
-                        )
-                        self._emit_activity(
-                            activity_descriptor,
-                            status="running",
-                            progress=34 if image_generation_started else 22,
-                            source=source,
-                            entry=entry,
-                        )
-                        result = self._execute_routed_tool(route)
-                        self._emit_activity(
-                            activity_descriptor,
-                            status="running",
-                            message="FORMATTING RESULT",
-                            progress=82,
-                            source=source,
-                            entry=entry,
-                        )
-                        reply = self._format_chat_result(route, result)
-                        tool_success = self._activity_result_success(route, result, reply)
-                        self._emit_activity(
-                            activity_descriptor,
-                            status="done" if tool_success else "error",
-                            message="TASK COMPLETE" if tool_success else "TASK FAILED",
-                            progress=100,
-                            source=source,
-                            entry=entry,
-                        )
+                    recall_reply = self._conversation_recall_reply(text, previous_messages)
+                    if recall_reply:
+                        reply = recall_reply
+                    elif self._is_telemetry_chart_prompt(text, entry=entry):
+                        reply = self._chart_summary_reply(text)
                     else:
-                        reply = self._brain_chat_fallback(processing_text, previous_messages=previous_messages)
+                        from shell_nl_router import route_natural_command
+
+                        route = route_natural_command(text)
+                        if not (route and route.get("tool")):
+                            image_prompt = self._extract_image_generation_prompt(text)
+                            if image_prompt:
+                                route = self._image_generation_route(image_prompt)
+                        if route and route.get("tool"):
+                            if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
+                                image_prompt = (
+                                    self._clean_image_prompt(self._route_image_prompt(route))
+                                    or self._extract_image_generation_prompt(text)
+                                    or text
+                                )
+                                route_args = dict(route.get("args") or {})
+                                route_args["description"] = image_prompt
+                                route = {**route, "args": route_args}
+                                image_generation_started = True
+                                self.emit_event(
+                                    "image-gen",
+                                    {
+                                        "prompt": image_prompt,
+                                        "loading": True,
+                                        "url": "",
+                                        "source": source,
+                                        "entry": entry,
+                                    },
+                                )
+                            activity_descriptor = self._activity_descriptor(
+                                text,
+                                route,
+                                image_prompt=image_prompt,
+                            )
+                            self._emit_activity(
+                                activity_descriptor,
+                                status="running",
+                                progress=34 if image_generation_started else 22,
+                                source=source,
+                                entry=entry,
+                            )
+                            result = self._execute_routed_tool(route)
+                            self._emit_activity(
+                                activity_descriptor,
+                                status="running",
+                                message="FORMATTING RESULT",
+                                progress=82,
+                                source=source,
+                                entry=entry,
+                            )
+                            reply = self._format_chat_result(route, result)
+                            tool_success = self._activity_result_success(route, result, reply)
+                            self._emit_activity(
+                                activity_descriptor,
+                                status="done" if tool_success else "error",
+                                message="TASK COMPLETE" if tool_success else "TASK FAILED",
+                                progress=100,
+                                source=source,
+                                entry=entry,
+                            )
+                        else:
+                            reply = self._brain_chat_fallback(processing_text, previous_messages=previous_messages)
             if entry == "chart":
                 reply = self._compact_chat_reply(reply, limit=360)
         except Exception as exc:
@@ -1197,13 +1201,27 @@ class ShellBackendBridge(QObject):
         if not normalized:
             return ""
 
+        who_intent = bool(re.search(r"\b(who\s+are\s+you|tum\s+kaun|tum\s+kon|tu\s+kaun|tu\s+kon|aap\s+kaun|aap\s+kon|kaun\s+ho|kon\s+ho)\b", normalized))
+        explicit_creator_words = bool(
+            re.search(
+                r"\b("
+                r"kis\s*ne|kisne|creator|maker|founder|owner|developer|made|created|built|developed|designed|"
+                r"banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|banane\s*wala|banane\s*waala|"
+                r"banane\s*wale|create\s*kiya|develop\s*kiya"
+                r")\b",
+                normalized,
+            )
+        )
+        if who_intent and not explicit_creator_words:
+            return ""
+
         subject_intent = bool(
             re.search(r"\b(shell|shell ai|you|your|tum|tumhe|tumko|tujhe|tume|aap|aapko|apko|tere|tera|tu)\b", normalized)
         )
         creator_intent = bool(
             re.search(
                 r"\b("
-                r"kis\s*ne|kisne|kaun|kon|who|whom|which company|company|creator|maker|founder|owner|developer|"
+                r"kis\s*ne|kisne|which company|company|creator|maker|founder|owner|developer|"
                 r"made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|"
                 r"banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya"
                 r")\b",
@@ -1218,6 +1236,15 @@ class ShellBackendBridge(QObject):
             return ""
 
         return "Mujhe mdshoebking ne banaya hai."
+
+    @staticmethod
+    def _self_identity_reply(text: str) -> str:
+        normalized = " ".join(str(text or "").lower().split())
+        if not normalized:
+            return ""
+        if not re.search(r"\b(who\s+are\s+you|tum\s+kaun|tum\s+kon|tu\s+kaun|tu\s+kon|aap\s+kaun|aap\s+kon|kaun\s+ho|kon\s+ho)\b", normalized):
+            return ""
+        return "Main Shell AI hoon, tumhara desktop OS controller aur assistant."
 
     def _history_context_snippet(self, previous_messages: list[Any], *, limit: int = 6) -> str:
         rows: list[str] = []
@@ -1315,7 +1342,7 @@ class ShellBackendBridge(QObject):
             if language == "hindi":
                 return "Network protocol rules का set होता है जिससे devices data exchange करते हैं, जैसे TCP/IP, HTTP और DNS."
             return "Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS."
-        if "who are you" in query or "tum kaun" in query:
+        if re.search(r"\b(who\s+are\s+you|tum\s+kaun|tum\s+kon|tu\s+kaun|tu\s+kon|aap\s+kaun|aap\s+kon|kaun\s+ho|kon\s+ho)\b", query):
             if language == "english":
                 return "I am Shell AI, your desktop OS controller and assistant."
             if language == "hindi":

@@ -35,6 +35,8 @@ KOKORO_DEFAULT_VOICES = {
     "hinglish": "af_heart",
     "hindi": "hf_alpha",
 }
+KOKORO_REALISTIC_FEMALE_VOICE = "af_heart"
+KOKORO_HINDI_NATIVE_VOICE = "hf_alpha"
 HINGLISH_ROUTING_HINTS = frozenset(
     {
         "aap",
@@ -174,7 +176,7 @@ def _kokoro_voice_for(language: str) -> str:
 
 def _kokoro_routing_mode() -> str:
     mode = os.environ.get("SHELL_HINGLISH_TTS_ROUTING", "balanced").strip().lower()
-    return mode if mode in {"balanced", "aggressive", "english"} else "balanced"
+    return mode if mode in {"balanced", "aggressive", "english", "native-hindi"} else "balanced"
 
 
 def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> dict[str, Any]:
@@ -186,6 +188,10 @@ def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> d
         "routing": _kokoro_routing_mode(),
         "activeVoice": _kokoro_voice_for(language),
         "voices": {lang: _kokoro_voice_for(lang) for lang in SUPPORTED_SHELL_LANGUAGE_ORDER},
+        "preferredVoiceProfile": "realistic-female",
+        "preferredFemaleVoice": KOKORO_REALISTIC_FEMALE_VOICE,
+        "nativeHindiVoice": KOKORO_HINDI_NATIVE_VOICE,
+        "hinglishStrategy": "Roman Hinglish uses af_heart for a more natural female voice; native Hindi uses hf_alpha for Hindi phonemization.",
     }
     if model:
         payload["modelPath"] = str(model)
@@ -425,7 +431,7 @@ def _classify_hinglish_clause(text: str) -> str:
     if _contains_devanagari(text):
         return "hindi"
     score, word_count = _roman_hindi_score(text)
-    if score >= 2 or (score > 0 and score == word_count):
+    if _kokoro_routing_mode() == "native-hindi" and (score >= 2 or (score > 0 and score == word_count)):
         return "hindi"
     if _kokoro_routing_mode() == "aggressive" and score > 0:
         return "hindi"

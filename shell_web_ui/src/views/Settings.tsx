@@ -45,6 +45,10 @@ type OfflineTtsStatus = {
   locale?: string
   modelDir?: string
   reason?: string
+  activeVoice?: string
+  preferredFemaleVoice?: string
+  preferredVoiceProfile?: string
+  hinglishStrategy?: string
   candidates?: Array<{
     engine?: string
     available?: boolean
@@ -404,7 +408,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
 
     setOfflineTtsStatus(status)
     if (status.available) {
-      setOfflineTtsMessage(`${status.label || status.engine || 'Offline TTS'} ready.`)
+      const voiceLabel = status.activeVoice ? ` Voice: ${status.activeVoice}.` : ''
+      setOfflineTtsMessage(`${status.label || status.engine || 'Offline TTS'} ready.${voiceLabel}`)
       return
     }
     setOfflineTtsMessage(status.reason || 'No packaged offline TTS model is ready; Shell will use local OS voice fallback.')
@@ -630,6 +635,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const offlineTtsReady = Boolean(offlineTtsStatus?.available)
   const offlineTtsBadge = offlineTtsBusy ? 'CHECKING' : offlineTtsReady ? 'READY' : 'FALLBACK'
   const offlineTtsEngine = String(offlineTtsStatus?.engine || 'fallback').toUpperCase()
+  const offlineTtsVoice = String(
+    offlineTtsStatus?.activeVoice || offlineTtsStatus?.preferredFemaleVoice || ''
+  ).trim()
   const offlineTtsCandidateSummary = (offlineTtsStatus?.candidates || [])
     .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
     .filter(Boolean)
@@ -952,6 +960,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                           {offlineTtsEngine}
                           {offlineTtsStatus?.language ? ` / ${String(offlineTtsStatus.language).toUpperCase()}` : ''}
                           {offlineTtsStatus?.locale ? ` / ${String(offlineTtsStatus.locale).toUpperCase()}` : ''}
+                          {offlineTtsVoice ? ` / ${offlineTtsVoice}` : ''}
                         </span>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">

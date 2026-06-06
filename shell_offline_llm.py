@@ -301,6 +301,13 @@ def _identity_reply(prompt: str) -> str:
     normalized = str(prompt or "").strip().lower()
     if not normalized:
         return ""
+    who_question = re.search(r"(who are you|tum kaun|tu kaun|aap kaun|kaun ho|kon ho|kaun hai|kon hai|who r u)", normalized)
+    creator_phrase = re.search(
+        r"(kisne|kis ne|kisine|kisne banaya|kis ne banaya|who made|who created|who built|who developed|creator|founder|developer|owner)",
+        normalized,
+    )
+    if who_question and not creator_phrase:
+        return "Main Shell AI hoon."
     creator_question = re.search(
         r"(kisne|kis ne|kisine|banaya|banai|made|created|built|developed|developer|creator|owner|founder)",
         normalized,
@@ -308,8 +315,6 @@ def _identity_reply(prompt: str) -> str:
     shell_subject = re.search(r"(shell|tum|tu|aap|you|tera|ter|iska|is app)", normalized)
     if creator_question and shell_subject:
         return "Mujhe mdshoebking ne banaya hai."
-    if re.search(r"(who are you|tum kaun|tu kaun|aap kaun|kaun ho|kon ho|who r u)", normalized):
-        return "Main Shell AI hoon."
     return ""
 
 

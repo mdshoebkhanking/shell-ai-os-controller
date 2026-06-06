@@ -90,6 +90,8 @@ def test_offline_tts_status_reports_kokoro_metadata(monkeypatch, tmp_path):
     assert status["activeVoice"] == "hf_alpha"
     assert status["voices"]["english"] == "af_heart"
     assert status["voices"]["hindi"] == "hf_alpha"
+    assert status["preferredVoiceProfile"] == "realistic-female"
+    assert status["nativeHindiVoice"] == "hf_alpha"
 
 
 def test_kokoro_segments_route_hinglish_clauses(monkeypatch):
@@ -100,11 +102,38 @@ def test_kokoro_segments_route_hinglish_clauses(monkeypatch):
 
     segments = shell_offline_tts._prepare_kokoro_segments("Open Chrome now. bhai kaise ho?")
 
+    assert [segment.language for segment in segments] == ["english"]
+    assert [segment.locale for segment in segments] == ["en-us"]
+    assert [segment.voice for segment in segments] == ["af_heart"]
+    assert segments[0].text == "Open Chrome now. bhai kaise ho?"
+
+
+def test_kokoro_native_hindi_routing_is_opt_in(monkeypatch):
+    import shell_offline_tts
+
+    monkeypatch.setenv("SHELL_LANGUAGE", "hinglish")
+    monkeypatch.setenv("SHELL_HINGLISH_TTS_ROUTING", "native-hindi")
+    monkeypatch.delenv("SHELL_NATURAL_TTS_VOICE", raising=False)
+
+    segments = shell_offline_tts._prepare_kokoro_segments("Open Chrome now. bhai kaise ho?")
+
     assert [segment.language for segment in segments] == ["english", "hindi"]
     assert [segment.locale for segment in segments] == ["en-us", "hi"]
     assert [segment.voice for segment in segments] == ["af_heart", "hf_alpha"]
-    assert segments[0].text == "Open Chrome now."
-    assert segments[1].text == "bhai kaise ho?"
+
+
+def test_kokoro_devanagari_routes_to_native_hindi_voice(monkeypatch):
+    import shell_offline_tts
+
+    monkeypatch.setenv("SHELL_LANGUAGE", "hinglish")
+    monkeypatch.delenv("SHELL_HINGLISH_TTS_ROUTING", raising=False)
+    monkeypatch.delenv("SHELL_NATURAL_TTS_VOICE", raising=False)
+
+    segments = shell_offline_tts._prepare_kokoro_segments("Namaste. आप कैसे हैं?")
+
+    assert [segment.language for segment in segments] == ["english", "hindi"]
+    assert [segment.locale for segment in segments] == ["en-us", "hi"]
+    assert [segment.voice for segment in segments] == ["af_heart", "hf_alpha"]
 
 
 def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
@@ -145,10 +174,10 @@ def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
     result = shell_offline_tts._speak_kokoro("Open Chrome now. bhai kaise ho?")
 
     assert result["success"] is True
-    assert [call["lang"] for call in calls] == ["en-us", "hi"]
-    assert [call["voice"] for call in calls] == ["af_heart", "hf_alpha"]
-    assert result["voices"] == ["af_heart", "hf_alpha"]
-    assert result["segments"][1]["language"] == "hindi"
+    assert [call["lang"] for call in calls] == ["en-us"]
+    assert [call["voice"] for call in calls] == ["af_heart"]
+    assert result["voices"] == ["af_heart"]
+    assert result["segments"][0]["language"] == "english"
     assert captured_audio["sample_rate"] == 24000
 
 

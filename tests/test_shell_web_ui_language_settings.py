@@ -39,6 +39,8 @@ def test_language_setting_reaches_browser_bridge_and_gemini_live_prompt():
     assert "case 'get-settings'" in bridge
     assert "case 'set-settings'" in bridge
     assert "languageReply" in bridge
+    assert "selfIdentityReply" in bridge
+    assert "tum\\s+kon" in bridge
     assert "utterance.lang = shellSpeechLocale()" in bridge
     assert "Current Shell language setting" in voice
     assert "shellLanguageInstruction" in voice
@@ -58,6 +60,8 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     assert "refreshOfflineLlmStatus" in settings
     assert "OFFLINE TTS" in settings
     assert "OFFLINE BRAIN" in settings
+    assert "activeVoice" in settings
+    assert "offlineTtsVoice" in settings
     assert "offlineTtsCandidateSummary" in settings
     assert "offlineLlmCandidateSummary" in settings
     assert "Browser speech fallback" in bridge

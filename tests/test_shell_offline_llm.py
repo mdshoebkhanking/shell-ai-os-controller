@@ -121,3 +121,26 @@ def test_generate_offline_reply_short_circuits_shell_identity(monkeypatch, tmp_p
     assert result.reply == "Mujhe mdshoebking ne banaya hai."
     assert result.metadata
     assert result.metadata["identityGuard"] is True
+
+
+def test_generate_offline_reply_who_are_you_does_not_return_creator(monkeypatch, tmp_path):
+    import shell_offline_llm
+
+    shell_offline_llm._reset_cached_model_for_tests()
+    model_dir = tmp_path / "models" / "llm" / "falcon-h1-1.5b-deep"
+    model_dir.mkdir(parents=True)
+    (model_dir / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").write_bytes(b"gguf-probe")
+    monkeypatch.setattr(shell_offline_llm, "PROJECT_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    class FakeLlama:
+        def __init__(self, **kwargs):
+            raise AssertionError("identity guard should not load the model")
+
+    monkeypatch.setattr(shell_offline_llm, "_load_llama_class", lambda: (FakeLlama, ""))
+
+    result = shell_offline_llm.generate_offline_reply("tum kon ho?")
+
+    assert result.success is True
+    assert result.reply == "Main Shell AI hoon."
+    assert "mdshoebking" not in result.reply

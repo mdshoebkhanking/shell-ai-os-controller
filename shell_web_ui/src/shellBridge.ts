@@ -78,7 +78,7 @@ const writeFallbackGallery = (images: unknown[]) => {
   } catch {}
 }
 
-const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' | 'pythonMemory' | 'networkProtocol' | 'filesAttached' | 'hello', values: Record<string, string> = {}) => {
+const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' | 'pythonMemory' | 'networkProtocol' | 'filesAttached' | 'hello' | 'identity', values: Record<string, string> = {}) => {
   const language = readShellLanguage()
   const replies = {
     hinglish: {
@@ -89,7 +89,8 @@ const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' 
       pythonMemory: 'Python memory heap mein objects rakhta hai; reference counting aur garbage collector unused objects clean karte hain.',
       networkProtocol: 'Network protocol rules ka set hota hai jisse devices data exchange karte hain, jaise TCP/IP, HTTP, DNS.',
       filesAttached: `Files attached hain: ${values.files || ''}. Backend connected hoga to main inka content read karke answer de paungi.`,
-      hello: 'Haan bhai, bolo. Main sun rahi hoon.'
+      hello: 'Haan bhai, bolo. Main sun rahi hoon.',
+      identity: 'Main Shell AI hoon, tumhara desktop OS controller aur assistant.'
     },
     english: {
       backendOffline: 'The Shell backend bridge is not connected yet. Once it starts, I can answer fully and run OS actions.',
@@ -99,7 +100,8 @@ const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' 
       pythonMemory: 'Python stores objects on the heap; reference counting and the garbage collector clean up unused objects.',
       networkProtocol: 'A network protocol is a set of rules devices use to exchange data, such as TCP/IP, HTTP, and DNS.',
       filesAttached: `Files attached: ${values.files || ''}. Once the backend is connected, I can read their content and answer.`,
-      hello: 'Yes, tell me. I am listening.'
+      hello: 'Yes, tell me. I am listening.',
+      identity: 'I am Shell AI, your desktop OS controller and assistant.'
     },
     hindi: {
       backendOffline: 'Shell backend bridge अभी connected नहीं है. Backend start होने के बाद मैं पूरा जवाब और OS actions कर पाऊंगी.',
@@ -109,7 +111,8 @@ const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' 
       pythonMemory: 'Python objects को heap में रखता है; reference counting और garbage collector unused objects clean करते हैं.',
       networkProtocol: 'Network protocol rules का set होता है जिससे devices data exchange करते हैं, जैसे TCP/IP, HTTP और DNS.',
       filesAttached: `Files attached हैं: ${values.files || ''}. Backend connected होगा तो मैं उनका content पढ़कर answer दे पाऊंगी.`,
-      hello: 'हाँ, बोलिए. मैं सुन रही हूँ.'
+      hello: 'हाँ, बोलिए. मैं सुन रही हूँ.',
+      identity: 'मैं Shell AI हूँ, आपका desktop OS controller और assistant.'
     }
   }
   return replies[language][key]
@@ -205,11 +208,19 @@ const recallFromHistory = (text: string, messages: any[]) => {
 const creatorIdentityReply = (text: string, source = 'text') => {
   const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
   if (!normalized) return ''
+  const whoIntent = /\b(who\s+are\s+you|tum\s+kaun|tum\s+kon|tu\s+kaun|tu\s+kon|aap\s+kaun|aap\s+kon|kaun\s+ho|kon\s+ho)\b/i.test(
+    normalized
+  )
+  const explicitCreatorWords =
+    /\b(kis\s*ne|kisne|creator|maker|founder|owner|developer|made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya)\b/i.test(
+      normalized
+    )
+  if (whoIntent && !explicitCreatorWords) return ''
   const subjectIntent = /\b(shell|shell ai|you|your|tum|tumhe|tumko|tujhe|tume|aap|aapko|apko|tere|tera|tu)\b/i.test(
     normalized
   )
   const creatorIntent =
-    /\b(kis\s*ne|kisne|kaun|kon|who|whom|which company|company|creator|maker|founder|owner|developer|made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya)\b/i.test(
+    /\b(kis\s*ne|kisne|which company|company|creator|maker|founder|owner|developer|made|created|built|developed|designed|banaya|bana\s*ya|banaya\s*hai|banaya\s*ha|banaya\s*h|banane\s*wala|banane\s*waala|banane\s*wale|create\s*kiya|develop\s*kiya)\b/i.test(
       normalized
     )
   const explicitCreatorPhrase =
@@ -218,6 +229,14 @@ const creatorIdentityReply = (text: string, source = 'text') => {
     ) || /\b(creator|maker|founder|owner|developer)\s+(kaun|kon|who|kisne|kis\s*ne)\b/i.test(normalized)
   if (!((subjectIntent && creatorIntent) || explicitCreatorPhrase)) return ''
   return 'Mujhe mdshoebking ne banaya hai.'
+}
+
+const selfIdentityReply = (text: string) => {
+  const normalized = String(text || '').toLowerCase().replace(/\s+/g, ' ').trim()
+  if (!/\b(who\s+are\s+you|tum\s+kaun|tum\s+kon|tu\s+kaun|tu\s+kon|aap\s+kaun|aap\s+kon|kaun\s+ho|kon\s+ho)\b/i.test(normalized)) {
+    return ''
+  }
+  return languageReply('identity')
 }
 
 const researchIntentFromText = (value: string) => {
@@ -479,8 +498,10 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
       const lower = text.toLowerCase()
       let reply = languageReply('backendOffline')
       const identityReply = creatorIdentityReply(text, source)
+      const selfReply = selfIdentityReply(text)
       const recallReply = recallFromHistory(text, messages)
       if (identityReply) reply = identityReply
+      else if (selfReply) reply = selfReply
       else if (recallReply) reply = recallReply
       else if (lower.includes('capital of france')) reply = languageReply('france')
       else if (lower.includes('memory') && lower.includes('python')) {
