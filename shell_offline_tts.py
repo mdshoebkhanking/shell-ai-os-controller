@@ -397,6 +397,11 @@ def _kokoro_metadata(model: Path | None = None, voices: Path | None = None) -> d
     return payload
 
 
+def _short_runtime_error(exc: BaseException) -> str:
+    message = f"{type(exc).__name__}: {exc}"
+    return message if len(message) <= 500 else message[:497] + "..."
+
+
 def _candidate_model_dirs(engine: str) -> list[Path]:
     dirs: list[Path] = []
     explicit = os.environ.get("SHELL_NATURAL_TTS_MODEL_DIR") or os.environ.get("SHELL_OFFLINE_TTS_MODEL_DIR")
@@ -456,14 +461,16 @@ def _kokoro_status() -> OfflineTTSCandidate:
         )
     try:
         import kokoro_onnx  # noqa: F401
-    except Exception:
+    except Exception as exc:
+        metadata = _kokoro_metadata(model, voices)
+        metadata["runtimeError"] = _short_runtime_error(exc)
         return OfflineTTSCandidate(
             "kokoro",
             "Kokoro ONNX natural offline voice",
             model_dir,
             False,
-            "kokoro_onnx runtime is not installed in the app bundle.",
-            _kokoro_metadata(model, voices),
+            f"kokoro_onnx runtime is not installed in the app bundle: {_short_runtime_error(exc)}",
+            metadata,
         )
     return OfflineTTSCandidate(
         "kokoro",

@@ -228,6 +228,9 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "--windowed" in builder
     assert "shell_hub" in builder
     assert "shell_local_stt" in builder
+    assert "_add_frozen_dll_dirs()" in desktop_entry
+    assert "add_dll_directory" in desktop_entry
+    assert '"dllDirs": list(_DLL_DIRS_ADDED)' in desktop_entry
     assert 'os.environ.setdefault("SHELL_VOICE_MODE", "auto")' in desktop_entry
     assert 'os.environ.setdefault("SHELL_NATURAL_TTS_ENGINE", "kokoro")' in desktop_entry
     assert 'os.environ.setdefault("SHELL_NATURAL_TTS_MODEL_DIR", str(KOKORO_MODEL_DIR))' in desktop_entry

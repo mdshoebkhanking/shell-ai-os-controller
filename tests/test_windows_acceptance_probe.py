@@ -163,6 +163,8 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry
     assert "offline_tts_module" in desktop_entry
     assert "kokoroModelFiles" in desktop_entry
+    assert "import_checks" in desktop_entry
+    assert "onnxruntime.capi.onnxruntime_pybind11_state" in desktop_entry
 
 
 def test_windows_acceptance_summarizes_offline_tts_candidates():

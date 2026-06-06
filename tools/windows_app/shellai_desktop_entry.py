@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import atexit
+import importlib
 import json
 import os
 import runpy
@@ -33,6 +34,75 @@ PORT_HINT = ROOT / ".shell_hub_port"
 KOKORO_MODEL_DIR = ROOT / "models" / "tts" / "kokoro"
 OFFLINE_LLM_MODEL_DIR = ROOT / "models" / "llm"
 LOCAL_STT_MODEL_DIR = ROOT / "models" / "stt" / "sherpa-onnx"
+_DLL_DIR_HANDLES: list[object] = []
+_DLL_DIRS_ADDED: list[str] = []
+
+
+def _frozen_internal_dir() -> Path | None:
+    meipass = getattr(sys, "_MEIPASS", "")
+    if meipass:
+        try:
+            return Path(str(meipass)).resolve()
+        except Exception:
+            pass
+    candidate = ROOT / "ShellAIApp" / "_internal"
+    if candidate.exists():
+        return candidate.resolve()
+    if getattr(sys, "frozen", False):
+        candidate = Path(sys.executable).resolve().parent / "_internal"
+        if candidate.exists():
+            return candidate.resolve()
+    return None
+
+
+def _prepend_path_once(path: Path) -> None:
+    text = str(path)
+    parts = [part for part in os.environ.get("PATH", "").split(os.pathsep) if part]
+    normalized = {part.lower() if os.name == "nt" else part for part in parts}
+    key = text.lower() if os.name == "nt" else text
+    if key not in normalized:
+        os.environ["PATH"] = text + (os.pathsep + os.environ["PATH"] if os.environ.get("PATH") else "")
+
+
+def _add_windows_dll_dir(path: Path) -> None:
+    if not path.exists() or not path.is_dir():
+        return
+    text = str(path)
+    if text in _DLL_DIRS_ADDED:
+        return
+    _prepend_path_once(path)
+    add_dll_directory = getattr(os, "add_dll_directory", None)
+    if os.name == "nt" and callable(add_dll_directory):
+        try:
+            _DLL_DIR_HANDLES.append(add_dll_directory(text))
+        except OSError:
+            pass
+    _DLL_DIRS_ADDED.append(text)
+
+
+def _add_frozen_dll_dirs() -> None:
+    internal = _frozen_internal_dir()
+    if internal is None:
+        return
+    # PyInstaller's onedir layout stores native dependencies in package
+    # subdirectories. Seed those locations before Kokoro imports onnxruntime.
+    candidates = [
+        internal,
+        internal / "onnxruntime" / "capi",
+        internal / "sherpa_onnx" / "lib",
+        internal / "llama_cpp" / "lib",
+        internal / "PyQt6" / "Qt6" / "bin",
+        internal / "numpy.libs",
+        internal / "espeakng_loader",
+        internal / "_soundfile_data",
+        internal / "_sounddevice_data" / "portaudio-binaries",
+    ]
+    # PATH insertion prepends, so reverse iteration preserves candidate priority.
+    for candidate in reversed(candidates):
+        _add_windows_dll_dir(candidate)
+
+
+_add_frozen_dll_dirs()
 
 os.environ.setdefault("PYTHONUTF8", "1")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
@@ -159,6 +229,8 @@ def _run_runtime_probe_mode() -> None:
         "root": str(ROOT),
         "executable": sys.executable,
         "frozen": bool(getattr(sys, "frozen", False)),
+        "meipass": str(getattr(sys, "_MEIPASS", "")),
+        "dllDirs": list(_DLL_DIRS_ADDED),
         "env": {
             "SHELL_APP_ROOT": os.environ.get("SHELL_APP_ROOT", ""),
             "SHELL_INSTALL_ROOT": os.environ.get("SHELL_INSTALL_ROOT", ""),
@@ -177,6 +249,25 @@ def _run_runtime_probe_mode() -> None:
             "localSttDirExists": LOCAL_STT_MODEL_DIR.exists(),
         },
     }
+    import_checks: dict[str, dict[str, object]] = {}
+    for module_name in (
+        "onnxruntime",
+        "onnxruntime.capi.onnxruntime_pybind11_state",
+        "kokoro_onnx",
+        "espeakng_loader",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+            import_checks[module_name] = {
+                "ok": True,
+                "file": str(getattr(module, "__file__", "")),
+            }
+        except Exception as exc:
+            import_checks[module_name] = {
+                "ok": False,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+    payload["import_checks"] = import_checks
     exit_code = 0
     try:
         import shell_offline_tts

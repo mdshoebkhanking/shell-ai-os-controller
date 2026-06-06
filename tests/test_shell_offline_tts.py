@@ -1,3 +1,4 @@
+import builtins
 import sys
 import types
 from pathlib import Path
@@ -105,6 +106,35 @@ def test_offline_tts_status_reports_kokoro_metadata(monkeypatch, tmp_path):
     assert status["voices"]["hindi"] == "hf_alpha"
     assert status["preferredVoiceProfile"] == "realistic-female"
     assert status["nativeHindiVoice"] == "hf_alpha"
+
+
+def test_offline_tts_status_includes_kokoro_import_error(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    model_dir = tmp_path / "kokoro"
+    model_dir.mkdir()
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "kokoro_onnx":
+            raise ImportError("missing native onnxruntime dll")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    monkeypatch.setenv("SHELL_OFFLINE_TTS", "1")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_ENGINE", "kokoro")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+
+    status = shell_offline_tts.offline_tts_status()
+
+    assert status["available"] is False
+    assert "will not use local OS TTS fallback" in status["reason"]
+    candidate = status["candidates"][0]
+    assert "ImportError: missing native onnxruntime dll" in candidate["runtimeError"]
+    assert "ImportError: missing native onnxruntime dll" in candidate["reason"]
 
 
 def test_offline_tts_status_finds_kokoro_next_to_installed_pyinstaller_app(monkeypatch, tmp_path):
