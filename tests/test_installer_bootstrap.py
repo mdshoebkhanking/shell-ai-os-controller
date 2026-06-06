@@ -239,6 +239,8 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert 'os.environ.setdefault("SHELL_LOCAL_STT_MODEL_DIR", str(LOCAL_STT_MODEL_DIR))' in desktop_entry
     assert "sherpa_onnx" in builder
     assert "onnxruntime" in builder
+    assert '"language_tags"' in builder
+    assert '"language-tags"' in builder
     assert '"llama_cpp"' in builder
     assert "soundfile" in builder
     assert '"phonemizer"' in builder
