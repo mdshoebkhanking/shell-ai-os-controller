@@ -146,9 +146,9 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
     assert "SHELL_WINDOWS_PERFORMANCE_MODE=balanced" in start
-    assert "SHELL_OFFLINE_LLM_CONTEXT=1024" in start
-    assert "SHELL_OFFLINE_LLM_BATCH=64" in start
-    assert "SHELL_OFFLINE_LLM_MAX_TOKENS=160" in start
+    assert "SHELL_OFFLINE_LLM_CONTEXT=768" in start
+    assert "SHELL_OFFLINE_LLM_BATCH=32" in start
+    assert "SHELL_OFFLINE_LLM_MAX_TOKENS=96" in start
     assert "OPENBLAS_NUM_THREADS=1" in start
     assert "MKL_NUM_THREADS=1" in start
     for script in (start, one_click, repair, acceptance):
@@ -159,13 +159,16 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
     assert "tools\\build_windows_installer.py" in exe_builder
-    assert "bundle ShellAI.exe with PyInstaller" in exe_builder
+    assert "bundle ShellAI.exe with Electron/electron-builder" in exe_builder
+    assert "bundle the local Python backend as ShellAIBackend.exe" in exe_builder
     assert "JRSoftware.InnoSetup" in exe_builder
     assert "--installer-engine inno" in exe_builder
+    assert "--desktop-runtime electron" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
     assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
-    assert "tools\\stage_falcon_offline_llm_assets.py --variant q4_k_m" in exe_builder
+    assert "Offline LLM models are installed on demand from Shell Settings" in exe_builder
+    assert "tools\\stage_falcon_offline_llm_assets.py --variant q4_k_m" not in exe_builder
     assert "llama-cpp-python" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in public_release
     assert "EnableDelayedExpansion" in public_release
@@ -200,9 +203,9 @@ def test_bootstrap_applies_windows_runtime_performance_defaults(monkeypatch):
     assert env["MKL_NUM_THREADS"] == "1"
     assert env["NUMEXPR_NUM_THREADS"] == "1"
     assert env["SHELL_WINDOWS_PERFORMANCE_MODE"] == "balanced"
-    assert env["SHELL_OFFLINE_LLM_CONTEXT"] == "1024"
-    assert env["SHELL_OFFLINE_LLM_BATCH"] == "64"
-    assert env["SHELL_OFFLINE_LLM_MAX_TOKENS"] == "160"
+    assert env["SHELL_OFFLINE_LLM_CONTEXT"] == "768"
+    assert env["SHELL_OFFLINE_LLM_BATCH"] == "32"
+    assert env["SHELL_OFFLINE_LLM_MAX_TOKENS"] == "96"
     assert "SHELL_OFFLINE_LLM_THREADS" not in env
 
 
@@ -260,10 +263,10 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert '"offline_stt": offline_stt_report' in builder
     assert "copy_staged_model_assets_to_stage" in builder
     assert "Windows EXE build requires packaged Kokoro offline TTS assets" in builder
-    assert "Windows EXE build requires packaged offline LLM GGUF assets" in builder
-    assert "Bundled ShellAI.exe has no extractable icon resource" in builder
+    assert "Offline LLM GGUF assets are intentionally not bundled" in builder
+    assert "runtime_downloads" in builder
+    assert "Electron ShellAI.exe has no extractable icon resource" in builder
     assert "Windows setup EXE has no extractable icon resource" in builder
-    assert "No packaged GGUF offline LLM model assets detected" in builder
     assert "No packaged sherpa-onnx STT model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
     assert '!define AppIconName "shell-ai.ico"' in nsi
@@ -334,40 +337,38 @@ def test_windows_installer_reports_packaged_offline_tts_assets(monkeypatch, tmp_
     build_windows_installer.require_packaged_kokoro_tts(ready)
 
 
-def test_windows_installer_reports_packaged_offline_llm_assets(monkeypatch, tmp_path):
+def test_windows_installer_reports_on_demand_offline_llm_catalog(monkeypatch, tmp_path):
     build_windows_installer = load_tool_module("build_windows_installer")
 
     llm_root = tmp_path / "models" / "llm"
     monkeypatch.setattr(build_windows_installer, "LLM_MODEL_STAGE", llm_root)
 
     fallback = build_windows_installer.offline_llm_stage_report()
-    assert fallback["status"] == "fallback"
+    assert fallback["status"] == "on-demand"
     assert fallback["model_file_count"] == 0
-    try:
-        build_windows_installer.require_packaged_offline_llm(fallback)
-    except RuntimeError as exc:
-        assert "Windows EXE build requires packaged offline LLM GGUF assets" in str(exc)
-    else:
-        raise AssertionError("Missing offline LLM assets must block Windows EXE builds.")
+    assert fallback["runtime_downloads"] is True
+    assert len(fallback["catalog_options"]) >= 4
+    assert fallback["engines"]["llama_cpp_python"]["model_bundled"] is False
+    build_windows_installer.require_packaged_offline_llm(fallback)
 
     falcon = llm_root / "falcon-h1-1.5b-deep"
     falcon.mkdir(parents=True)
     (falcon / "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf").write_bytes(b"model")
 
     ready = build_windows_installer.offline_llm_stage_report()
-    assert ready["status"] == "ready"
-    assert ready["model_file_count"] == 1
+    assert ready["status"] == "on-demand"
+    assert ready["model_file_count"] == 0
+    assert ready["ignored_staged_model_file_count"] == 1
     assert ready["recommended_engine"] == "llama-cpp-python"
-    assert ready["model_family"] == "Falcon-H1-1.5B-Deep-Instruct-GGUF"
-    assert ready["model_repo"] == "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
+    assert ready["model_family"] == "Installable GGUF catalog"
     assert ready["language_support"] == ["english", "hinglish", "hindi"]
-    assert ready["runtime_downloads"] is False
+    assert ready["runtime_downloads"] is True
     assert ready["engines"]["llama_cpp_python"]["ready"] is True
-    assert ready["engines"]["llama_cpp_python"]["primary_ready"] is True
+    assert ready["engines"]["llama_cpp_python"]["model_bundled"] is False
     build_windows_installer.require_packaged_offline_llm(ready)
 
 
-def test_windows_installer_reports_legacy_qwen_offline_llm_assets(monkeypatch, tmp_path):
+def test_windows_installer_ignores_legacy_qwen_offline_llm_assets(monkeypatch, tmp_path):
     build_windows_installer = load_tool_module("build_windows_installer")
 
     llm_root = tmp_path / "models" / "llm"
@@ -379,10 +380,10 @@ def test_windows_installer_reports_legacy_qwen_offline_llm_assets(monkeypatch, t
 
     ready = build_windows_installer.offline_llm_stage_report()
 
-    assert ready["status"] == "ready"
-    assert ready["model_family"] == "Qwen3-1.7B-GGUF"
-    assert ready["engines"]["llama_cpp_python"]["primary_ready"] is False
-    assert ready["engines"]["llama_cpp_python"]["legacy_qwen_ready"] is True
+    assert ready["status"] == "on-demand"
+    assert ready["model_family"] == "Installable GGUF catalog"
+    assert ready["ignored_staged_model_file_count"] == 1
+    assert ready["engines"]["llama_cpp_python"]["runtime_downloads"] is True
 
 
 def test_windows_installer_reports_packaged_offline_stt_assets(monkeypatch, tmp_path):
@@ -485,8 +486,8 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     assert "tools/stage_kokoro_tts_assets.py --variant int8" in workflow
     assert "models/tts/kokoro" in workflow
     assert "llama-cpp-python" in workflow
-    assert "tools/stage_falcon_offline_llm_assets.py --variant q4_k_m" in workflow
-    assert "models/llm/falcon-h1-1.5b-deep" in workflow
+    assert "tools/stage_falcon_offline_llm_assets.py --variant q4_k_m" not in workflow
+    assert "models/llm/falcon-h1-1.5b-deep" not in workflow
     assert "sherpa-onnx" in workflow
     assert "tools/stage_sherpa_stt_assets.py" in workflow
     assert "models/stt/sherpa-onnx" in workflow
@@ -496,16 +497,15 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():
-    launch = open("launch.py", encoding="utf-8").read()
     host = open("shell_web_ui/host.py", encoding="utf-8").read()
     index = open("shell_web_ui/index.html", encoding="utf-8").read()
     builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+    electron_main = open("shell_web_ui/electron/main.cjs", encoding="utf-8").read()
     desktop_entry = open("tools/windows_app/shellai_desktop_entry.py", encoding="utf-8").read()
 
-    for content in (launch, host, index, builder):
+    for content in (host, index, builder, electron_main):
         assert "shell-logo.png" in content
-    assert "setWindowIcon" in launch
-    assert "setWindowIcon" in host
+    assert "nativeImage.createFromPath" in electron_main
     assert 'rel="icon"' in index
     assert "--shell-ai-runtime-probe" in desktop_entry
 
@@ -578,7 +578,8 @@ def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):
     bootstrap.install_python_deps(tmp_path)
 
     assert any("shell_ui/requirements_ui.txt" in " ".join(call).replace("\\", "/") for call in calls)
-    assert "PyQt6.QtWebEngineWidgets" in bootstrap.UI_IMPORTS
+    assert "PyQt6" not in bootstrap.CORE_IMPORTS
+    assert all("PyQt6" not in key for key in bootstrap.UI_IMPORTS)
 
 
 def test_bootstrap_installs_and_builds_shell_web_ui(monkeypatch):

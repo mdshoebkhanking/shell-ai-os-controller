@@ -1,7 +1,4 @@
-# Shell Premium UI Dependencies
-PyQt6>=6.6.0
-PyQt6-WebEngine>=6.6.0
-pyqtgraph>=0.13.7
+# Shell Electron desktop support dependencies
 PyOpenGL>=3.1.7
 psutil>=5.9.0
 GPUtil>=1.4.0

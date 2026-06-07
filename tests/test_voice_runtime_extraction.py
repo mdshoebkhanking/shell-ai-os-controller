@@ -42,11 +42,7 @@ def test_ui_reexports_tts_runtime_for_backward_compatibility(monkeypatch):
 
 def test_voice_runtime_thread_handles_repeated_requests(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-
-    from PyQt6.QtCore import QCoreApplication
     from shell_voice_runtime import TTSSpeaker
-
-    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
     speaker = TTSSpeaker()
     calls: list[str] = []
     finished: list[bool] = []
@@ -64,12 +60,10 @@ def test_voice_runtime_thread_handles_repeated_requests(monkeypatch):
 
     deadline = time.time() + 2.0
     while time.time() < deadline and len(finished) < 3:
-        app.processEvents()
         time.sleep(0.01)
 
     speaker.shutdown()
     speaker.wait(1000)
-    app.processEvents()
 
     assert calls == ["hello 0", "hello 1", "hello 2"]
     assert len(finished) == 3

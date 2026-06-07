@@ -172,6 +172,34 @@ def _project_slug_from_text(raw: str, fallback: str = "shell_site") -> str:
     return slug or fallback
 
 
+def _build_subject_from_text(raw: str, *, kind: str) -> str:
+    stop_words = (
+        r"\b(?:please|pls|make|create|build|generate|design|scaffold|develop|code|website|webpage|web\s+page|"
+        r"landing\s+page|site|app|application|software|dashboard|tool|banao|bana|banado|banaao|bana\s+do|"
+        r"kar\s+do|with|for|ke\s+liye|ka|ki|ek|a|an)\b"
+    )
+    text = re.sub(stop_words, " ", str(raw or ""), flags=re.I)
+    text = _clean(text)
+    if text:
+        return text
+    return "business" if kind == "website" else "productivity"
+
+
+def _build_brief_from_text(raw: str, *, kind: str) -> str:
+    subject = _build_subject_from_text(raw, kind=kind)
+    if kind == "website":
+        return (
+            f"Build a polished responsive website for {subject}. "
+            "Include a strong hero, clear value proposition, feature/service sections, proof or highlights, "
+            "and a contact/CTA section. Do not echo the request text as page copy."
+        )
+    return (
+        f"Build a full-stack app for {subject}. "
+        "Include a useful dashboard, create/read/update flows, persistent backend data, responsive UI, "
+        "and clear empty/error states. Do not echo the request text as page copy."
+    )
+
+
 def _game_name_from_text(raw: str) -> str:
     lower = str(raw or "").lower()
     known_games = (
@@ -310,6 +338,16 @@ _GAME_INTENT_RE = (
     r"\b(game|khel|snake|tetris|pong|flappy|flappy\s+bird|2048|breakout|"
     r"space\s+invaders?|runner|dino|tic\s*tac\s*toe|reaction)\b"
 )
+_CODE_LANGUAGE_RE = (
+    r"\b(python|py|javascript|typescript|java|kotlin|swift|c\+\+|cpp|c#|csharp|"
+    r"go|golang|rust|php|ruby|sql|html|css|react|node|nodejs|express|fastapi|"
+    r"flask|django|bash|shell\s+script|script|program|function|class|component|"
+    r"algorithm|api|endpoint|regex|code|coding)\b"
+)
+_CODE_ACTION_RE = (
+    r"\b(write|likho|likh\s+do|create|make|build|generate|develop|code|"
+    r"banao|bana|banado|banaao|bana\s+do|kar\s+do)\b"
+)
 
 
 def _workspace_file_path_match(raw: str) -> tuple[str, tuple[int, int]] | None:
@@ -433,6 +471,22 @@ def _user_file_save_content(raw: str, filename: str) -> str:
     return text
 
 
+def _user_file_content_task(raw: str, content: str, file_type: str) -> str:
+    topic = _clean(content)
+    lower = str(raw or "").lower()
+    if not topic:
+        topic = _clean(raw)
+    if re.search(r"\b(movie|film|short\s+film|script|screenplay|scene|dialogue|dialog)\b", lower):
+        return f"Write an original movie script about {topic}."
+    if re.search(r"\b(report|analysis|summary|essay|article)\b", lower):
+        return f"Write a concise structured report about {topic}."
+    if re.search(r"\b(letter|application|email\s+draft)\b", lower):
+        return f"Write a polished letter about {topic}."
+    if str(file_type or "").lower() == "pdf":
+        return f"Write a polished PDF document about {topic}."
+    return f"Write useful file content about {topic}."
+
+
 def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
     if not re.search(
         r"\b(save|create|make|new|write|generate|banao|bana|banado|banaao|bana\s+do|kar\s+do|karke\s+do)\b",
@@ -456,6 +510,8 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
         {
             "filename": filename,
             "content": content,
+            "content_request": _user_file_content_task(raw, content, file_type),
+            "raw_request": _strip_quotes(raw),
             "destination": destination,
             "file_type": file_type,
             "overwrite": overwrite,
@@ -592,6 +648,34 @@ def _telegram_route(raw: str, lower: str) -> dict[str, Any] | None:
     if re.search(r"\b(stop|band|deactivate|close)\b", lower, flags=re.I):
         return _route("shell_telegram:stop_telegram_bot", confidence=0.9)
     return None
+
+
+def _code_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
+    """Route generic code-writing asks to Shell's developer agent."""
+    if re.search(r"\b(qr\s*code|barcode|verification\s+code|otp|pin\s+code|error\s+code)\b", lower, flags=re.I):
+        return None
+    direct_code_phrase = re.search(
+        r"\b(?:code|coding|script|program|function|class|component|algorithm)\s+"
+        r"(?:likho|likh\s+do|banao|bana|banado|banaao|write|create|make|build|generate|develop)\b",
+        lower,
+        flags=re.I,
+    ) or re.search(
+        r"\b(?:write|create|make|build|generate|develop|code|banao|bana|banado|banaao|bana\s+do)\s+"
+        r"(?:a\s+|an\s+|the\s+)?(?:code|script|program|function|class|component|algorithm)\b",
+        lower,
+        flags=re.I,
+    )
+    if not direct_code_phrase and not (
+        re.search(_CODE_ACTION_RE, lower, flags=re.I)
+        and re.search(_CODE_LANGUAGE_RE, lower, flags=re.I)
+    ):
+        return None
+    return _route(
+        "shell_agents:developer_agent_tool",
+        {"task": _strip_quotes(raw)},
+        kind="agent",
+        confidence=0.89,
+    )
 
 
 def _autonomous_route(raw: str, lower: str) -> dict[str, Any] | None:
@@ -772,7 +856,7 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             "shell_code_engine:create_fullstack_app_tool",
             {
                 "project_name": _project_slug_from_text(raw, "shell_site"),
-                "app_type": _strip_quotes(raw),
+                "app_type": _build_brief_from_text(raw, kind="website"),
             },
             confidence=0.91,
         )
@@ -792,7 +876,7 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             "shell_code_engine:create_fullstack_app_tool",
             {
                 "project_name": _project_slug_from_text(raw, "shell_app"),
-                "app_type": _strip_quotes(raw),
+                "app_type": _build_brief_from_text(raw, kind="app"),
             },
             confidence=0.9,
         )
@@ -808,6 +892,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     workspace_create = _workspace_file_create_route(raw, lower)
     if workspace_create:
         return workspace_create
+
+    code_generation = _code_generation_route(raw, lower)
+    if code_generation:
+        return code_generation
 
     if lower.startswith(("search google", "google search", "google ")):
         query = re.sub(r"^(search\s+google|google\s+search|google)\s*(for)?\s*", "", raw, flags=re.I).strip()

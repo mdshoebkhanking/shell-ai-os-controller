@@ -64,6 +64,10 @@ async def test_fullstack_app_builder_writes_project_when_safety_enabled(monkeypa
     assert (project / "templates" / "index.html").exists()
     assert (project / "static" / "css" / "style.css").exists()
     assert (project / "run_app.bat").exists()
+    html = (project / "templates" / "index.html").read_text(encoding="utf-8")
+    assert "todo app banao with login" not in html.lower()
+    assert "Command Center" in html
+    assert "Core Workflow" in html
     assert launched
 
 

@@ -15,6 +15,20 @@ interface ToolParam {
   default?: unknown
 }
 
+interface ToolReadiness {
+  ok?: boolean
+  state?: string
+  reasons?: string[]
+  requirements?: string[]
+}
+
+interface ToolMetadata {
+  enabled?: boolean
+  online_state?: string
+  safety_level?: string
+  [key: string]: unknown
+}
+
 interface ToolItem {
   id: string
   name?: string
@@ -24,6 +38,12 @@ interface ToolItem {
   risk?: string
   description?: string
   params?: ToolParam[]
+  readiness?: ToolReadiness
+  runtime_state?: string
+  enabled?: boolean
+  metadata?: ToolMetadata
+  file?: string
+  line?: number
 }
 
 interface CapabilityPayload {
@@ -36,6 +56,29 @@ interface CapabilityPayload {
 }
 
 const glassPanel = 'shell-control-panel backdrop-blur-xl rounded-2xl shadow-xl'
+
+const readinessFor = (tool: ToolItem | null): ToolReadiness => {
+  if (!tool) return { ok: false, state: 'UNKNOWN' }
+  return tool.readiness || { ok: tool.enabled !== false, state: tool.runtime_state || 'READY' }
+}
+
+const isToolReady = (tool: ToolItem | null) => readinessFor(tool).ok !== false
+
+const readinessClassFor = (tool: ToolItem | null) => {
+  const readiness = readinessFor(tool)
+  if (readiness.ok !== false) return 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10'
+  const state = String(readiness.state || '').toUpperCase()
+  if (state === 'NEEDS_API_KEY') return 'text-sky-300 border-sky-500/20 bg-sky-500/10'
+  if (state === 'WINDOWS_ONLY') return 'text-cyan-300 border-cyan-500/20 bg-cyan-500/10'
+  if (state === 'MISSING_DEPENDENCY') return 'text-amber-300 border-amber-500/20 bg-amber-500/10'
+  if (state === 'BLOCKED_BY_SAFETY') return 'text-red-300 border-red-500/20 bg-red-500/10'
+  return 'text-zinc-300 border-white/10 bg-white/5'
+}
+
+const readinessLabelFor = (tool: ToolItem | null) => {
+  const readiness = readinessFor(tool)
+  return String(readiness.state || (readiness.ok !== false ? 'READY' : 'NOT_READY')).replace(/_/g, ' ')
+}
 
 const defaultArgsFor = (tool: ToolItem | null) => {
   if (!tool?.params?.length) return '{}'
@@ -103,7 +146,7 @@ const ControlCenter = () => {
   }
 
   const executeSelected = async () => {
-    if (!selected || running) return
+    if (!selected || running || !isToolReady(selected)) return
     setRunning(true)
     try {
       const currentArgsText = argsRef.current?.value ?? argsText
@@ -118,6 +161,7 @@ const ControlCenter = () => {
   }
 
   const summary = payload.summary || {}
+  const selectedReady = isToolReady(selected)
 
   return (
     <div className="shell-control-surface h-full w-full p-4 grid grid-cols-12 gap-4 overflow-hidden">
@@ -194,21 +238,26 @@ const ControlCenter = () => {
                     selected?.id === tool.id
                       ? 'bg-emerald-500/10 border-emerald-500/30'
                       : 'bg-black/30 border-white/5 hover:border-white/15'
-                  }`}
+                  } ${isToolReady(tool) ? '' : 'opacity-75'}`}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-[11px] font-bold text-zinc-100 tracking-wide">
                       {tool.title || tool.name || tool.id}
                     </span>
-                    <span
-                      className={`text-[8px] font-mono px-2 py-0.5 rounded border ${
-                        tool.risk === 'guarded'
-                          ? 'text-orange-300 border-orange-500/20 bg-orange-500/10'
-                          : 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10'
-                      }`}
-                    >
-                      {tool.risk || 'normal'}
-                    </span>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <span className={`text-[8px] font-mono px-2 py-0.5 rounded border ${readinessClassFor(tool)}`}>
+                        {readinessLabelFor(tool)}
+                      </span>
+                      <span
+                        className={`text-[8px] font-mono px-2 py-0.5 rounded border ${
+                          tool.risk === 'guarded'
+                            ? 'text-orange-300 border-orange-500/20 bg-orange-500/10'
+                            : 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10'
+                        }`}
+                      >
+                        {tool.risk || 'normal'}
+                      </span>
+                    </div>
                   </div>
                   <div className="mt-1 text-[9px] font-mono text-zinc-500 truncate">{tool.id}</div>
                 </button>
@@ -231,6 +280,9 @@ const ControlCenter = () => {
                     <div className="mt-1 text-[10px] font-mono text-zinc-500">{selected.id}</div>
                   </div>
                   <div className="flex items-center gap-2 text-[9px] font-mono">
+                    <span className={`px-2 py-1 rounded border ${readinessClassFor(selected)}`}>
+                      {readinessLabelFor(selected)}
+                    </span>
                     <span className="px-2 py-1 rounded border border-white/10 text-zinc-400">
                       {selected.kind || 'tool'}
                     </span>
@@ -259,10 +311,14 @@ const ControlCenter = () => {
                   <button
                     aria-label="Execute selected backend tool"
                     onClick={executeSelected}
-                    disabled={running}
-                    className="cursor-pointer h-11 rounded-xl bg-emerald-500 text-black text-xs font-black tracking-widest flex items-center justify-center gap-2 hover:bg-emerald-300 disabled:opacity-50 transition-all"
+                    disabled={running || !selectedReady}
+                    className={`h-11 rounded-xl text-xs font-black tracking-widest flex items-center justify-center gap-2 transition-all ${
+                      selectedReady
+                        ? 'cursor-pointer bg-emerald-500 text-black hover:bg-emerald-300 disabled:opacity-50'
+                        : 'cursor-not-allowed bg-zinc-800 text-zinc-500 border border-white/10'
+                    }`}
                   >
-                    <RiPlayLine size={16} /> {running ? 'RUNNING' : 'EXECUTE'}
+                    <RiPlayLine size={16} /> {running ? 'RUNNING' : selectedReady ? 'EXECUTE' : 'NOT READY'}
                   </button>
                 </div>
 
@@ -275,9 +331,14 @@ const ControlCenter = () => {
                       JSON.stringify(
                         {
                           params: selected.params || [],
+                          readiness: readinessFor(selected),
+                          requirements: readinessFor(selected).requirements || [],
+                          reasons: readinessFor(selected).reasons || [],
                           risk: selected.risk || 'normal',
-                          file: (selected as any).file,
-                          line: (selected as any).line
+                          safety: selected.metadata?.safety_level,
+                          onlineState: selected.metadata?.online_state,
+                          file: selected.file,
+                          line: selected.line
                         },
                         null,
                         2

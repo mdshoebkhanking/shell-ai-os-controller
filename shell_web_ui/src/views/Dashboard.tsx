@@ -17,7 +17,8 @@ import {
   RiCloseCircleLine,
   RiAttachment2,
   RiCloseLine,
-  RiFileTextLine
+  RiFileTextLine,
+  RiFileCopyLine
 } from 'react-icons/ri'
 import { VisionMode } from '@renderer/IndexRoot'
 import { normalizeGeminiApiKey } from '@renderer/services/api-key-utils'
@@ -71,7 +72,7 @@ type AttachedFile = {
 const GEMINI_STARTUP_VOICE_MESSAGE =
   'Shell AI is online. Premium Gemini voice is active. Your private command center is standing by.'
 const LOCAL_STARTUP_VOICE_MESSAGE =
-  'Shell AI is online. Offline voice is active. Your private command center is standing by.'
+  'Command center ready.'
 
 type FaceApiModule = typeof import('face-api.js')
 
@@ -101,6 +102,15 @@ const ACTIVITY_TITLES: Record<ActivityKind, string> = {
   search: 'LIVE SEARCH',
   file: 'FILE CONTEXT',
   tool: 'SHELL ACTION'
+}
+
+const ACTIVITY_AGENT_COUNT: Record<ActivityKind, number> = {
+  research: 4,
+  image: 2,
+  build: 3,
+  search: 2,
+  file: 1,
+  tool: 1
 }
 
 const clampProgress = (value: unknown, fallback = 18) => {
@@ -145,6 +155,16 @@ const readFileAsDataUrl = (file: File) =>
     reader.onerror = () => reject(reader.error || new Error('file data read failed'))
     reader.readAsDataURL(file)
   })
+
+const transcriptMessageText = (message: any) => {
+  const partsText = Array.isArray(message?.parts)
+    ? message.parts.map((part: any) => String(part?.text || '').trim()).filter(Boolean).join('\n')
+    : ''
+  return String(partsText || message?.content || message?.text || '').trim()
+}
+
+const transcriptRoleLabel = (message: any) =>
+  String(message?.role || '').toLowerCase() === 'user' ? 'YOU' : 'SHELL'
 
 const coerceActivityStatus = (value: unknown): ActivityStatus => {
   const status = String(value || '').toLowerCase()
@@ -247,6 +267,7 @@ function DashboardView({
   const [voiceEventState, setVoiceEventState] = useState(backendVoiceState || 'OFFLINE')
   const [voiceAmplitude, setVoiceAmplitude] = useState(0)
   const [speechState, setSpeechState] = useState('VOICE OUT')
+  const [speechReactionActive, setSpeechReactionActive] = useState(false)
   const [activityState, setActivityState] = useState<ActivityState | null>(null)
   const [attachedFiles, setAttachedFiles] = useState<AttachedFile[]>([])
   const useGeminiTestVoice = voiceRuntime === 'gemini' && hasBrowserGeminiVoiceKey()
@@ -272,10 +293,12 @@ function DashboardView({
   const clearSpeechReaction = useCallback(() => {
     speechReactionTimersRef.current.forEach((timer) => window.clearTimeout(timer))
     speechReactionTimersRef.current = []
+    setSpeechReactionActive(false)
   }, [])
 
   const runSpeechReaction = useCallback((payload: any = {}, fallbackText = '') => {
     clearSpeechReaction()
+    setSpeechReactionActive(true)
     const durationMs = speechDurationFromPayload(payload, fallbackText)
     const frameMs = Math.max(45, Math.min(140, Number(payload?.amplitudeFrameMs || 70)))
     const frames = Array.isArray(payload?.amplitudeFrames)
@@ -303,6 +326,7 @@ function DashboardView({
 
     const finishTimer = window.setTimeout(() => {
       updateVoiceAmplitude(0, true)
+      setSpeechReactionActive(false)
       setSpeechState('VOICE OUT')
       speechReactionTimersRef.current = []
     }, durationMs + 180)
@@ -389,7 +413,7 @@ function DashboardView({
       }
       if (state === 'SPEAKING') {
         setSpeechState('SPEAKING')
-        runSpeechReaction(payload)
+        runSpeechReaction(payload, String(payload?.text || payload?.message || '').trim())
         return
       }
       clearSpeechReaction()
@@ -838,6 +862,48 @@ function DashboardView({
     }
   }
 
+  const copyTranscript = async () => {
+    const text = chatHistory
+      .map((message) => {
+        const body = transcriptMessageText(message)
+        return body ? `${transcriptRoleLabel(message)}: ${body}` : ''
+      })
+      .filter(Boolean)
+      .join('\n\n')
+    if (!text.trim()) return
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        const scratch = document.createElement('textarea')
+        scratch.value = text
+        scratch.setAttribute('readonly', 'true')
+        scratch.style.position = 'fixed'
+        scratch.style.left = '-9999px'
+        document.body.appendChild(scratch)
+        scratch.select()
+        document.execCommand('copy')
+        document.body.removeChild(scratch)
+      }
+      setActivityState(createActivityState({
+        kind: 'file',
+        status: 'done',
+        title: 'TRANSCRIPT',
+        message: 'COPIED',
+        progress: 100
+      }, 'file'))
+    } catch {
+      setActivityState(createActivityState({
+        kind: 'file',
+        status: 'error',
+        title: 'TRANSCRIPT',
+        message: 'COPY FAILED',
+        progress: 100
+      }, 'file'))
+    }
+  }
+
   const visionDisplayLabel = isVideoOn
     ? visionMode === 'screen'
       ? 'SCREEN FEED'
@@ -853,6 +919,10 @@ function DashboardView({
       ? activitySteps.length - 1
       : Math.min(activitySteps.length - 1, Math.max(0, Math.floor((activityState.progress / 100) * activitySteps.length)))
     : 0
+  const activeAgentCount =
+    activityState?.status === 'running' ? ACTIVITY_AGENT_COUNT[activityState.kind] || 1 : 0
+  const agentStripCountText = `${activeAgentCount} ${activeAgentCount === 1 ? 'AGENT' : 'AGENTS'}`
+  const orbSpeaking = speechState === 'SPEAKING' || speechState === 'GEMINI LIVE' || speechReactionActive
   const activityPanel = activityState ? (
     <div className="shell-workstream-anchor" aria-live="polite">
       <div className={`shell-workstream-panel shell-workstream-${activityState.status} shell-workstream-${activityState.kind}`}>
@@ -1058,7 +1128,7 @@ function DashboardView({
         >
           <Sphere
             active={isSystemActive}
-            speaking={speechState === 'SPEAKING' || speechState === 'GEMINI LIVE'}
+            speaking={orbSpeaking}
             voiceLevel={voiceAmplitude}
           />
         </div>
@@ -1134,6 +1204,15 @@ function DashboardView({
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
+                aria-label="Copy transcript"
+                onClick={copyTranscript}
+                disabled={chatHistory.length === 0}
+                className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[8px] font-black tracking-widest text-zinc-500 hover:border-blue-500/40 hover:bg-blue-500/10 hover:text-blue-200 transition-all flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <RiFileCopyLine size={12} />
+                COPY
+              </button>
+              <button
                 aria-label="Clear transcript"
                 onClick={clearTranscript}
                 className="cursor-pointer rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-[8px] font-black tracking-widest text-zinc-500 hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 transition-all flex items-center gap-1"
@@ -1151,7 +1230,7 @@ function DashboardView({
           <div
             ref={scrollRef}
             onScroll={onTranscriptScroll}
-            className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 pr-2 scrollbar-small"
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-4 pr-2 scrollbar-small select-text"
           >
             {chatHistory.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-zinc-700 gap-3 opacity-60">
@@ -1166,23 +1245,36 @@ function DashboardView({
               chatHistory.map((msg, idx) => (
                 <div
                   key={idx}
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+                  className={`flex flex-col select-text ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                 >
                   <span
                     className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-blue-300/70' : 'text-zinc-500'}`}
                   >
-                    {msg.role === 'user' ? 'YOU' : 'SHELL'}
+                    {transcriptRoleLabel(msg)}
                   </span>
                   <div
-                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
+                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] select-text ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
                   >
-                    {msg.parts && msg.parts[0] ? msg.parts[0].text : msg.content}
+                    {transcriptMessageText(msg)}
                   </div>
                 </div>
               ))
             )}
           </div>
           <div className="shrink-0 border-t border-blue-500/10 pt-3">
+            <div className="mb-1 flex justify-end" aria-live="polite">
+              <span
+                className={`inline-flex h-5 items-center gap-1 rounded-full border px-2 text-[8px] font-black tracking-widest ${
+                  activeAgentCount
+                    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
+                    : 'border-white/10 bg-white/[0.03] text-zinc-500'
+                }`}
+                title="Active agents for this task"
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${activeAgentCount ? 'bg-emerald-300 animate-pulse' : 'bg-zinc-600'}`} />
+                {agentStripCountText}
+              </span>
+            </div>
             {attachedFiles.length > 0 && (
               <div className="shell-attachment-tray" aria-label="Attached files">
                 {attachedFiles.map((file) => (

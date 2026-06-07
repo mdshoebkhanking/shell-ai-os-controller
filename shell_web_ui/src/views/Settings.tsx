@@ -38,6 +38,7 @@ type TabType = 'updates' | 'general' | 'keys'
 type VoiceRuntime = 'auto' | 'gemini' | 'backend'
 type OfflineTtsStatus = {
   success?: boolean
+  category?: string
   available?: boolean
   engine?: string
   label?: string
@@ -66,8 +67,17 @@ type OfflineLlmStatus = {
   modelRepo?: string
   modelFile?: string
   language?: string
+  languageSupport?: string[]
+  languageMismatch?: boolean
+  languageWarning?: string
   reason?: string
   runtimeDownloads?: boolean
+  installDir?: string
+  selectedModelId?: string
+  modelPath?: string
+  modelSizeBytes?: number
+  installedModels?: OfflineModelOption[]
+  catalog?: OfflineModelCatalog
   candidates?: Array<{
     engine?: string
     available?: boolean
@@ -75,9 +85,51 @@ type OfflineLlmStatus = {
   }>
 }
 
+type OfflineModelOption = {
+  id?: string
+  name?: string
+  family?: string
+  repo?: string
+  filename?: string
+  quantization?: string
+  sizeMb?: number
+  size_bytes?: number
+  min_ram_gb?: number
+  recommended_ram_gb?: number
+  pc_tier?: string
+  description?: string
+  strengths?: string[]
+  languages?: string[]
+  installed?: boolean
+  recommended?: boolean
+  modelPath?: string
+}
+
+type OfflineModelCatalog = {
+  success?: boolean
+  category?: string
+  runtimeDownloads?: boolean
+  installDir?: string
+  systemRamGb?: number
+  selectedModelId?: string
+  selectedModelPath?: string
+  installedModels?: OfflineModelOption[]
+  options?: OfflineModelOption[]
+  status?: OfflineLlmStatus
+}
+
+type OfflineModelDownloadState = {
+  status?: string
+  percent?: number
+  message?: string
+  modelPath?: string
+  downloadedBytes?: number
+  totalBytes?: number
+}
+
 const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
   const runtime = String(value || '').trim().toLowerCase()
-  return runtime === 'auto' || runtime === 'gemini' || runtime === 'backend' ? runtime : 'auto'
+  return runtime === 'auto' || runtime === 'gemini' ? runtime : 'auto'
 }
 
 const settingsTabs = [
@@ -119,12 +171,19 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [userName, setUserName] = useState(localStorage.getItem('shell_user_name') || '')
   const [language, setLanguage] = useState<ShellLanguage>(() => readShellLanguage())
   const [languageStatus, setLanguageStatus] = useState('Shell replies use this language.')
-  const [offlineTtsStatus, setOfflineTtsStatus] = useState<OfflineTtsStatus | null>(null)
-  const [offlineTtsMessage, setOfflineTtsMessage] = useState('Offline TTS status not checked yet.')
-  const [offlineTtsBusy, setOfflineTtsBusy] = useState(false)
+  const [, setOfflineTtsStatus] = useState<OfflineTtsStatus | null>(null)
+  const [, setOfflineTtsMessage] = useState('Offline TTS status not checked yet.')
+  const [, setOfflineTtsBusy] = useState(false)
   const [offlineLlmStatus, setOfflineLlmStatus] = useState<OfflineLlmStatus | null>(null)
   const [offlineLlmMessage, setOfflineLlmMessage] = useState('Offline brain status not checked yet.')
   const [offlineLlmBusy, setOfflineLlmBusy] = useState(false)
+  const [offlineModelCatalog, setOfflineModelCatalog] = useState<OfflineModelCatalog | null>(null)
+  const [offlineModelDownloads, setOfflineModelDownloads] = useState<Record<string, OfflineModelDownloadState>>({})
+  const [offlineCodingLlmStatus, setOfflineCodingLlmStatus] = useState<OfflineLlmStatus | null>(null)
+  const [offlineCodingLlmMessage, setOfflineCodingLlmMessage] = useState('Offline coding brain status not checked yet.')
+  const [offlineCodingLlmBusy, setOfflineCodingLlmBusy] = useState(false)
+  const [offlineCodingModelCatalog, setOfflineCodingModelCatalog] = useState<OfflineModelCatalog | null>(null)
+  const [offlineCodingModelDownloads, setOfflineCodingModelDownloads] = useState<Record<string, OfflineModelDownloadState>>({})
 
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('shell_custom_api_key') || '')
   const [groqKey, setGroqKey] = useState(localStorage.getItem('shell_groq_api_key') || '')
@@ -233,7 +292,52 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     window.electron.ipcRenderer.invoke('offline-llm-status').then((status) => {
       applyOfflineLlmStatus(status)
     }).catch(() => {})
+    window.electron.ipcRenderer.invoke('offline-coding-llm-status').then((status) => {
+      applyOfflineCodingLlmStatus(status)
+    }).catch(() => {})
   }, [activeTab])
+
+  useEffect(() => {
+    if (!window.electron?.ipcRenderer) return
+    const handleOfflineModelEvent = (_event: unknown, payload: any) => {
+      const modelId = String(payload?.modelId || '')
+      const isCodingEvent =
+        payload?.category === 'coding' ||
+        payload?.catalog?.category === 'coding' ||
+        payload?.catalog?.status?.category === 'coding' ||
+        modelId.includes('coder')
+      const setDownloads = isCodingEvent ? setOfflineCodingModelDownloads : setOfflineModelDownloads
+      if (modelId) {
+        setDownloads((current) => ({
+          ...current,
+          [modelId]: {
+            status: payload?.status,
+            percent: Number(payload?.percent || 0),
+            message: String(payload?.message || ''),
+            modelPath: payload?.modelPath,
+            downloadedBytes: Number(payload?.downloadedBytes || 0),
+            totalBytes: Number(payload?.totalBytes || 0)
+          }
+        }))
+      }
+      if (payload?.catalog?.status) {
+        if (isCodingEvent) {
+          setOfflineCodingModelCatalog(payload.catalog as OfflineModelCatalog)
+          applyOfflineCodingLlmStatus(payload.catalog.status)
+        } else {
+          setOfflineModelCatalog(payload.catalog as OfflineModelCatalog)
+          applyOfflineLlmStatus(payload.catalog.status)
+        }
+      } else if (payload?.status === 'installed') {
+        if (isCodingEvent) refreshOfflineCodingLlmStatus()
+        else refreshOfflineLlmStatus()
+      }
+    }
+    window.electron.ipcRenderer.on('offline-llm-download-event', handleOfflineModelEvent)
+    return () => {
+      window.electron?.ipcRenderer?.off?.('offline-llm-download-event', handleOfflineModelEvent)
+    }
+  }, [])
 
   useEffect(() => {
     if (activeTab !== 'keys' || keysHydratedRef.current || !window.electron?.ipcRenderer) return
@@ -448,23 +552,229 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     }
 
     setOfflineLlmStatus(status)
+    const catalog = status.catalog || ((status as any).options ? (status as any) : null)
+    if (catalog) setOfflineModelCatalog(catalog as OfflineModelCatalog)
     if (status.available) {
-      setOfflineLlmMessage(`${status.modelFamily || status.label || 'Offline brain'} ready for chat and voice replies.`)
+      const warning = String(status.languageWarning || '').trim()
+      setOfflineLlmMessage(
+        warning
+          ? `${status.modelFamily || status.label || 'Offline brain'} ready. ${warning}`
+          : `${status.modelFamily || status.label || 'Offline brain'} ready for chat and voice replies.`
+      )
       return
     }
-    setOfflineLlmMessage(status.reason || 'No packaged offline LLM model is ready; Shell will use local fallback answers.')
+    setOfflineLlmMessage(
+      status.reason ||
+        (status.runtimeDownloads
+          ? 'Download one offline brain model below to enable local chat and voice replies.'
+          : 'Offline brain is not ready; Shell will use local fallback answers.')
+    )
   }
 
   const refreshOfflineLlmStatus = async () => {
     setOfflineLlmBusy(true)
     try {
-      const status = await window.electron?.ipcRenderer.invoke('offline-llm-status')
-      applyOfflineLlmStatus(status)
+      const catalog = await window.electron?.ipcRenderer.invoke('offline-llm-catalog')
+      if (catalog && typeof catalog === 'object') {
+        setOfflineModelCatalog(catalog)
+        applyOfflineLlmStatus((catalog as OfflineModelCatalog).status || (catalog as OfflineLlmStatus))
+      } else {
+        const status = await window.electron?.ipcRenderer.invoke('offline-llm-status')
+        applyOfflineLlmStatus(status)
+      }
     } catch (error: any) {
       setOfflineLlmStatus(null)
       setOfflineLlmMessage(`Offline brain check failed: ${error?.message || error}`)
     } finally {
       setOfflineLlmBusy(false)
+    }
+  }
+
+  const downloadOfflineModel = async (modelId: string) => {
+    if (!modelId || !window.electron?.ipcRenderer) return
+    setOfflineModelDownloads((current) => ({
+      ...current,
+      [modelId]: { status: 'queued', percent: 0, message: 'Queued' }
+    }))
+    try {
+      const result = await window.electron.ipcRenderer.invoke('offline-llm-download', { modelId })
+      if (result?.catalog) setOfflineModelCatalog(result.catalog as OfflineModelCatalog)
+      if (result?.catalog?.status) applyOfflineLlmStatus(result.catalog.status)
+      if (result?.status === 'installed' || result?.status === 'selected') {
+        setOfflineModelDownloads((current) => ({
+          ...current,
+          [modelId]: {
+            status: 'installed',
+            percent: 100,
+            message: result?.message || 'Offline brain is active',
+            modelPath: result?.modelPath
+          }
+        }))
+        await refreshOfflineLlmStatus()
+      }
+      if (result?.success === false) {
+        setOfflineModelDownloads((current) => ({
+          ...current,
+          [modelId]: { status: 'error', percent: 0, message: result?.message || 'Download failed' }
+        }))
+      }
+    } catch (error: any) {
+      setOfflineModelDownloads((current) => ({
+        ...current,
+        [modelId]: { status: 'error', percent: 0, message: `Download failed: ${error?.message || error}` }
+      }))
+    }
+  }
+
+  const selectOfflineModel = async (modelId: string) => {
+    if (!modelId || !window.electron?.ipcRenderer) return
+    setOfflineModelDownloads((current) => ({
+      ...current,
+      [modelId]: { ...current[modelId], status: 'selecting', percent: 100, message: 'Switching brain' }
+    }))
+    try {
+      const result = await window.electron.ipcRenderer.invoke('offline-llm-select', { modelId })
+      if (result?.success === false) {
+        setOfflineModelDownloads((current) => ({
+          ...current,
+          [modelId]: { status: 'error', percent: 0, message: result?.message || 'Selection failed' }
+        }))
+        return
+      }
+      if (result?.catalog) setOfflineModelCatalog(result.catalog as OfflineModelCatalog)
+      if (result?.catalog?.status) applyOfflineLlmStatus(result.catalog.status)
+      setOfflineModelDownloads((current) => ({
+        ...current,
+        [modelId]: {
+          status: 'installed',
+          percent: 100,
+          message: result?.message || 'Offline brain is active',
+          modelPath: result?.modelPath
+        }
+      }))
+      await refreshOfflineLlmStatus()
+    } catch (error: any) {
+      setOfflineModelDownloads((current) => ({
+        ...current,
+        [modelId]: { status: 'error', percent: 0, message: `Selection failed: ${error?.message || error}` }
+      }))
+    }
+  }
+
+  const applyOfflineCodingLlmStatus = (status: OfflineLlmStatus | null | undefined) => {
+    if (!status || typeof status !== 'object') {
+      setOfflineCodingLlmStatus(null)
+      setOfflineCodingLlmMessage('Offline coding brain status unavailable.')
+      return
+    }
+
+    setOfflineCodingLlmStatus(status)
+    const catalog = status.catalog || ((status as any).options ? (status as any) : null)
+    if (catalog) setOfflineCodingModelCatalog(catalog as OfflineModelCatalog)
+    if (status.available) {
+      const warning = String(status.languageWarning || '').trim()
+      setOfflineCodingLlmMessage(
+        warning
+          ? `${status.modelFamily || status.label || 'Offline coding brain'} ready. ${warning}`
+          : `${status.modelFamily || status.label || 'Offline coding brain'} ready for coding agents.`
+      )
+      return
+    }
+    setOfflineCodingLlmMessage(
+      status.reason ||
+        (status.runtimeDownloads
+          ? 'Download one offline coding brain model below to enable local coding agents.'
+          : 'Offline coding brain is not ready; Shell coding agents will use provider or local snippets.')
+    )
+  }
+
+  const refreshOfflineCodingLlmStatus = async () => {
+    setOfflineCodingLlmBusy(true)
+    try {
+      const catalog = await window.electron?.ipcRenderer.invoke('offline-coding-llm-catalog')
+      if (catalog && typeof catalog === 'object') {
+        setOfflineCodingModelCatalog(catalog)
+        applyOfflineCodingLlmStatus((catalog as OfflineModelCatalog).status || (catalog as OfflineLlmStatus))
+      } else {
+        const status = await window.electron?.ipcRenderer.invoke('offline-coding-llm-status')
+        applyOfflineCodingLlmStatus(status)
+      }
+    } catch (error: any) {
+      setOfflineCodingLlmStatus(null)
+      setOfflineCodingLlmMessage(`Offline coding brain check failed: ${error?.message || error}`)
+    } finally {
+      setOfflineCodingLlmBusy(false)
+    }
+  }
+
+  const downloadOfflineCodingModel = async (modelId: string) => {
+    if (!modelId || !window.electron?.ipcRenderer) return
+    setOfflineCodingModelDownloads((current) => ({
+      ...current,
+      [modelId]: { status: 'queued', percent: 0, message: 'Queued' }
+    }))
+    try {
+      const result = await window.electron.ipcRenderer.invoke('offline-coding-llm-download', { modelId })
+      if (result?.catalog) setOfflineCodingModelCatalog(result.catalog as OfflineModelCatalog)
+      if (result?.catalog?.status) applyOfflineCodingLlmStatus(result.catalog.status)
+      if (result?.status === 'installed' || result?.status === 'selected') {
+        setOfflineCodingModelDownloads((current) => ({
+          ...current,
+          [modelId]: {
+            status: 'installed',
+            percent: 100,
+            message: result?.message || 'Offline coding brain is active',
+            modelPath: result?.modelPath
+          }
+        }))
+        await refreshOfflineCodingLlmStatus()
+      }
+      if (result?.success === false) {
+        setOfflineCodingModelDownloads((current) => ({
+          ...current,
+          [modelId]: { status: 'error', percent: 0, message: result?.message || 'Download failed' }
+        }))
+      }
+    } catch (error: any) {
+      setOfflineCodingModelDownloads((current) => ({
+        ...current,
+        [modelId]: { status: 'error', percent: 0, message: `Download failed: ${error?.message || error}` }
+      }))
+    }
+  }
+
+  const selectOfflineCodingModel = async (modelId: string) => {
+    if (!modelId || !window.electron?.ipcRenderer) return
+    setOfflineCodingModelDownloads((current) => ({
+      ...current,
+      [modelId]: { ...current[modelId], status: 'selecting', percent: 100, message: 'Switching coding brain' }
+    }))
+    try {
+      const result = await window.electron.ipcRenderer.invoke('offline-coding-llm-select', { modelId })
+      if (result?.success === false) {
+        setOfflineCodingModelDownloads((current) => ({
+          ...current,
+          [modelId]: { status: 'error', percent: 0, message: result?.message || 'Selection failed' }
+        }))
+        return
+      }
+      if (result?.catalog) setOfflineCodingModelCatalog(result.catalog as OfflineModelCatalog)
+      if (result?.catalog?.status) applyOfflineCodingLlmStatus(result.catalog.status)
+      setOfflineCodingModelDownloads((current) => ({
+        ...current,
+        [modelId]: {
+          status: 'installed',
+          percent: 100,
+          message: result?.message || 'Offline coding brain is active',
+          modelPath: result?.modelPath
+        }
+      }))
+      await refreshOfflineCodingLlmStatus()
+    } catch (error: any) {
+      setOfflineCodingModelDownloads((current) => ({
+        ...current,
+        [modelId]: { status: 'error', percent: 0, message: `Selection failed: ${error?.message || error}` }
+      }))
     }
   }
 
@@ -644,16 +954,6 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .trim()
     .split(/\s+/)
     .filter((w) => w.length > 0).length
-  const offlineTtsReady = Boolean(offlineTtsStatus?.available)
-  const offlineTtsBadge = offlineTtsBusy ? 'CHECKING' : offlineTtsReady ? 'READY' : 'FALLBACK'
-  const offlineTtsEngine = String(offlineTtsStatus?.engine || 'fallback').toUpperCase()
-  const offlineTtsVoice = String(
-    offlineTtsStatus?.activeVoice || offlineTtsStatus?.preferredFemaleVoice || ''
-  ).trim()
-  const offlineTtsCandidateSummary = (offlineTtsStatus?.candidates || [])
-    .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
-    .filter(Boolean)
-    .join('  ')
   const offlineLlmReady = Boolean(offlineLlmStatus?.available)
   const offlineLlmBadge = offlineLlmBusy ? 'CHECKING' : offlineLlmReady ? 'READY' : 'FALLBACK'
   const offlineLlmEngine = String(offlineLlmStatus?.engine || 'fallback').toUpperCase()
@@ -661,6 +961,26 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
     .filter(Boolean)
     .join('  ')
+  const offlineModelOptions = offlineModelCatalog?.options || offlineLlmStatus?.catalog?.options || []
+  const offlineSelectedModelId =
+    offlineLlmStatus?.selectedModelId || offlineModelCatalog?.selectedModelId || ''
+  const offlineCodingLlmReady = Boolean(offlineCodingLlmStatus?.available)
+  const offlineCodingLlmBadge = offlineCodingLlmBusy ? 'CHECKING' : offlineCodingLlmReady ? 'READY' : 'FALLBACK'
+  const offlineCodingLlmEngine = String(offlineCodingLlmStatus?.engine || 'fallback').toUpperCase()
+  const offlineCodingLlmCandidateSummary = (offlineCodingLlmStatus?.candidates || [])
+    .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
+    .filter(Boolean)
+    .join('  ')
+  const offlineCodingModelOptions = offlineCodingModelCatalog?.options || offlineCodingLlmStatus?.catalog?.options || []
+  const offlineCodingSelectedModelId =
+    offlineCodingLlmStatus?.selectedModelId || offlineCodingModelCatalog?.selectedModelId || ''
+  const formatOfflineModelSize = (option: OfflineModelOption) => {
+    const sizeMb = Number(option.sizeMb || 0)
+    if (sizeMb > 0) return `${sizeMb.toFixed(sizeMb >= 1000 ? 0 : 1)} MB`
+    const sizeBytes = Number(option.size_bytes || 0)
+    if (sizeBytes > 0) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
+    return 'Size unknown'
+  }
 
   const cardClass =
     'shell-settings-card border p-6 md:p-8 rounded-2xl flex flex-col gap-5 transition-all shadow-lg'
@@ -936,11 +1256,10 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                     ))}
                   </div>
                   <div
-                    className={`grid grid-cols-1 sm:grid-cols-3 gap-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
+                    className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
                   >
                     {[
                       { id: 'auto', label: 'AUTO LOCAL', hint: 'Desktop first' },
-                      { id: 'backend', label: 'LOCAL ONLY', hint: 'Offline + OS' },
                       { id: 'gemini', label: 'GEMINI LIVE', hint: 'Cloud voice' }
                     ].map((item) => (
                       <button
@@ -961,92 +1280,6 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                         </span>
                       </button>
                     ))}
-                  </div>
-                  <div className="rounded-lg border border-white/10 bg-[#050505] p-3">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="block text-[10px] font-black tracking-widest text-zinc-500">
-                          OFFLINE TTS
-                        </span>
-                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
-                          {offlineTtsEngine}
-                          {offlineTtsStatus?.language ? ` / ${String(offlineTtsStatus.language).toUpperCase()}` : ''}
-                          {offlineTtsStatus?.locale ? ` / ${String(offlineTtsStatus.locale).toUpperCase()}` : ''}
-                          {offlineTtsVoice ? ` / ${offlineTtsVoice}` : ''}
-                        </span>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
-                            offlineTtsReady
-                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                          }`}
-                        >
-                          {offlineTtsBadge}
-                        </span>
-                        <button
-                          onClick={refreshOfflineTtsStatus}
-                          disabled={offlineTtsBusy}
-                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
-                        >
-                          {offlineTtsBusy ? '...' : 'REFRESH'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
-                      {offlineTtsMessage}
-                    </div>
-                    {offlineTtsCandidateSummary && (
-                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
-                        {offlineTtsCandidateSummary}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-lg border border-white/10 bg-[#050505] p-3">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <span className="flex items-center gap-1 text-[10px] font-black tracking-widest text-zinc-500">
-                          <RiBrainLine size={12} /> OFFLINE BRAIN
-                        </span>
-                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
-                          {offlineLlmEngine}
-                          {offlineLlmStatus?.modelFamily ? ` / ${String(offlineLlmStatus.modelFamily).toUpperCase()}` : ''}
-                          {offlineLlmStatus?.language ? ` / ${String(offlineLlmStatus.language).toUpperCase()}` : ''}
-                        </span>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span
-                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
-                            offlineLlmReady
-                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
-                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
-                          }`}
-                        >
-                          {offlineLlmBadge}
-                        </span>
-                        <button
-                          onClick={refreshOfflineLlmStatus}
-                          disabled={offlineLlmBusy}
-                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
-                        >
-                          {offlineLlmBusy ? '...' : 'REFRESH'}
-                        </button>
-                      </div>
-                    </div>
-                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
-                      {offlineLlmMessage}
-                    </div>
-                    {offlineLlmStatus?.modelFile && (
-                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
-                        {offlineLlmStatus.modelFile}
-                      </div>
-                    )}
-                    {offlineLlmCandidateSummary && (
-                      <div className="mt-1 truncate text-[8px] font-mono tracking-widest text-zinc-600">
-                        {offlineLlmCandidateSummary}
-                      </div>
-                    )}
                   </div>
                   <div
                     className={`mt-3 rounded-lg border border-white/10 bg-[#050505] p-3 ${isSystemActive ? 'opacity-40 cursor-not-allowed' : ''}`}
@@ -1080,11 +1313,289 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                   </div>
                   {isSystemActive && (
                     <div
-                      className="absolute inset-0 z-10"
+                      className="pointer-events-none absolute inset-0 z-10"
                       title="Disconnect AI to change voice"
                     ></div>
                   )}
                 </div>
+
+                <div className={`${cardClass} md:col-span-2`}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 text-[10px] font-black tracking-widest text-zinc-500">
+                          <RiBrainLine size={12} /> OFFLINE BRAIN
+                        </span>
+                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
+                          {offlineLlmEngine}
+                          {offlineLlmStatus?.modelFamily ? ` / ${String(offlineLlmStatus.modelFamily).toUpperCase()}` : ''}
+                          {offlineLlmStatus?.language ? ` / ${String(offlineLlmStatus.language).toUpperCase()}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
+                            offlineLlmReady
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {offlineLlmBadge}
+                        </span>
+                        <button
+                          onClick={refreshOfflineLlmStatus}
+                          disabled={offlineLlmBusy}
+                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {offlineLlmBusy ? '...' : 'REFRESH'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
+                      {offlineLlmMessage}
+                    </div>
+                    {offlineModelOptions.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        {offlineModelOptions.map((option) => {
+                          const modelId = String(option.id || '')
+                          const downloadState = offlineModelDownloads[modelId]
+                          const status = String(downloadState?.status || '')
+                          const isDownloading = status === 'queued' || status === 'downloading' || status === 'verifying'
+                          const isSelecting = status === 'selecting'
+                          const isSelected = offlineSelectedModelId === modelId
+                          const isInstalled = Boolean(option.installed) || status === 'installed'
+                          const percent = Math.max(0, Math.min(100, Number(downloadState?.percent || 0)))
+                          return (
+                            <div
+                              key={modelId}
+                              className={`rounded-lg border p-3 transition-all ${
+                                isSelected
+                                  ? 'border-emerald-500/30 bg-emerald-500/10'
+                                  : isInstalled
+                                    ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
+                                  : option.recommended
+                                    ? 'border-cyan-500/25 bg-cyan-500/5'
+                                    : 'border-white/10 bg-black/30'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-black tracking-widest text-zinc-200">
+                                      {option.name || option.family || modelId}
+                                    </span>
+                                    {option.recommended && (
+                                      <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-cyan-200">
+                                        RECOMMENDED
+                                      </span>
+                                    )}
+                                    {isSelected && (
+                                      <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-emerald-200">
+                                        ACTIVE
+                                      </span>
+                                    )}
+                                    {isInstalled && (
+                                      <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-emerald-200">
+                                        INSTALLED
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-[8px] font-mono uppercase tracking-widest text-zinc-500">
+                                    {option.pc_tier || 'LOCAL'} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
+                                    {Array.isArray(option.languages) && option.languages.length > 0
+                                      ? ` / ${option.languages.join(', ').toUpperCase()}`
+                                      : ''}
+                                  </div>
+                                  <div className="mt-1 text-[9px] font-mono leading-relaxed text-zinc-500">
+                                    {option.description || 'Offline chat model.'}
+                                  </div>
+                                  {Array.isArray(option.strengths) && option.strengths.length > 0 && (
+                                    <div className="mt-1 truncate text-[8px] font-mono text-zinc-600">
+                                      {option.strengths.slice(0, 4).join('  /  ')}
+                                    </div>
+                                  )}
+                                  {downloadState?.message && (
+                                    <div className="mt-2 text-[8px] font-mono text-cyan-300">
+                                      {downloadState.message}
+                                    </div>
+                                  )}
+                                  {isDownloading && (
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                      <div
+                                        className="h-full rounded-full bg-cyan-300 transition-all"
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => (isInstalled ? selectOfflineModel(modelId) : downloadOfflineModel(modelId))}
+                                  disabled={!modelId || isDownloading || isSelecting || isSelected}
+                                  className={`shrink-0 cursor-pointer rounded-md border px-2.5 py-1.5 text-[8px] font-black tracking-widest transition-all disabled:cursor-wait disabled:opacity-60 ${
+                                    isSelected
+                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                      : isInstalled
+                                        ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-200 hover:border-emerald-500/40'
+                                      : 'border-white/10 bg-white/5 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200'
+                                  }`}
+                                >
+                                  {isSelected ? 'ACTIVE' : isSelecting ? '...' : isInstalled ? 'USE' : isDownloading ? `${percent}%` : 'DOWNLOAD'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {offlineLlmStatus?.modelFile && (
+                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineLlmStatus.modelFile}
+                      </div>
+                    )}
+                    {offlineLlmCandidateSummary && (
+                      <div className="mt-1 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineLlmCandidateSummary}
+                      </div>
+                    )}
+                  </div>
+
+                <div className={`${cardClass} md:col-span-2`}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className="flex items-center gap-1 text-[10px] font-black tracking-widest text-zinc-500">
+                          <RiTerminalWindowLine size={12} /> OFFLINE CODING BRAIN
+                        </span>
+                        <span className="mt-1 block truncate text-[9px] font-mono text-zinc-500">
+                          {offlineCodingLlmEngine}
+                          {offlineCodingLlmStatus?.modelFamily ? ` / ${String(offlineCodingLlmStatus.modelFamily).toUpperCase()}` : ''}
+                          {offlineCodingLlmStatus?.language ? ` / ${String(offlineCodingLlmStatus.language).toUpperCase()}` : ''}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-1 text-[8px] font-black tracking-widest ${
+                            offlineCodingLlmReady
+                              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+                          }`}
+                        >
+                          {offlineCodingLlmBadge}
+                        </span>
+                        <button
+                          onClick={refreshOfflineCodingLlmStatus}
+                          disabled={offlineCodingLlmBusy}
+                          className="cursor-pointer rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-black tracking-widest text-zinc-400 hover:border-emerald-500/40 hover:text-emerald-300 disabled:cursor-wait disabled:opacity-50"
+                        >
+                          {offlineCodingLlmBusy ? '...' : 'REFRESH'}
+                        </button>
+                      </div>
+                    </div>
+                    <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
+                      {offlineCodingLlmMessage}
+                    </div>
+                    {offlineCodingModelOptions.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        {offlineCodingModelOptions.map((option) => {
+                          const modelId = String(option.id || '')
+                          const downloadState = offlineCodingModelDownloads[modelId]
+                          const status = String(downloadState?.status || '')
+                          const isDownloading = status === 'queued' || status === 'downloading' || status === 'verifying'
+                          const isSelecting = status === 'selecting'
+                          const isSelected = offlineCodingSelectedModelId === modelId
+                          const isInstalled = Boolean(option.installed) || status === 'installed'
+                          const percent = Math.max(0, Math.min(100, Number(downloadState?.percent || 0)))
+                          return (
+                            <div
+                              key={modelId}
+                              className={`rounded-lg border p-3 transition-all ${
+                                isSelected
+                                  ? 'border-emerald-500/30 bg-emerald-500/10'
+                                  : isInstalled
+                                    ? 'border-emerald-500/20 bg-emerald-500/[0.04]'
+                                  : option.recommended
+                                    ? 'border-cyan-500/25 bg-cyan-500/5'
+                                    : 'border-white/10 bg-black/30'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-black tracking-widest text-zinc-200">
+                                      {option.name || option.family || modelId}
+                                    </span>
+                                    {option.recommended && (
+                                      <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-cyan-200">
+                                        RECOMMENDED
+                                      </span>
+                                    )}
+                                    {isSelected && (
+                                      <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-emerald-200">
+                                        ACTIVE
+                                      </span>
+                                    )}
+                                    {isInstalled && (
+                                      <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-emerald-200">
+                                        INSTALLED
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-[8px] font-mono uppercase tracking-widest text-zinc-500">
+                                    {option.pc_tier || 'CODING'} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
+                                    {Array.isArray(option.languages) && option.languages.length > 0
+                                      ? ` / ${option.languages.join(', ').toUpperCase()}`
+                                      : ''}
+                                  </div>
+                                  <div className="mt-1 text-[9px] font-mono leading-relaxed text-zinc-500">
+                                    {option.description || 'Offline coding model.'}
+                                  </div>
+                                  {Array.isArray(option.strengths) && option.strengths.length > 0 && (
+                                    <div className="mt-1 truncate text-[8px] font-mono text-zinc-600">
+                                      {option.strengths.slice(0, 4).join('  /  ')}
+                                    </div>
+                                  )}
+                                  {downloadState?.message && (
+                                    <div className="mt-2 text-[8px] font-mono text-cyan-300">
+                                      {downloadState.message}
+                                    </div>
+                                  )}
+                                  {isDownloading && (
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                      <div
+                                        className="h-full rounded-full bg-cyan-300 transition-all"
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => (isInstalled ? selectOfflineCodingModel(modelId) : downloadOfflineCodingModel(modelId))}
+                                  disabled={!modelId || isDownloading || isSelecting || isSelected}
+                                  className={`shrink-0 cursor-pointer rounded-md border px-2.5 py-1.5 text-[8px] font-black tracking-widest transition-all disabled:cursor-wait disabled:opacity-60 ${
+                                    isSelected
+                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                      : isInstalled
+                                        ? 'border-emerald-500/25 bg-emerald-500/[0.06] text-emerald-200 hover:border-emerald-500/40'
+                                      : 'border-white/10 bg-white/5 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200'
+                                  }`}
+                                >
+                                  {isSelected ? 'ACTIVE' : isSelecting ? '...' : isInstalled ? 'USE' : isDownloading ? `${percent}%` : 'DOWNLOAD'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                    {offlineCodingLlmStatus?.modelFile && (
+                      <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineCodingLlmStatus.modelFile}
+                      </div>
+                    )}
+                    {offlineCodingLlmCandidateSummary && (
+                      <div className="mt-1 truncate text-[8px] font-mono tracking-widest text-zinc-600">
+                        {offlineCodingLlmCandidateSummary}
+                      </div>
+                    )}
+                  </div>
               </motion.div>
             )}
 

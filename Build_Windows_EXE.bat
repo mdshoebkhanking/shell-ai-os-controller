@@ -9,9 +9,9 @@ set "SHELL_LEGACY_UI=0"
 set "SHELL_V2_STREAM=1"
 set "SHELL_IMAGE_LOCAL_FALLBACK=1"
 set "SHELL_WINDOWS_PERFORMANCE_MODE=balanced"
-set "SHELL_OFFLINE_LLM_CONTEXT=1024"
-set "SHELL_OFFLINE_LLM_BATCH=64"
-set "SHELL_OFFLINE_LLM_MAX_TOKENS=160"
+set "SHELL_OFFLINE_LLM_CONTEXT=768"
+set "SHELL_OFFLINE_LLM_BATCH=32"
+set "SHELL_OFFLINE_LLM_MAX_TOKENS=96"
 set "OPENBLAS_NUM_THREADS=1"
 set "OMP_NUM_THREADS=1"
 set "MKL_NUM_THREADS=1"
@@ -28,7 +28,8 @@ echo.
 echo  This will:
 echo   - validate the release package inputs
 echo   - build the React renderer
-echo   - bundle ShellAI.exe with PyInstaller
+echo   - bundle ShellAI.exe with Electron/electron-builder
+echo   - bundle the local Python backend as ShellAIBackend.exe
 echo   - stage a clean installer tree without secrets/runtime files
 echo   - compile a Windows setup EXE with Inno Setup
 echo.
@@ -83,24 +84,22 @@ echo Staging offline TTS assets...
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
-echo Staging offline LLM assets...
-%PY_CMD% tools\stage_falcon_offline_llm_assets.py --variant q4_k_m
-set "SHELL_RC=!ERRORLEVEL!"
-if not "!SHELL_RC!"=="0" goto failed
+echo Offline LLM models are installed on demand from Shell Settings.
 
 echo Staging offline STT assets...
 %PY_CMD% tools\stage_sherpa_stt_assets.py
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
-%PY_CMD% tools\build_windows_installer.py --no-strict --installer-engine inno
+%PY_CMD% tools\build_windows_installer.py --no-strict --installer-engine inno --desktop-runtime electron
 set "SHELL_RC=!ERRORLEVEL!"
 
 echo.
 if "!SHELL_RC!"=="0" (
   echo ============================================================
   echo  Windows setup EXE created in dist.
-  echo  Installer shortcuts launch ShellAIApp\ShellAI.exe.
+  echo  Installer shortcuts launch Electron ShellAIApp\ShellAI.exe.
+  echo  Local tools and voice run through ShellAIBackend\ShellAIBackend.exe.
   echo  Upload the setup EXE as the release asset for Settings updates.
   echo ============================================================
 ) else (

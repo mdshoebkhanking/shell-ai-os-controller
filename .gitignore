@@ -50,6 +50,7 @@ brain/data/*.json.bak
 .phoenix_analytics.json
 .shell_chat_history/
 .shell_full_smoke_report.json
+.shell_electron_bridge_port
 .shell_hub_port
 .shell_theme.json
 .shell_runtime/

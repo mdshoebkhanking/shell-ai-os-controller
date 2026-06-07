@@ -21,13 +21,16 @@ def test_dashboard_orb_listens_to_backend_voice_amplitude():
 
     assert "voice-amplitude" in dashboard
     assert "voiceLevel={voiceAmplitude}" in dashboard
-    assert "speaking={speechState === 'SPEAKING' || speechState === 'GEMINI LIVE'}" in dashboard
+    assert "speaking={orbSpeaking}" in dashboard
+    assert "speechReactionActive" in dashboard
+    assert "const orbSpeaking = speechState === 'SPEAKING' || speechState === 'GEMINI LIVE' || speechReactionActive" in dashboard
     assert "runSpeechReaction" in dashboard
     assert "amplitudeFrames" in dashboard
     assert "durationMs" in dashboard
     assert "backendLevel" in sphere
-    assert "speechPulse" in sphere
-    assert "idlePulse" in sphere
+    assert "speechPulse" not in sphere
+    assert "targetVolume = speaking ? Math.min(1, Math.max(liveVolume, backendLevel)) : 0" in sphere
+    assert "__shellVoiceService?.analyser" in sphere
 
 
 def test_dashboard_queued_tts_does_not_start_orb_reaction():
@@ -41,6 +44,7 @@ def test_dashboard_queued_tts_does_not_start_orb_reaction():
     assert "runSpeechReaction" not in queued_branch
     assert "state === 'QUEUED'" in speech_status
     assert speech_status.index("state === 'QUEUED'") < speech_status.index("state === 'SPEAKING'")
+    assert "runSpeechReaction(payload, String(payload?.text || payload?.message || '').trim())" in speech_status
 
 
 def test_backend_probe_voice_amplitude_channel_is_env_gated(monkeypatch):
@@ -72,6 +76,17 @@ def test_browser_probe_emitter_is_query_param_gated():
     assert "window.location.search" in bridge
 
 
+def test_electron_bridge_events_forward_to_shell_api_listener_bus():
+    bridge = (ROOT / "shell_web_ui" / "src" / "shellBridge.ts").read_text(encoding="utf-8")
+
+    assert "const BRIDGE_EVENT_CHANNELS = [" in bridge
+    assert "'speech-status'" in bridge
+    assert "'voice-amplitude'" in bridge
+    assert "'voice-status'" in bridge
+    assert "eventBridge.on(channel, (_event: unknown, payload?: unknown) => emit(channel, payload))" in bridge
+    assert "connectBridgeEventForwarding()" in bridge.split("on: (channel: string, listener: Listener) =>", 1)[1]
+
+
 def test_primary_tabs_can_scroll_inside_tight_windows():
     shell_ai = (ROOT / "shell_web_ui" / "src" / "UI" / "ShellAI.tsx").read_text(encoding="utf-8")
     css = (ROOT / "shell_web_ui" / "src" / "assets" / "main.css").read_text(encoding="utf-8")
@@ -80,6 +95,18 @@ def test_primary_tabs_can_scroll_inside_tight_windows():
     assert "flex-1 items-center justify-center" in shell_ai
     assert ".shell-primary-tabs" in css
     assert "overflow-x: auto" in css
+
+
+def test_dashboard_transcript_copy_select_and_agent_strip_are_visible():
+    dashboard = (ROOT / "shell_web_ui" / "src" / "views" / "Dashboard.tsx").read_text(encoding="utf-8")
+
+    assert "aria-label=\"Copy transcript\"" in dashboard
+    assert "navigator.clipboard.writeText(text)" in dashboard
+    assert "select-text" in dashboard
+    assert "agentStripCountText" in dashboard
+    assert "Active agents for this task" in dashboard
+    assert "inline-flex h-5" in dashboard
+    assert "Shell will choose tools and agents for typed tasks" not in dashboard
 
 
 def test_orb_session_dock_keeps_accessible_icon_controls():

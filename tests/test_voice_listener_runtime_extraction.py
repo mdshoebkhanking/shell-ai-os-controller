@@ -36,11 +36,7 @@ def test_ui_reexports_voice_listener_runtime_for_backward_compatibility(monkeypa
 
 def test_voice_listener_reports_dependency_failure_and_exits(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
-
-    from PyQt6.QtCore import QCoreApplication
     from shell_voice_listener_runtime import VoiceListenerThread
-
-    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
     listener = VoiceListenerThread()
     errors: list[str] = []
     listener.error_occurred.connect(errors.append)
@@ -53,10 +49,8 @@ def test_voice_listener_reports_dependency_failure_and_exits(monkeypatch):
     listener.start()
     deadline = time.time() + 2.0
     while time.time() < deadline and not errors:
-        app.processEvents()
         time.sleep(0.01)
     listener.wait(1000)
-    app.processEvents()
 
     assert errors == ["sounddevice not installed"]
     assert not listener.isRunning()
@@ -66,7 +60,6 @@ def test_voice_listener_thread_stops_cleanly_with_silent_audio(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
     import numpy as np
-    from PyQt6.QtCore import QCoreApplication
     from shell_voice_listener_runtime import VoiceListenerThread
 
     class FakeSoundDevice:
@@ -77,8 +70,6 @@ def test_voice_listener_thread_stops_cleanly_with_silent_audio(monkeypatch):
     class FakeSpeechRecognition:
         class Recognizer:
             pass
-
-    app = QCoreApplication.instance() or QCoreApplication(sys.argv)
     listener = VoiceListenerThread()
     stopped: list[bool] = []
     amplitudes: list[float] = []
@@ -100,7 +91,6 @@ def test_voice_listener_thread_stops_cleanly_with_silent_audio(monkeypatch):
     time.sleep(0.25)
     listener.stop_listening()
     listener.wait(1500)
-    app.processEvents()
 
     assert stopped == [True]
     assert amplitudes and amplitudes[-1] == 0.0

@@ -13,7 +13,8 @@ import logging
 import os
 from pathlib import Path
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from shell_async_signals import WorkerThread
+from shell_async_signals import signal as runtime_signal
 
 
 logger = logging.getLogger("shell.realtime_audio")
@@ -68,10 +69,10 @@ def _hub_auth_headers(extra=None) -> dict[str, str]:
     return headers
 
 
-class LiveKitAudioClient(QThread):
+class LiveKitAudioClient(WorkerThread):
     """Optional LiveKit audio bridge for realtime voice amplitude updates."""
 
-    audio_amplitude = pyqtSignal(float)
+    audio_amplitude = runtime_signal(float)
 
     def __init__(self, token_url=None, *, token_url_resolver=None, auth_headers_factory=None):
         super().__init__()

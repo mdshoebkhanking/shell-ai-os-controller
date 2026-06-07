@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import wave
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,8 @@ from typing import Any
 PROJECT_ROOT = Path(__file__).resolve().parent
 RUNTIME_TTS_DIR = PROJECT_ROOT / ".shell_runtime" / "tts_audio"
 DEFAULT_ENGINE_ORDER = ("kokoro",)
-PLAYBACK_STARTUP_GRACE_S = 0.12
+PLAYBACK_STARTUP_GRACE_S = 0.0
+KOKORO_AUDIO_CACHE_MAX = 16
 SUPPORTED_SHELL_LANGUAGE_ORDER = ("hinglish", "english", "hindi")
 SUPPORTED_SHELL_LANGUAGES = set(SUPPORTED_SHELL_LANGUAGE_ORDER)
 KOKORO_MODEL_FAMILY = "Kokoro-82M"
@@ -38,8 +40,18 @@ KOKORO_DEFAULT_VOICES = {
     "hinglish": "af_heart",
     "hindi": "hf_alpha",
 }
+KOKORO_PRESET_AUDIO_FILES = {
+    "Command center ready.": "command-center-ready.wav",
+}
 KOKORO_REALISTIC_FEMALE_VOICE = "af_heart"
 KOKORO_HINDI_NATIVE_VOICE = "hf_alpha"
+_KOKORO_ENGINE_LOCK = threading.Lock()
+_KOKORO_SYNTHESIS_LOCK = threading.Lock()
+_KOKORO_ENGINE: Any | None = None
+_KOKORO_ENGINE_KEY: tuple[str, int, str, int, str] | None = None
+_KOKORO_ENGINE_LOAD_MS: float | None = None
+_KOKORO_AUDIO_CACHE_LOCK = threading.Lock()
+_KOKORO_AUDIO_CACHE: OrderedDict[tuple[Any, ...], dict[str, Any]] = OrderedDict()
 HINGLISH_ROUTING_HINTS = frozenset(
     {
         "aap",
@@ -640,8 +652,51 @@ def _play_wav_async(wav_path: Path) -> Any | None:
         )
     except Exception:
         return None
-    time.sleep(PLAYBACK_STARTUP_GRACE_S)
+    if PLAYBACK_STARTUP_GRACE_S > 0:
+        time.sleep(PLAYBACK_STARTUP_GRACE_S)
     return None if process.poll() not in (None, 0) else process
+
+
+class _SoundDevicePlayback:
+    def __init__(self, sounddevice_module: Any) -> None:
+        self._sounddevice = sounddevice_module
+        self._stopped = False
+
+    def poll(self) -> int | None:
+        return 0 if self._stopped else None
+
+    def terminate(self) -> None:
+        self._stopped = True
+        try:
+            self._sounddevice.stop()
+        except Exception:
+            pass
+
+    def wait(self, timeout: float | None = None) -> int:
+        if timeout:
+            time.sleep(min(float(timeout), 0.05))
+        return 0 if self._stopped else 0
+
+    def kill(self) -> None:
+        self.terminate()
+
+
+def _play_samples_async(samples: Any, sample_rate: int) -> Any | None:
+    try:
+        import numpy as np
+        import sounddevice as sd
+
+        audio = np.asarray(samples, dtype=np.float32)
+        if audio.ndim > 1:
+            audio = audio.reshape(-1)
+        if audio.size == 0:
+            return None
+        audio = np.clip(audio, -1.0, 1.0)
+        sd.stop()
+        sd.play(audio, int(sample_rate), blocking=False)
+        return _SoundDevicePlayback(sd)
+    except Exception:
+        return None
 
 
 def _tts_audio_path(engine: str) -> Path:
@@ -721,6 +776,57 @@ def _wav_reactivity_metadata(wav_path: Path) -> dict[str, Any]:
         return _audio_reactivity_metadata(audio, sample_rate)
     except Exception:
         return {"durationMs": 0, "amplitudeFrameMs": 80, "amplitudeFrames": []}
+
+
+def _kokoro_preset_audio_path(text: str, model_dir: Path) -> Path | None:
+    filename = KOKORO_PRESET_AUDIO_FILES.get(" ".join(str(text or "").strip().split()))
+    if not filename:
+        return None
+    preset_path = model_dir / "presets" / filename
+    return preset_path if preset_path.exists() and preset_path.is_file() else None
+
+
+def _speak_kokoro_preset(text: str, wav_path: Path, started: float) -> dict[str, Any]:
+    playback_started = time.perf_counter()
+    process = _play_wav_async(wav_path)
+    if not process:
+        return {"success": False, "available": True, "engine": "kokoro", "message": "No local WAV playback command found."}
+    playback_start_ms = (time.perf_counter() - playback_started) * 1000.0
+    total_ms = (time.perf_counter() - started) * 1000.0
+    return {
+        "success": True,
+        "available": True,
+        "engine": "kokoro",
+        "playbackBackend": "wav-preset",
+        "voice": _kokoro_voice_for(_shell_language()),
+        "voices": [_kokoro_voice_for(_shell_language())],
+        "segments": [],
+        "chars": len(text),
+        "audioPath": str(wav_path),
+        "cacheHit": True,
+        "presetHit": True,
+        "synthesisMs": 0.0,
+        "playbackStartMs": round(playback_start_ms, 2),
+        "totalMs": round(total_ms, 2),
+        **_wav_reactivity_metadata(wav_path),
+        "_process": process,
+    }
+
+
+def _speak_kokoro_preset_fast_path(text: str) -> dict[str, Any] | None:
+    if _env_disabled():
+        return None
+    requested = _engine_setting()
+    if requested not in {"auto", "kokoro"}:
+        return None
+    started = time.perf_counter()
+    model, voices, model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
+    if not model or not voices or not model_dir:
+        return None
+    preset_path = _kokoro_preset_audio_path(text, model_dir)
+    if preset_path is None:
+        return None
+    return _speak_kokoro_preset(text, preset_path, started)
 
 
 def _contains_devanagari(text: str) -> bool:
@@ -938,46 +1044,234 @@ def _prepare_kokoro_espeak_data_layout(data_path: Path) -> None:
                 continue
 
 
-def _speak_kokoro(text: str) -> dict[str, Any]:
+def _kokoro_asset_signature(model: Path, voices: Path) -> tuple[str, int, str, int, str]:
+    try:
+        model_stat = model.stat()
+        model_mtime = int(model_stat.st_mtime_ns)
+    except Exception:
+        model_mtime = 0
+    try:
+        voices_stat = voices.stat()
+        voices_mtime = int(voices_stat.st_mtime_ns)
+    except Exception:
+        voices_mtime = 0
+    espeak_marker = "|".join(
+        (
+            os.environ.get("PHONEMIZER_ESPEAK_LIBRARY", ""),
+            os.environ.get("PHONEMIZER_ESPEAK_DATA_PATH", ""),
+        )
+    )
+    return (str(model.resolve()), model_mtime, str(voices.resolve()), voices_mtime, espeak_marker)
+
+
+def _kokoro_audio_cache_key(
+    text: str,
+    segments: list[KokoroTTSSegment],
+    speed: float,
+    model: Path,
+    voices: Path,
+) -> tuple[Any, ...]:
+    return (
+        str(model.resolve()),
+        str(voices.resolve()),
+        round(float(speed), 3),
+        tuple((segment.text, segment.language, segment.locale, segment.voice) for segment in segments),
+        text,
+    )
+
+
+def _get_cached_kokoro_audio(key: tuple[Any, ...]) -> dict[str, Any] | None:
+    with _KOKORO_AUDIO_CACHE_LOCK:
+        cached = _KOKORO_AUDIO_CACHE.get(key)
+        if cached is None:
+            return None
+        _KOKORO_AUDIO_CACHE.move_to_end(key)
+        return dict(cached)
+
+
+def _store_cached_kokoro_audio(key: tuple[Any, ...], value: dict[str, Any]) -> None:
+    with _KOKORO_AUDIO_CACHE_LOCK:
+        _KOKORO_AUDIO_CACHE[key] = dict(value)
+        _KOKORO_AUDIO_CACHE.move_to_end(key)
+        while len(_KOKORO_AUDIO_CACHE) > KOKORO_AUDIO_CACHE_MAX:
+            _KOKORO_AUDIO_CACHE.popitem(last=False)
+
+
+def _create_kokoro_engine(model: Path, voices: Path) -> Any:
+    from kokoro_onnx import Kokoro
+
+    espeak_config = _kokoro_espeak_config()
+    try:
+        return Kokoro(str(model), str(voices), espeak_config=espeak_config)
+    except TypeError:
+        return Kokoro(str(model), str(voices))
+
+
+def _get_kokoro_engine(model: Path, voices: Path) -> Any:
+    global _KOKORO_ENGINE, _KOKORO_ENGINE_KEY, _KOKORO_ENGINE_LOAD_MS
+
+    key = _kokoro_asset_signature(model, voices)
+    with _KOKORO_ENGINE_LOCK:
+        if _KOKORO_ENGINE is not None and _KOKORO_ENGINE_KEY == key:
+            return _KOKORO_ENGINE
+        started = time.perf_counter()
+        engine = _create_kokoro_engine(model, voices)
+        _KOKORO_ENGINE = engine
+        _KOKORO_ENGINE_KEY = key
+        _KOKORO_ENGINE_LOAD_MS = (time.perf_counter() - started) * 1000.0
+        return engine
+
+
+def prewarm_offline_tts() -> dict[str, Any]:
+    """Load the packaged Kokoro engine without playing audio."""
+    status = offline_tts_status()
+    if not status.get("available") or str(status.get("engine") or "").lower() != "kokoro":
+        return {"success": False, "prewarmed": False, "engine": status.get("engine", "kokoro"), "status": status}
     model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
     if not model or not voices:
-        return {"success": False, "available": False, "engine": "kokoro", "message": "Kokoro model assets are missing."}
+        return {"success": False, "prewarmed": False, "engine": "kokoro", "message": "Kokoro model assets are missing."}
     try:
-        from kokoro_onnx import Kokoro
+        _get_kokoro_engine(model, voices)
+    except Exception as exc:
+        return {"success": False, "prewarmed": False, "engine": "kokoro", "message": str(exc), "status": status}
+    return {
+        "success": True,
+        "prewarmed": True,
+        "engine": "kokoro",
+        "loadMs": _KOKORO_ENGINE_LOAD_MS,
+        "status": status,
+    }
+
+
+def _speak_kokoro(text: str) -> dict[str, Any]:
+    started = time.perf_counter()
+    model, voices, model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
+    if not model or not voices:
+        return {"success": False, "available": False, "engine": "kokoro", "message": "Kokoro model assets are missing."}
+    preset_path = _kokoro_preset_audio_path(text, model_dir)
+    if preset_path is not None:
+        return _speak_kokoro_preset(text, preset_path, started)
+    try:
+        engine = _get_kokoro_engine(model, voices)
     except Exception as exc:
         return {"success": False, "available": False, "engine": "kokoro", "message": f"kokoro_onnx unavailable: {exc}"}
 
     speed = float(os.environ.get("SHELL_NATURAL_TTS_SPEED", "1.0") or "1.0")
-    wav_path = _tts_audio_path("kokoro")
-
-    espeak_config = _kokoro_espeak_config()
-    try:
-        engine = Kokoro(str(model), str(voices), espeak_config=espeak_config)
-    except TypeError:
-        engine = Kokoro(str(model), str(voices))
     segments = _prepare_kokoro_segments(text)
-    rendered_segments = [
-        engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
-        for segment in segments
-    ]
-    samples, sample_rate = _join_kokoro_audio(rendered_segments)
-    _write_float_wav(wav_path, samples, int(sample_rate))
-    reactivity = _audio_reactivity_metadata(samples, int(sample_rate))
-    process = _play_wav_async(wav_path)
+    cache_key = _kokoro_audio_cache_key(text, segments, speed, model, voices)
+    cached = _get_cached_kokoro_audio(cache_key)
+    cache_hit = cached is not None
+    if cached is not None:
+        samples = cached["samples"]
+        sample_rate = int(cached["sample_rate"])
+        reactivity = dict(cached["reactivity"])
+        synth_ms = 0.0
+    else:
+        synth_started = time.perf_counter()
+        with _KOKORO_SYNTHESIS_LOCK:
+            cached = _get_cached_kokoro_audio(cache_key)
+            if cached is not None:
+                samples = cached["samples"]
+                sample_rate = int(cached["sample_rate"])
+                reactivity = dict(cached["reactivity"])
+                synth_ms = 0.0
+                cache_hit = True
+            else:
+                rendered_segments = [
+                    engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
+                    for segment in segments
+                ]
+                samples, sample_rate = _join_kokoro_audio(rendered_segments)
+                sample_rate = int(sample_rate)
+                reactivity = _audio_reactivity_metadata(samples, sample_rate)
+                synth_ms = (time.perf_counter() - synth_started) * 1000.0
+                _store_cached_kokoro_audio(
+                    cache_key,
+                    {"samples": samples, "sample_rate": sample_rate, "reactivity": reactivity},
+                )
+
+    playback_started = time.perf_counter()
+    process = _play_samples_async(samples, int(sample_rate))
+    playback_backend = "sounddevice"
+    wav_path: Path | None = None
+    if not process:
+        wav_path = _tts_audio_path("kokoro")
+        _write_float_wav(wav_path, samples, int(sample_rate))
+        process = _play_wav_async(wav_path)
+        playback_backend = "wav-player"
     if not process:
         return {"success": False, "available": True, "engine": "kokoro", "message": "No local WAV playback command found."}
+    playback_start_ms = (time.perf_counter() - playback_started) * 1000.0
+    total_ms = (time.perf_counter() - started) * 1000.0
     return {
         "success": True,
         "available": True,
         "engine": "kokoro",
+        "playbackBackend": playback_backend,
         "voice": segments[0].voice if segments else _kokoro_voice_for(_shell_language()),
         "voices": sorted({segment.voice for segment in segments}),
         "segments": [segment.as_dict() for segment in segments],
         "chars": len(text),
-        "audioPath": str(wav_path),
+        "audioPath": str(wav_path) if wav_path else "",
+        "cacheHit": cache_hit,
+        "synthesisMs": round(synth_ms, 2),
+        "playbackStartMs": round(playback_start_ms, 2),
+        "totalMs": round(total_ms, 2),
         **reactivity,
         "_process": process,
     }
+
+
+def prime_offline_tts_cache(phrases: list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
+    status = offline_tts_status()
+    if not status.get("available") or str(status.get("engine") or "").lower() != "kokoro":
+        return {"success": False, "primed": 0, "engine": status.get("engine", "kokoro"), "status": status}
+    model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
+    if not model or not voices:
+        return {"success": False, "primed": 0, "engine": "kokoro", "message": "Kokoro model assets are missing."}
+    try:
+        engine = _get_kokoro_engine(model, voices)
+    except Exception as exc:
+        return {"success": False, "primed": 0, "engine": "kokoro", "message": str(exc), "status": status}
+
+    defaults = (
+        "Command center ready.",
+        "Electron Kokoro test successful hai.",
+        "Shell Kokoro test successful hai.",
+        "Haan bhai, main ready hoon.",
+    )
+    phrase_list = [str(item or "").strip() for item in (phrases or defaults)]
+    speed = float(os.environ.get("SHELL_NATURAL_TTS_SPEED", "1.0") or "1.0")
+    primed = 0
+    started = time.perf_counter()
+    for phrase in phrase_list:
+        if not phrase:
+            continue
+        segments = _prepare_kokoro_segments(phrase)
+        key = _kokoro_audio_cache_key(phrase, segments, speed, model, voices)
+        if _get_cached_kokoro_audio(key) is not None:
+            primed += 1
+            continue
+        with _KOKORO_SYNTHESIS_LOCK:
+            if _get_cached_kokoro_audio(key) is not None:
+                primed += 1
+                continue
+            rendered_segments = [
+                engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
+                for segment in segments
+            ]
+        samples, sample_rate = _join_kokoro_audio(rendered_segments)
+        sample_rate = int(sample_rate)
+        _store_cached_kokoro_audio(
+            key,
+            {
+                "samples": samples,
+                "sample_rate": sample_rate,
+                "reactivity": _audio_reactivity_metadata(samples, sample_rate),
+            },
+        )
+        primed += 1
+    return {"success": True, "primed": primed, "engine": "kokoro", "elapsedMs": round((time.perf_counter() - started) * 1000.0, 2)}
 
 
 def _speak_piper(text: str) -> dict[str, Any]:
@@ -1023,6 +1317,10 @@ def speak_offline_tts(text: str) -> dict[str, Any]:
     if not speech_text:
         return {"success": False, "available": False, "engine": "", "message": "No speech text provided."}
 
+    preset_result = _speak_kokoro_preset_fast_path(speech_text)
+    if preset_result is not None:
+        return preset_result
+
     status = offline_tts_status()
     if not status.get("available"):
         return {
@@ -1043,4 +1341,14 @@ def speak_offline_tts(text: str) -> dict[str, Any]:
     return {"success": False, "available": False, "engine": engine, "message": f"Unsupported offline TTS engine: {engine}"}
 
 
-__all__ = ["offline_tts_status", "speak_offline_tts"]
+def _reset_cached_kokoro_for_tests() -> None:
+    global _KOKORO_ENGINE, _KOKORO_ENGINE_KEY, _KOKORO_ENGINE_LOAD_MS
+    with _KOKORO_ENGINE_LOCK:
+        _KOKORO_ENGINE = None
+        _KOKORO_ENGINE_KEY = None
+        _KOKORO_ENGINE_LOAD_MS = None
+    with _KOKORO_AUDIO_CACHE_LOCK:
+        _KOKORO_AUDIO_CACHE.clear()
+
+
+__all__ = ["offline_tts_status", "prewarm_offline_tts", "prime_offline_tts_cache", "speak_offline_tts"]

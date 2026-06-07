@@ -195,6 +195,7 @@ def _evaluate(
     apis: list[str],
     permissions: list[str],
     safety_level: SafetyLevel,
+    fallback_available: bool = False,
 ) -> ToolReadiness:
     statuses: list[RequirementStatus] = []
     states: list[RuntimeState] = []
@@ -235,6 +236,16 @@ def _evaluate(
         states.append(RuntimeState.EXPERIMENTAL)
         reasons.append("experimental capability")
 
+    if fallback_available and states and all(state == RuntimeState.NEEDS_API_KEY for state in states):
+        fallback_reasons = ["offline/local fallback available"]
+        fallback_reasons.extend(reasons)
+        return ToolReadiness(
+            state=RuntimeState.OFFLINE_ONLY,
+            ok=True,
+            reasons=fallback_reasons,
+            requirements=statuses,
+        )
+
     state = worst_state(states)
     ok = state in {RuntimeState.READY, RuntimeState.OFFLINE_ONLY}
     return ToolReadiness(state=state, ok=ok, reasons=reasons, requirements=statuses)
@@ -259,7 +270,7 @@ def infer_tool_metadata(item: dict[str, Any]) -> ToolMetadata:
     elif category in {"developer", "files", "productivity", "general"}:
         latency, reliability = 0.25, 0.82
 
-    readiness = _evaluate(platforms, deps, apis, permissions, safety_level)
+    readiness = _evaluate(platforms, deps, apis, permissions, safety_level, fallback)
     return ToolMetadata(
         tool_id=tool_id,
         category=category,

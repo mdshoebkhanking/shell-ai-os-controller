@@ -1,7 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo, type CSSProperties } from 'react'
 import * as THREE from 'three'
-import { shellService } from '@renderer/services/shell-voice-ai'
 
 const ORB_BASE_COLOR = '#7ED3BA'
 const ORB_AUDIO_COLOR = '#5EEAD4'
@@ -9,11 +8,11 @@ const ORB_PEAK_COLOR = '#ECFDF5'
 const ORB_PARTICLE_RADIUS = 1.93
 const ORB_PARTICLE_SIZE = 0.011
 const ORB_OPACITY = 0.9
-const ORB_EXPANSION_STRENGTH = 0.4
+const ORB_EXPANSION_STRENGTH = 0.32
 const ORB_TARGET_FRAME_MS = 1000 / 30
-const ORB_ROTATION_X_SPEED = 0.018
-const ORB_ROTATION_Y_SPEED = 0.14
-const ORB_ROTATION_Z_SPEED = 0.032
+const ORB_ROTATION_X_SPEED = 0.01
+const ORB_ROTATION_Y_SPEED = 0.05
+const ORB_ROTATION_Z_SPEED = 0.05
 
 type SphereProps = {
   voiceLevel?: number
@@ -21,40 +20,14 @@ type SphereProps = {
   speaking?: boolean
 }
 
-const ORB_VERTEX_SHADER = `
-  attribute float spreadFactor;
-
-  uniform float uVolume;
-  uniform float uSize;
-  uniform float uScale;
-  uniform float uExpansionStrength;
-
-  void main() {
-    vec3 reactivePosition = position * (1.0 + uVolume * spreadFactor * uExpansionStrength);
-    vec4 mvPosition = modelViewMatrix * vec4(reactivePosition, 1.0);
-
-    gl_PointSize = uSize * (uScale / max(0.001, -mvPosition.z));
-    gl_Position = projectionMatrix * mvPosition;
-  }
-`
-
-const ORB_FRAGMENT_SHADER = `
-  uniform vec3 uColor;
-  uniform float uOpacity;
-
-  void main() {
-    gl_FragColor = vec4(uColor, uOpacity);
-  }
-`
-
 const CustomParticleSphere = ({
-  count = 2000,
+  count = 1600,
   voiceLevel = 0,
   active = false,
   speaking = false
 }: SphereProps & { count?: number }) => {
   const mesh = useRef<THREE.Points>(null)
-  const materialRef = useRef<THREE.ShaderMaterial>(null)
+  const materialRef = useRef<THREE.PointsMaterial>(null)
   const smoothedVolumeRef = useRef(0)
   const lastFrameMsRef = useRef(0)
 
@@ -65,19 +38,8 @@ const CustomParticleSphere = ({
   const colorEnd = useMemo(() => new THREE.Color(ORB_PEAK_COLOR), [])
   const colorTarget = useMemo(() => new THREE.Color(), [])
 
-  const shaderUniforms = useMemo(
-    () => ({
-      uVolume: { value: 0 },
-      uColor: { value: new THREE.Color(ORB_BASE_COLOR) },
-      uSize: { value: ORB_PARTICLE_SIZE },
-      uScale: { value: 1 },
-      uOpacity: { value: ORB_OPACITY },
-      uExpansionStrength: { value: ORB_EXPANSION_STRENGTH },
-    }),
-    [],
-  )
-
-  const { positions, spreadFactors } = useMemo(() => {
+  const { positions, originalPositions, spreadFactors } = useMemo(() => {
+    const base = new Float32Array(count * 3)
     const pos = new Float32Array(count * 3)
     const spread = new Float32Array(count)
 
@@ -89,13 +51,16 @@ const CustomParticleSphere = ({
       const vector = new THREE.Vector3(x, y, z)
       vector.normalize().multiplyScalar(ORB_PARTICLE_RADIUS)
 
+      base[i * 3] = vector.x
+      base[i * 3 + 1] = vector.y
+      base[i * 3 + 2] = vector.z
       pos[i * 3] = vector.x
       pos[i * 3 + 1] = vector.y
       pos[i * 3 + 2] = vector.z
 
-      spread[i] = Math.random()
+      spread[i] = 0.45 + Math.random() * 0.55
     }
-    return { positions: pos, spreadFactors: spread }
+    return { positions: pos, originalPositions: base, spreadFactors: spread }
   }, [count])
 
   useFrame((state, delta) => {
@@ -110,8 +75,9 @@ const CustomParticleSphere = ({
     mesh.current.rotation.z += delta * ORB_ROTATION_Z_SPEED
 
     let liveVolume = 0
-    if (speaking && shellService.analyser) {
-      shellService.analyser.getByteFrequencyData(dataArray)
+    const analyser = (window as any).__shellVoiceService?.analyser as AnalyserNode | undefined
+    if (speaking && analyser) {
+      analyser.getByteFrequencyData(dataArray)
 
       let sum = 0
       const len = dataArray.length
@@ -122,12 +88,22 @@ const CustomParticleSphere = ({
     }
 
     const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))
-    const speechPulse = speaking ? 0.18 + Math.sin(state.clock.elapsedTime * 8) * 0.08 : 0
     // Keep queued/idle states visually honest: only actual speech/audio amplitude drives expansion.
-    const idlePulse = active && !speaking ? 0 : 0
-    const targetVolume = Math.min(1, Math.max(liveVolume, backendLevel, speechPulse, idlePulse))
+    const targetVolume = speaking ? Math.min(1, Math.max(liveVolume, backendLevel)) : 0
     smoothedVolumeRef.current += (targetVolume - smoothedVolumeRef.current) * Math.min(1, delta * 9)
     const volume = smoothedVolumeRef.current
+
+    const geometry = mesh.current.geometry
+    const positionAttribute = geometry.getAttribute('position') as THREE.BufferAttribute
+    const currentPos = positionAttribute.array as Float32Array
+    for (let i = 0; i < spreadFactors.length; i++) {
+      const ix = i * 3
+      const scale = 1 + volume * spreadFactors[i] * ORB_EXPANSION_STRENGTH
+      currentPos[ix] = originalPositions[ix] * scale
+      currentPos[ix + 1] = originalPositions[ix + 1] * scale
+      currentPos[ix + 2] = originalPositions[ix + 2] * scale
+    }
+    positionAttribute.needsUpdate = true
 
     if (volume < 0.55) {
       colorTarget.lerpColors(colorStart, colorMid, volume / 0.55)
@@ -135,34 +111,31 @@ const CustomParticleSphere = ({
       colorTarget.lerpColors(colorMid, colorEnd, (volume - 0.55) / 0.45)
     }
 
-    const uniforms = materialRef.current.uniforms
-    uniforms.uVolume.value = volume
-    uniforms.uSize.value = ORB_PARTICLE_SIZE * state.gl.getPixelRatio()
-    uniforms.uScale.value = state.size.height * 0.5
-    ;(uniforms.uColor.value as THREE.Color).copy(colorTarget)
+    materialRef.current.size = ORB_PARTICLE_SIZE * state.gl.getPixelRatio()
+    materialRef.current.color.copy(colorTarget)
   })
 
   return (
     <points ref={mesh}>
       <bufferGeometry>
         <bufferAttribute attach="attributes-position" args={[positions, 3]} />
-        <bufferAttribute attach="attributes-spreadFactor" args={[spreadFactors, 1]} />
       </bufferGeometry>
-      <shaderMaterial
+      <pointsMaterial
         ref={materialRef}
-        uniforms={shaderUniforms}
-        vertexShader={ORB_VERTEX_SHADER}
-        fragmentShader={ORB_FRAGMENT_SHADER}
+        color={ORB_BASE_COLOR}
+        size={ORB_PARTICLE_SIZE}
+        opacity={ORB_OPACITY}
         transparent={true}
         blending={THREE.AdditiveBlending}
         depthWrite={false}
+        sizeAttenuation={true}
       />
     </points>
   )
 }
 
 const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProps) => {
-  const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0.22)) : 0
+  const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0)) : 0
   const fallbackScale = 0.92 + fallbackLevel * 0.1
   const stageStyle = {
     '--shell-orb-level': fallbackLevel.toFixed(3),

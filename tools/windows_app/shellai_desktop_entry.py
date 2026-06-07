@@ -91,7 +91,6 @@ def _add_frozen_dll_dirs() -> None:
         internal / "onnxruntime" / "capi",
         internal / "sherpa_onnx" / "lib",
         internal / "llama_cpp" / "lib",
-        internal / "PyQt6" / "Qt6" / "bin",
         internal / "numpy.libs",
         internal / "espeakng_loader",
         internal / "_soundfile_data",
@@ -106,7 +105,6 @@ _add_frozen_dll_dirs()
 
 os.environ.setdefault("PYTHONUTF8", "1")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-os.environ.setdefault("SHELL_LEGACY_UI", "0")
 os.environ.setdefault("SHELL_V2_STREAM", "1")
 os.environ.setdefault("SHELL_IMAGE_LOCAL_FALLBACK", "1")
 os.environ.setdefault("SHELL_DESKTOP_BUNDLED", "1")
@@ -290,7 +288,7 @@ def _run_runtime_probe_mode() -> None:
 
         llm_status = offline_llm_status()
         payload["offline_llm"] = llm_status
-        if not llm_status.get("available"):
+        if not llm_status.get("available") and not _offline_llm_catalog_ready(llm_status):
             exit_code = 2
     except Exception as exc:
         payload["offline_llm"] = {"available": False, "reason": str(exc)}
@@ -298,6 +296,14 @@ def _run_runtime_probe_mode() -> None:
 
     print("SHELL_RUNTIME_PROBE_JSON=" + json.dumps(payload, sort_keys=True, default=str), flush=True)
     raise SystemExit(exit_code)
+
+
+def _offline_llm_catalog_ready(status: object) -> bool:
+    if not isinstance(status, dict) or status.get("runtimeDownloads") is not True:
+        return False
+    catalog = status.get("catalog")
+    options = catalog.get("options") if isinstance(catalog, dict) else []
+    return isinstance(options, list) and len(options) >= 4
 
 
 def _run_app_mode() -> None:

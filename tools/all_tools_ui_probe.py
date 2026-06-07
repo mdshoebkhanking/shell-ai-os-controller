@@ -3,8 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import re
 import sys
+import threading
 import time
 from collections import Counter
 from pathlib import Path
@@ -38,13 +40,6 @@ ENVIRONMENT_SKIP_RE = re.compile(
     r")",
     re.I,
 )
-
-
-def _process_events(app, duration_s: float = 0.1) -> None:
-    deadline = time.time() + duration_s
-    while time.time() < deadline:
-        app.processEvents()
-        time.sleep(0.01)
 
 
 def _make_probe_files(root: Path) -> dict[str, Path]:
@@ -236,39 +231,28 @@ def _should_skip_execution(item: dict[str, Any]) -> tuple[bool, str]:
     return False, ""
 
 
-def _run_item(window, app, item: dict[str, Any], args: dict[str, Any], timeout_s: float) -> dict[str, Any]:
-    from shell_ui.shell_cinematic_full import BackendToolRunWorker
+def _run_item(bridge: Any, item: dict[str, Any], args: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+    """Run through the same backend channel used by the Electron Control Center."""
+    results: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
 
-    outcome: dict[str, Any] = {"done": False}
-    worker = BackendToolRunWorker(item, args, window)
-
-    def _ready(result):
-        outcome.update({"done": True, "status": "ready", "result": result})
-
-    def _error(message):
-        outcome.update({"done": True, "status": "error", "error": str(message)})
-
-    worker.run_ready.connect(_ready)
-    worker.run_error.connect(_error)
-    worker.start()
-    deadline = time.time() + timeout_s
-    while time.time() < deadline and not outcome.get("done"):
-        app.processEvents()
-        time.sleep(0.02)
-    if not outcome.get("done"):
+    def target() -> None:
         try:
-            worker.requestInterruption()
-            if not worker.wait(500):
-                worker.terminate()
-                worker.wait(500)
-        except Exception:
-            pass
+            raw = bridge.call("execute-tool", json.dumps([item.get("id"), args], ensure_ascii=False))
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+            data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+            results.put({"status": "ready", "result": data})
+        except Exception as exc:
+            results.put({"status": "error", "error": str(exc)})
+
+    thread = threading.Thread(target=target, name="ShellAllToolsProbeItem", daemon=True)
+    thread.start()
+    thread.join(timeout=max(0.1, float(timeout_s)))
+    if thread.is_alive():
         return {"status": "timeout", "error": f"timeout after {timeout_s}s"}
     try:
-        worker.wait(1000)
-    except Exception:
-        pass
-    return outcome
+        return results.get_nowait()
+    except queue.Empty:
+        return {"status": "error", "error": "tool worker exited without a result"}
 
 
 def _classify(item: dict[str, Any], outcome: dict[str, Any], skipped: bool, skip_reason: str) -> str:
@@ -296,16 +280,14 @@ def _classify(item: dict[str, Any], outcome: dict[str, Any], skipped: bool, skip
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run every Shell tool through the PyQt UI backend worker.")
-    parser.add_argument("--visible", action="store_true", help="Show a real Shell UI window while testing.")
+    parser = argparse.ArgumentParser(description="Run every Shell tool through the Electron backend bridge path.")
+    parser.add_argument("--visible", action="store_true", help="Accepted for compatibility; the backend bridge probe is headless.")
     parser.add_argument("--json-out", default="/private/tmp/shell_all_tools_ui_probe_report.json")
     parser.add_argument("--screens-dir", default="/private/tmp/shell_all_tools_ui_probe")
     parser.add_argument("--timeout-s", type=float, default=8.0)
     parser.add_argument("--max-execute", type=int, default=0, help="0 = no limit.")
     args = parser.parse_args()
 
-    if not args.visible:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("SHELL_V2_TIMEOUT_S", "2")
     os.environ.setdefault("SHELL_UI_TOOL_TIMEOUT_S", "2")
     os.environ.setdefault("SHELL_FAST_TOOL_PROBE", "1")
@@ -313,21 +295,12 @@ def main() -> int:
     probe_root = Path(args.screens_dir) / "inputs"
     files = _make_probe_files(probe_root)
 
-    from PyQt6.QtWidgets import QApplication
     from shell_tool_catalog import discover_tool_catalog
     from core.tools.registry import enrich_catalog
-    from shell_ui.shell_cinematic_full import ShellHoloUI
+    from shell_web_ui.host import ShellBackendBridge
 
     rows = enrich_catalog(discover_tool_catalog())
-    app = QApplication.instance() or QApplication(sys.argv)
-    window = ShellHoloUI()
-    window.resize(1260, 720)
-    window.show()
-    _process_events(app, 1.0)
-    try:
-        window._on_page_change(0)
-    except Exception:
-        pass
+    bridge = ShellBackendBridge()
 
     report: dict[str, Any] = {
         "ok": True,
@@ -335,129 +308,98 @@ def main() -> int:
         "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
         "results": [],
         "summary": {},
-        "screenshots": {},
+        "runtime": "electron-backend-bridge",
     }
     counts: Counter[str] = Counter()
     executed = 0
     started = time.perf_counter()
 
-    try:
-        window.chat_page.add_message(
-            "shell",
-            f"All-tools UI audit started. Catalog: {len(rows)} tools/agents. "
-            "Safe READY tools will execute; unsafe tools will be safety-skipped.",
-        )
-        _process_events(app, 0.2)
-        for idx, item in enumerate(rows, 1):
-            readiness = item.get("readiness") or {}
-            meta = item.get("metadata") or {}
-            skip, skip_reason = _should_skip_execution(item)
-            readiness_ok = bool(readiness.get("ok"))
-            args_for_run = _sample_args(item, files, probe_root) if not skip else {}
+    for idx, item in enumerate(rows, 1):
+        readiness = item.get("readiness") or {}
+        meta = item.get("metadata") or {}
+        skip, skip_reason = _should_skip_execution(item)
+        readiness_ok = bool(readiness.get("ok"))
+        args_for_run = _sample_args(item, files, probe_root) if not skip else {}
 
-            if not skip and not readiness_ok:
-                skip = True
-                skip_reason = "readiness-only: " + str(readiness.get("state") or "not ready")
-            if args.max_execute and executed >= args.max_execute:
-                skip = True
-                skip_reason = "max execute limit reached"
+        if not skip and not readiness_ok:
+            skip = True
+            skip_reason = "readiness-only: " + str(readiness.get("state") or "not ready")
+        if args.max_execute and executed >= args.max_execute:
+            skip = True
+            skip_reason = "max execute limit reached"
 
-            row: dict[str, Any] = {
-                "index": idx,
-                "id": item.get("id"),
-                "kind": item.get("kind"),
-                "category": item.get("category"),
-                "safety_level": meta.get("safety_level"),
-                "readiness_state": readiness.get("state"),
-                "readiness_ok": readiness.get("ok"),
-                "args": args_for_run,
-                "skip_reason": skip_reason if skip else "",
-            }
-
-            if skip:
-                if skip_reason.startswith("readiness-only:"):
-                    row["classification"] = "expected_not_ready"
-                    row["status"] = "readiness_only"
-                    row["message"] = "; ".join(str(reason) for reason in readiness.get("reasons") or [])[:500]
-                elif item.get("kind") == "agent":
-                    row["classification"] = "agent_readiness_only"
-                    row["status"] = "readiness_only"
-                    row["message"] = "; ".join(str(reason) for reason in readiness.get("reasons") or [])[:500]
-                elif skip_reason.startswith("environment/"):
-                    row["classification"] = "environment_skipped"
-                    row["status"] = "skipped"
-                else:
-                    row["classification"] = "skipped_by_safety"
-                    row["status"] = "skipped"
-            else:
-                t0 = time.perf_counter()
-                outcome = _run_item(window, app, item, args_for_run, timeout_s=args.timeout_s)
-                elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
-                row["elapsed_ms"] = elapsed_ms
-                row["status"] = outcome.get("status")
-                row["classification"] = _classify(item, outcome, False, "")
-                result = outcome.get("result")
-                if isinstance(result, dict):
-                    row["result_status"] = result.get("status")
-                    row["result_state"] = result.get("state")
-                    row["message"] = str(result.get("message") or result.get("error") or "")[:500]
-                    if result.get("reasons"):
-                        row["reasons"] = result.get("reasons")
-                elif outcome.get("error"):
-                    row["message"] = str(outcome.get("error"))[:500]
-                executed += 1
-
-            counts[row["classification"]] += 1
-            report["results"].append(row)
-
-            if idx == 1 or idx % 25 == 0 or idx == len(rows):
-                msg = (
-                    f"All-tools audit progress: {idx}/{len(rows)}. "
-                    f"Success={counts['executed_success']} "
-                    f"NotReady={counts['expected_not_ready']} "
-                    f"SafetySkipped={counts['skipped_by_safety']} "
-                    f"Errors={counts['tool_error'] + counts['worker_error'] + counts['timeout']}"
-                )
-                print(msg, flush=True)
-                try:
-                    window.chat_page.add_message("shell", msg)
-                except Exception:
-                    pass
-                _process_events(app, 0.1)
-
-        error_count = counts["tool_error"] + counts["worker_error"] + counts["timeout"] + counts["schema_error"]
-        report["ok"] = error_count == 0
-        report["summary"] = {
-            "counts": dict(sorted(counts.items())),
-            "executed_workers": executed,
-            "duration_s": round(time.perf_counter() - started, 2),
-            "readiness_counts": dict(Counter((r.get("readiness") or {}).get("state") for r in rows)),
-            "safety_counts": dict(Counter((r.get("metadata") or {}).get("safety_level") for r in rows)),
+        row: dict[str, Any] = {
+            "index": idx,
+            "id": item.get("id"),
+            "kind": item.get("kind"),
+            "category": item.get("category"),
+            "safety_level": meta.get("safety_level"),
+            "readiness_state": readiness.get("state"),
+            "readiness_ok": readiness.get("ok"),
+            "args": args_for_run,
+            "skip_reason": skip_reason if skip else "",
         }
-        try:
-            shot = Path(args.screens_dir) / "final.png"
-            shot.parent.mkdir(parents=True, exist_ok=True)
-            window.grab().save(str(shot))
-            report["screenshots"]["final"] = str(shot)
-        except Exception:
-            pass
-        try:
-            window.chat_page.add_message("shell", "All-tools UI audit finished. Report written.")
-        except Exception:
-            pass
-        _process_events(app, 0.3)
-    finally:
-        try:
-            window._stop_backend_command_workers()
-        except Exception:
-            pass
-        window.close()
-        _process_events(app, 0.2)
+
+        if skip:
+            if skip_reason.startswith("readiness-only:"):
+                row["classification"] = "expected_not_ready"
+                row["status"] = "readiness_only"
+                row["message"] = "; ".join(str(reason) for reason in readiness.get("reasons") or [])[:500]
+            elif item.get("kind") == "agent":
+                row["classification"] = "agent_readiness_only"
+                row["status"] = "readiness_only"
+                row["message"] = "; ".join(str(reason) for reason in readiness.get("reasons") or [])[:500]
+            elif skip_reason.startswith("environment/"):
+                row["classification"] = "environment_skipped"
+                row["status"] = "skipped"
+            else:
+                row["classification"] = "skipped_by_safety"
+                row["status"] = "skipped"
+        else:
+            t0 = time.perf_counter()
+            outcome = _run_item(bridge, item, args_for_run, timeout_s=args.timeout_s)
+            elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
+            row["elapsed_ms"] = elapsed_ms
+            row["status"] = outcome.get("status")
+            row["classification"] = _classify(item, outcome, False, "")
+            result = outcome.get("result")
+            if isinstance(result, dict):
+                row["result_status"] = result.get("status")
+                row["result_state"] = result.get("state")
+                row["message"] = str(result.get("message") or result.get("error") or "")[:500]
+                if result.get("reasons"):
+                    row["reasons"] = result.get("reasons")
+            elif outcome.get("error"):
+                row["message"] = str(outcome.get("error"))[:500]
+            executed += 1
+
+        counts[row["classification"]] += 1
+        report["results"].append(row)
+
+        if idx == 1 or idx % 25 == 0 or idx == len(rows):
+            msg = (
+                f"All-tools audit progress: {idx}/{len(rows)}. "
+                f"Success={counts['executed_success']} "
+                f"NotReady={counts['expected_not_ready']} "
+                f"SafetySkipped={counts['skipped_by_safety']} "
+                f"Errors={counts['tool_error'] + counts['worker_error'] + counts['timeout']}"
+            )
+            print(msg, flush=True)
+
+    error_count = counts["tool_error"] + counts["worker_error"] + counts["timeout"] + counts["schema_error"]
+    report["ok"] = error_count == 0
+    report["summary"] = {
+        "counts": dict(sorted(counts.items())),
+        "executed_workers": executed,
+        "duration_s": round(time.perf_counter() - started, 2),
+        "readiness_counts": dict(Counter((r.get("readiness") or {}).get("state") for r in rows)),
+        "safety_counts": dict(Counter((r.get("metadata") or {}).get("safety_level") for r in rows)),
+    }
 
     out = Path(args.json_out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, sort_keys=True, default=str), encoding="utf-8")
-    print(json.dumps({k: report[k] for k in ("ok", "total", "summary", "screenshots")}, indent=2, sort_keys=True), flush=True)
+    print(json.dumps({k: report[k] for k in ("ok", "total", "summary", "runtime")}, indent=2, sort_keys=True), flush=True)
     return 0 if report["ok"] else 1
 
 

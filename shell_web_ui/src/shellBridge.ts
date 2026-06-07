@@ -18,8 +18,20 @@ interface ShellCallResult {
 const listeners = new Map<string, Set<Listener>>()
 const memoryHistoryKey = 'shell_chat_history'
 const fallbackGalleryKey = 'shell_fallback_gallery'
+const BRIDGE_EVENT_CHANNELS = [
+  'activity-updated',
+  'chat-updated',
+  'gallery-updated',
+  'history-cleared',
+  'offline-llm-download-event',
+  'speech-status',
+  'updater-event',
+  'voice-amplitude',
+  'voice-status'
+] as const
 
 let pythonBridge: any = null
+let bridgeEventsConnected = false
 
 const emit = (channel: string, payload?: unknown) => {
   const channelListeners = listeners.get(channel)
@@ -27,8 +39,22 @@ const emit = (channel: string, payload?: unknown) => {
   channelListeners.forEach((listener) => listener({ channel }, payload))
 }
 
+const connectBridgeEventForwarding = () => {
+  if (bridgeEventsConnected) return
+  const eventBridge = (window as any).__shellElectronBridge || window.electron?.ipcRenderer
+  if (!eventBridge?.on) return
+  bridgeEventsConnected = true
+  BRIDGE_EVENT_CHANNELS.forEach((channel) => {
+    eventBridge.on(channel, (_event: unknown, payload?: unknown) => emit(channel, payload))
+  })
+}
+
 const waitForPythonBridge = (timeoutMs = 2500) =>
   new Promise<boolean>((resolve) => {
+    if ((window as any).__shellElectronBridge?.call) {
+      resolve(true)
+      return
+    }
     if (pythonBridge?.call) {
       resolve(true)
       return
@@ -42,10 +68,10 @@ const waitForPythonBridge = (timeoutMs = 2500) =>
       listeners.get('shell-bridge-ready')?.delete(onReady)
       resolve(ready)
     }
-    const onReady: Listener = () => finish(Boolean(pythonBridge?.call))
+    const onReady: Listener = () => finish(Boolean((window as any).__shellElectronBridge?.call || pythonBridge?.call))
     if (!listeners.has('shell-bridge-ready')) listeners.set('shell-bridge-ready', new Set())
     listeners.get('shell-bridge-ready')!.add(onReady)
-    const timer = window.setTimeout(() => finish(Boolean(pythonBridge?.call)), timeoutMs)
+    const timer = window.setTimeout(() => finish(Boolean((window as any).__shellElectronBridge?.call || pythonBridge?.call)), timeoutMs)
   })
 
 const readHistory = () => {
@@ -77,6 +103,107 @@ const writeFallbackGallery = (images: unknown[]) => {
     localStorage.setItem(fallbackGalleryKey, JSON.stringify(images.slice(0, 80)))
   } catch {}
 }
+
+const fallbackOfflineModelOptions = [
+  {
+    id: 'smollm2-135m-q4',
+    name: 'SmolLM2 135M Q4',
+    family: 'SmolLM2-135M-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 100.6,
+    pc_tier: 'Ultra low PC',
+    description: 'Smallest chat brain for very low memory machines.',
+    strengths: ['basic chat', 'short answers', 'voice replies']
+  },
+  {
+    id: 'smollm2-360m-q4',
+    name: 'SmolLM2 360M Q4',
+    family: 'SmolLM2-360M-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 258.1,
+    pc_tier: 'Low PC',
+    description: 'Balanced tiny model for 2-4 GB RAM systems.',
+    strengths: ['chat', 'summaries', 'voice replies']
+  },
+  {
+    id: 'qwen2.5-0.5b-q3',
+    name: 'Qwen2.5 0.5B Q3',
+    family: 'Qwen2.5-0.5B-Instruct-GGUF',
+    quantization: 'Q3_K_M',
+    sizeMb: 412.0,
+    pc_tier: '4 GB RAM',
+    description: 'Good general offline assistant with a small footprint.',
+    strengths: ['chat', 'Hinglish-style replies', 'simple writing']
+  },
+  {
+    id: 'qwen2.5-0.5b-q4',
+    name: 'Qwen2.5 0.5B Q4',
+    family: 'Qwen2.5-0.5B-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 468.6,
+    pc_tier: 'Recommended',
+    description: 'Recommended local brain for normal chat and voice use.',
+    strengths: ['chat', 'Hinglish-style replies', 'reasoning', 'short drafting'],
+    recommended: true
+  }
+]
+
+const fallbackOfflineCodingModelOptions = [
+  {
+    id: 'qwen2.5-coder-0.5b-q4',
+    name: 'Qwen2.5 Coder 0.5B Q4',
+    family: 'Qwen2.5-Coder-0.5B-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 468.6,
+    pc_tier: 'Coding ultra-light',
+    description: 'Tiny dedicated coding brain for low-memory PCs and short scripts.',
+    strengths: ['coding', 'small scripts', 'HTML/CSS drafts', 'agent planning']
+  },
+  {
+    id: 'qwen2.5-coder-1.5b-q2',
+    name: 'Qwen2.5 Coder 1.5B Q2',
+    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
+    quantization: 'Q2_K',
+    sizeMb: 718.0,
+    pc_tier: 'Coding lite',
+    description: 'Smaller coding model for websites, scripts, and structured drafts.',
+    strengths: ['coding', 'website drafts', 'PDF/script outlines', 'tool planning']
+  },
+  {
+    id: 'qwen2.5-coder-1.5b-q4',
+    name: 'Qwen2.5 Coder 1.5B Q4',
+    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 1065.6,
+    pc_tier: 'Best local coding',
+    description: 'Best quality local option in this lightweight catalog.',
+    strengths: ['coding', 'website generation', 'longer drafts', 'agent planning'],
+    recommended: true
+  }
+]
+
+const fallbackOfflineModelCatalog = (category = 'chat') => ({
+  success: true,
+  category,
+  runtimeDownloads: true,
+  installDir: '',
+  selectedModelId: '',
+  installedModels: [],
+  options: category === 'coding' ? fallbackOfflineCodingModelOptions : fallbackOfflineModelOptions,
+  status: {
+    success: true,
+    available: false,
+    status: 'fallback',
+    engine: 'browser',
+    category,
+    label: category === 'coding' ? 'Installable offline coding brain' : 'Installable offline chat brain',
+    modelFamily: category === 'coding' ? 'Qwen2.5-Coder-1.5B-Instruct-GGUF' : 'Qwen2.5-0.5B-Instruct-GGUF',
+    language: readShellLanguage(),
+    reason: 'Backend bridge is offline; download and local inference are available in the Shell desktop host.',
+    runtimeDownloads: true,
+    candidates: []
+  }
+})
 
 const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' | 'pythonMemory' | 'networkProtocol' | 'filesAttached' | 'hello' | 'identity', values: Record<string, string> = {}) => {
   const language = readShellLanguage()
@@ -546,17 +673,26 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
         candidates: []
       }
     case 'offline-llm-status':
+      return fallbackOfflineModelCatalog().status
+    case 'offline-llm-catalog':
+      return fallbackOfflineModelCatalog()
+    case 'offline-coding-llm-status':
+      return fallbackOfflineModelCatalog('coding').status
+    case 'offline-coding-llm-catalog':
+      return fallbackOfflineModelCatalog('coding')
+    case 'offline-llm-download':
+    case 'offline-coding-llm-download':
       return {
-        success: true,
-        available: false,
-        status: 'fallback',
-        engine: 'browser',
-        label: 'Packaged offline chat brain',
-        modelFamily: 'Qwen3-1.7B-GGUF',
-        language: readShellLanguage(),
-        reason: 'Backend bridge is offline; packaged local LLM status is only available from the Python host.',
-        runtimeDownloads: false,
-        candidates: []
+        success: false,
+        source: 'browser-fallback',
+        error: 'Offline model downloads require the Shell desktop backend.'
+      }
+    case 'offline-llm-select':
+    case 'offline-coding-llm-select':
+      return {
+        success: false,
+        source: 'browser-fallback',
+        error: 'Offline model selection requires the Shell desktop backend.'
       }
     case 'stop-speech':
       return { success: true, source: 'shell-speech-stop' }
@@ -602,14 +738,21 @@ const callPython = (channel: string, args: unknown[]) =>
     }, 15000)
 
     const invokeBridge = () => {
+      const electronBridge = (window as any).__shellElectronBridge
+      if (electronBridge?.call) {
+        Promise.resolve(electronBridge.call(channel, args))
+          .then((raw) => finish(parseBridgeResult(raw)))
+          .catch((error) => finish({ success: false, error: String(error?.message || error) }))
+        return
+      }
       pythonBridge.call(channel, JSON.stringify(args), (raw: unknown) => {
         finish(parseBridgeResult(raw))
       })
     }
 
-    if (!pythonBridge?.call) {
+    if (!(window as any).__shellElectronBridge?.call && !pythonBridge?.call) {
       waitForPythonBridge().then((ready) => {
-        if (ready && pythonBridge?.call) {
+        if (ready && ((window as any).__shellElectronBridge?.call || pythonBridge?.call)) {
           try {
             invokeBridge()
           } catch {
@@ -629,39 +772,11 @@ const callPython = (channel: string, args: unknown[]) =>
     }
   })
 
-const loadQWebChannel = () =>
-  new Promise<void>((resolve) => {
-    if ((window as any).QWebChannel || !(window as any).qt?.webChannelTransport) {
-      resolve()
-      return
-    }
-
-    const script = document.createElement('script')
-    script.src = 'qrc:///qtwebchannel/qwebchannel.js'
-    script.onload = () => resolve()
-    script.onerror = () => resolve()
-    document.head.appendChild(script)
-  })
-
 const connectPythonBridge = async () => {
-  await loadQWebChannel()
-  const qWebChannel = (window as any).QWebChannel
-  const transport = (window as any).qt?.webChannelTransport
-  if (!qWebChannel || !transport) return
-
-  new qWebChannel(transport, (channel: any) => {
-    pythonBridge = channel.objects.shellBridge
-    if (pythonBridge?.eventEmitted?.connect) {
-      pythonBridge.eventEmitted.connect((name: string, payload: string) => {
-        let parsed: unknown = payload
-        try {
-          parsed = JSON.parse(payload)
-        } catch {}
-        emit(name, parsed)
-      })
-    }
+  if ((window as any).__shellElectronBridge?.call) {
+    connectBridgeEventForwarding()
     emit('shell-bridge-ready', { ok: true })
-  })
+  }
 }
 
 const blockedBrowserSpeech = async (speechText: string) => {
@@ -679,7 +794,7 @@ const shellAPI = {
   stopVoice: () => callPython('stop-voice', []),
   speakText: async (text: string) => {
     const speechText = String(text || '').trim()
-    const desktopBridgeExpected = Boolean(pythonBridge?.call || (window as any).qt?.webChannelTransport)
+    const desktopBridgeExpected = Boolean((window as any).__shellElectronBridge?.call || pythonBridge?.call)
     if (desktopBridgeExpected) {
       const bridgeResult = (await callPython('speak-text', [speechText])) as any
       if (bridgeResult?.success) return bridgeResult
@@ -693,6 +808,7 @@ const shellAPI = {
   getSystemMetrics: () => callPython('get-system-stats', []),
   searchMemory: (query: string) => callPython('search-memory', [query]),
   on: (channel: string, listener: Listener) => {
+    connectBridgeEventForwarding()
     if (!listeners.has(channel)) listeners.set(channel, new Set())
     listeners.get(channel)!.add(listener)
   },
@@ -709,16 +825,18 @@ const shellAPI = {
 if (new URLSearchParams(window.location.search).get('shell-ui-probe') === '1') {
   ;(window as any).__shellProbeEmit = (channel: string, payload?: unknown) => emit(channel, payload)
 }
-;(window as any).electron = (window as any).electron || {
-  process: { platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'browser' },
-  ipcRenderer: {
-    invoke: (channel: string, ...args: unknown[]) => shellAPI.call(channel, ...args),
-    send: (channel: string, ...args: unknown[]) => {
-      shellAPI.call(channel, ...args)
-    },
-    on: (channel: string, listener: Listener) => shellAPI.on(channel, listener),
-    off: (channel: string, listener?: Listener) => shellAPI.off(channel, listener),
-    removeAllListeners: (channel: string) => shellAPI.off(channel)
+if (!('electron' in window)) {
+  ;(window as any).electron = {
+    process: { platform: navigator.platform.toLowerCase().includes('mac') ? 'darwin' : 'browser' },
+    ipcRenderer: {
+      invoke: (channel: string, ...args: unknown[]) => shellAPI.call(channel, ...args),
+      send: (channel: string, ...args: unknown[]) => {
+        shellAPI.call(channel, ...args)
+      },
+      on: (channel: string, listener: Listener) => shellAPI.on(channel, listener),
+      off: (channel: string, listener?: Listener) => shellAPI.off(channel, listener),
+      removeAllListeners: (channel: string) => shellAPI.off(channel)
+    }
   }
 }
 

@@ -7,7 +7,11 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "electron": "npm run build && electron electron/main.cjs",
+    "electron:dev": "electron electron/main.cjs",
+    "electron:dir": "npm run build && electron-builder --dir --config electron/builder.config.cjs",
+    "electron:pack": "npm run build && electron-builder --config electron/builder.config.cjs"
   },
   "dependencies": {
     "@gsap/react": "2.1.2",
@@ -44,6 +48,8 @@
     "@types/react": "19.2.15",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.0.2",
+    "electron": "^42.3.3",
+    "electron-builder": "^26.15.0",
     "tailwindcss": "4.1.18",
     "typescript": "6.0.3",
     "vite": "8.0.14"

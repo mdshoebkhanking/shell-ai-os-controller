@@ -10,7 +10,6 @@ from .states import RuntimeState
 
 
 _PYTHON_PACKAGES = {
-    "PyQt6": "desktop UI",
     "aiohttp": "hub HTTP server",
     "socketio": "hub realtime events",
     "websocket": "Socket.IO websocket transport",

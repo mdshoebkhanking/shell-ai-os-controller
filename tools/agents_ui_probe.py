@@ -3,10 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import re
 import sys
+import threading
 import time
 from pathlib import Path
+from typing import Any
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -63,56 +66,76 @@ SYSTEM_AGENT_COMMANDS: list[tuple[str, str]] = [
     ("DeploySwarm", '/agent shell_agent_tools:deploy_swarm_tool {"mission_objective":"UI smoke test only: produce a one-line readiness report. Do not create files, run commands, browse, or modify anything."}'),
 ]
 
-
-def _process_events(app, duration_s: float = 0.15) -> None:
-    deadline = time.time() + duration_s
-    while time.time() < deadline:
-        app.processEvents()
-        time.sleep(0.01)
-
-
-def _message_text(window) -> str:
-    from PyQt6.QtWidgets import QLabel
-
-    return "\n".join(label.text() for label in window.chat_page.findChildren(QLabel))
+ORCHESTRATION_AGENT_COMMANDS: list[tuple[str, str]] = [
+    ("ListOrchestrationAgents", "/agent shell_agent_orchestrator:list_orchestration_agents_tool {}"),
+    (
+        "OrchestrateShellGoal",
+        '/agent shell_agent_orchestrator:orchestrate_shell_goal_tool {"goal":"UI smoke test only: route a harmless status check. Do not execute tools.","execute":false,"approved":false}',
+    ),
+]
 
 
-def _message_labels(window) -> list[str]:
-    from PyQt6.QtWidgets import QLabel
-
-    return [label.text() for label in window.chat_page.findChildren(QLabel)]
-
-
-def _wait_for_workers(window, app, timeout_s: float) -> bool:
-    deadline = time.time() + timeout_s
-    while time.time() < deadline:
-        app.processEvents()
-        workers = list(getattr(window, "_backend_command_workers", []) or [])
-        if not any(worker is not None and worker.isRunning() for worker in workers):
-            return True
-        time.sleep(0.03)
-    return False
+def _parse_agent_command(command: str) -> tuple[str, dict[str, Any]]:
+    match = re.match(r"^/agent\s+([^\s]+)\s*(\{.*\})?\s*$", command.strip(), re.S)
+    if not match:
+        raise ValueError(f"Unsupported agent command format: {command}")
+    tool_id = match.group(1).strip()
+    payload = match.group(2) or "{}"
+    args = json.loads(payload)
+    if not isinstance(args, dict):
+        raise ValueError(f"Agent command payload must be an object: {command}")
+    return tool_id, args
 
 
-def _send_chat(window, app, label: str, command: str, timeout_s: float) -> dict[str, object]:
-    before_labels = _message_labels(window)
+def _execute_agent_tool(bridge: Any, tool_id: str, tool_args: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+    results: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=1)
+
+    def target() -> None:
+        try:
+            raw = bridge.call("execute-tool", json.dumps([tool_id, tool_args], ensure_ascii=False))
+            payload = json.loads(raw) if isinstance(raw, str) else raw
+            if isinstance(payload, dict) and not payload.get("ok", True):
+                results.put({"status": "error", "error": str(payload.get("error") or "bridge call failed")})
+                return
+            data = payload.get("data") if isinstance(payload, dict) and "data" in payload else payload
+            results.put({"status": "ready", "result": data})
+        except Exception as exc:
+            results.put({"status": "error", "error": str(exc)})
+
+    thread = threading.Thread(target=target, name=f"ShellAgentProbe-{tool_id}", daemon=True)
+    thread.start()
+    thread.join(timeout=max(0.1, float(timeout_s)))
+    if thread.is_alive():
+        return {"status": "timeout", "error": f"timeout after {timeout_s}s"}
+    try:
+        return results.get_nowait()
+    except queue.Empty:
+        return {"status": "error", "error": "agent worker exited without a result"}
+
+
+def _result_text(result: Any) -> str:
+    if isinstance(result, dict):
+        for key in ("result", "response", "message", "output", "summary"):
+            value = result.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return json.dumps(result, ensure_ascii=False, sort_keys=True)
+    return str(result or "")
+
+
+def _send_agent(bridge: Any, label: str, command: str, timeout_s: float) -> dict[str, object]:
+    tool_id, tool_args = _parse_agent_command(command)
     started = time.perf_counter()
-    window.chat_page._input.setPlainText(command)
-    _process_events(app, 0.08)
-    window.chat_page._send()
-    _process_events(app, 0.12)
-    workers_done = _wait_for_workers(window, app, timeout_s=timeout_s)
+    outcome = _execute_agent_tool(bridge, tool_id, tool_args, timeout_s=timeout_s)
     elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
-    _process_events(app, 0.35)
-    after_labels = _message_labels(window)
-    if len(after_labels) >= len(before_labels):
-        delta = "\n".join(after_labels[len(before_labels):]).strip()
-    else:
-        delta = _message_text(window)
-    shell_part = delta.rsplit("\nS\nSHELL", 1)[-1] if "\nS\nSHELL" in delta else delta
-    lower = shell_part.lower()
+
+    result = outcome.get("result")
+    text = _result_text(result)
+    lower = f"{outcome.get('error') or ''}\n{text}".lower()
+    result_status = result.get("status") if isinstance(result, dict) else None
     failed = (
-        not workers_done
+        outcome.get("status") in {"timeout", "error"}
+        or result_status == "error"
         or re.search(r"\b(failed via|failed:|failed to|all brains failed)\b", lower) is not None
         or "tool is not ready" in lower
         or "traceback" in lower
@@ -122,23 +145,24 @@ def _send_chat(window, app, label: str, command: str, timeout_s: float) -> dict[
     return {
         "label": label,
         "command": command,
-        "workers_done": workers_done,
+        "tool_id": tool_id,
+        "bridge_status": outcome.get("status"),
+        "result_status": result_status,
         "elapsed_ms": elapsed_ms,
         "ok": not failed,
-        "response_tail": delta[-1600:],
+        "response_tail": text[-1600:],
+        "error": outcome.get("error", ""),
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Drive all Shell agents through the real chat UI.")
+    parser = argparse.ArgumentParser(description="Drive all Shell agents through the Electron backend bridge.")
     parser.add_argument("--visible", action="store_true")
-    parser.add_argument("--include-swarm", action="store_true")
+    parser.add_argument("--include-swarm", action="store_true", help="Compatibility flag; safe swarm smoke is included by default.")
     parser.add_argument("--timeout-s", type=float, default=95.0)
     parser.add_argument("--json-out", default="/private/tmp/shell_agents_ui_probe_report.json")
     args = parser.parse_args()
 
-    if not args.visible:
-        os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     os.environ.setdefault("SHELL_V2_TIMEOUT_S", "3")
 
     try:
@@ -146,22 +170,17 @@ def main() -> int:
     except Exception:
         pass
 
-    from PyQt6.QtWidgets import QApplication
-    from shell_ui.shell_cinematic_full import ShellHoloUI
+    from shell_web_ui.host import ShellBackendBridge
 
-    app = QApplication.instance() or QApplication(sys.argv)
-    window = ShellHoloUI()
-    window.resize(1260, 720)
-    window.show()
-    _process_events(app, 1.0)
-    try:
-        window._on_page_change(0)
-    except Exception:
-        pass
+    bridge = ShellBackendBridge()
 
-    commands = list(CORE_AGENT_COMMANDS) + list(EXTRA_AGENT_COMMANDS) + [SYSTEM_AGENT_COMMANDS[0]]
-    if args.include_swarm:
-        commands.append(SYSTEM_AGENT_COMMANDS[1])
+    commands = (
+        list(CORE_AGENT_COMMANDS)
+        + list(EXTRA_AGENT_COMMANDS)
+        + [SYSTEM_AGENT_COMMANDS[0]]
+        + list(ORCHESTRATION_AGENT_COMMANDS)
+        + [SYSTEM_AGENT_COMMANDS[1]]
+    )
 
     report: dict[str, object] = {
         "ok": True,
@@ -169,12 +188,13 @@ def main() -> int:
         "passed": 0,
         "failed": 0,
         "results": [],
+        "runtime": "electron-backend-bridge",
     }
 
     try:
         for idx, (label, command) in enumerate(commands, 1):
             print(f"[{idx}/{len(commands)}] {label}", flush=True)
-            row = _send_chat(window, app, label, command, timeout_s=args.timeout_s)
+            row = _send_agent(bridge, label, command, timeout_s=args.timeout_s)
             report["results"].append(row)
             if row["ok"]:
                 report["passed"] = int(report["passed"]) + 1
@@ -184,13 +204,6 @@ def main() -> int:
     except Exception as exc:
         report["ok"] = False
         report.setdefault("errors", []).append(str(exc))
-    finally:
-        try:
-            window._stop_backend_command_workers()
-        except Exception:
-            pass
-        window.close()
-        _process_events(app, 0.3)
 
     out = Path(args.json_out)
     out.parent.mkdir(parents=True, exist_ok=True)

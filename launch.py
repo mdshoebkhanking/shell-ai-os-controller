@@ -1,149 +1,78 @@
-import os, sys, traceback, faulthandler
-os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
-os.environ.setdefault('OMP_NUM_THREADS', '1')
-os.environ.setdefault('MKL_NUM_THREADS', '1')
-os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
-if sys.platform.startswith('win'):
-    os.environ.setdefault('SHELL_WINDOWS_PERFORMANCE_MODE', 'balanced')
-    if getattr(sys, "frozen", False) or os.environ.get("SHELL_DESKTOP_BUNDLED") == "1":
-        os.environ.setdefault("SHELL_WEBENGINE_RENDERER", "safe-software")
-        os.environ.setdefault("QT_OPENGL", "software")
+from __future__ import annotations
 
-def _default_webengine_flags():
-    renderer = os.environ.get("SHELL_WEBENGINE_RENDERER", "balanced").strip().lower()
-    flags = ["--enable-webgl", "--enable-unsafe-swiftshader", "--disable-gpu-sandbox"]
-    if renderer in {"compat", "force-gpu"}:
-        flags.append("--ignore-gpu-blocklist")
-    elif renderer in {"software", "safe-software"}:
-        flags.extend(["--disable-gpu", "--disable-gpu-compositing", "--disable-zero-copy"])
-    return " ".join(flags)
+import os
+import shutil
+import subprocess
+import sys
+import traceback
+from pathlib import Path
 
 
-# QtWebEngine / Chromium switches must be set before QtWebEngine is imported.
-# Keep the default conservative for Windows EXE/RDP machines: allow WebGL and
-# SwiftShader fallback, but do not force blocklisted GPU paths or disable the
-# software rasterizer fallback. Those two flags were a common cause of black
-# frames/flicker on weak Windows graphics drivers.
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", _default_webengine_flags())
-
-faulthandler.enable()
+ROOT = Path(__file__).resolve().parent
+WEB_UI_ROOT = ROOT / "shell_web_ui"
+WEB_UI_DIST_INDEX = WEB_UI_ROOT / "dist" / "index.html"
 
 
-def _brand_icon_path():
-    root = os.path.dirname(os.path.abspath(__file__))
-    for rel in (
-        os.path.join("shell_web_ui", "dist", "shell-logo.png"),
-        os.path.join("shell_web_ui", "src", "public", "shell-logo.png"),
-        os.path.join("shell_ui", "shell_logo.png"),
-        os.path.join("assets", "brand", "shell-official-logo.png"),
-    ):
-        candidate = os.path.join(root, rel)
-        if os.path.exists(candidate):
-            return candidate
-    return ""
+def _npm_command() -> str:
+    return shutil.which("npm.cmd") or shutil.which("npm") or "npm"
 
-try:
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'shell_ui'))
-    print("Importing...", flush=True)
 
-    from PyQt6.QtCore import Qt
-    from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtGui import QPalette, QColor, QIcon
+def _ensure_shell_defaults() -> None:
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+    os.environ.setdefault("SHELL_IMAGE_LOCAL_FALLBACK", "1")
+    os.environ.setdefault("SHELL_OFFLINE_LLM_ASYNC_UI", "1")
+    if sys.platform.startswith("win"):
+        os.environ.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
 
-    # QtWebEngine (used by the voice-page Three.js orb) requires
-    # AA_ShareOpenGLContexts to be set BEFORE QApplication is created,
-    # AND its widget module to be imported beforehand so the global
-    # WebEngine bootstrap runs. Without this the orb falls back to the
-    # legacy painted visualizer.
-    QApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts, True)
-    try:
-        from PyQt6 import QtWebEngineWidgets, QtWebEngineCore  # noqa: F401
-    except Exception as _we_err:
-        print(f"QtWebEngine pre-import failed (non-fatal): {_we_err}", flush=True)
 
-    # Load .env before importing ShellHoloUI. shell_cinematic_full initializes
-    # MultiAIBrain at module import time, so provider keys must already be in
-    # os.environ or the UI falls back even when .env is configured.
+def _load_shell_config() -> None:
+    # Provider keys must be loaded before Electron starts the backend bridge.
     try:
         from shell_config import config as _shell_config  # noqa: F401
-    except Exception as _cfg_err:
-        print(f"Config load failed (non-fatal): {_cfg_err}", flush=True)
+    except Exception as exc:
+        print(f"Config load failed (non-fatal): {exc}", flush=True)
 
-    use_legacy_ui = os.environ.get("SHELL_LEGACY_UI", "0").strip().lower() in {"1", "true", "yes", "on"}
-    if use_legacy_ui:
-        from shell_cinematic_full import ShellHoloUI
-    else:
-        from shell_web_ui.host import ShellWebUI
-    print("Imports OK", flush=True)
 
-    app = QApplication(sys.argv)
-    _brand_icon = _brand_icon_path()
-    if _brand_icon:
-        app.setWindowIcon(QIcon(_brand_icon))
-    app.setStyle("Fusion")
+def _ensure_renderer_build() -> None:
+    if WEB_UI_DIST_INDEX.exists():
+        return
+    npm = _npm_command()
+    if not (WEB_UI_ROOT / "package.json").exists():
+        raise RuntimeError("shell_web_ui/package.json missing; Electron UI cannot start.")
+    install_cmd = [npm, "ci"] if (WEB_UI_ROOT / "package-lock.json").exists() else [npm, "install"]
+    subprocess.run(install_cmd, cwd=str(WEB_UI_ROOT), check=True)
+    subprocess.run([npm, "run", "build"], cwd=str(WEB_UI_ROOT), check=True)
+    if not WEB_UI_DIST_INDEX.exists():
+        raise RuntimeError("Electron renderer build did not create shell_web_ui/dist/index.html.")
+
+
+def _launch_electron() -> int:
+    npm = _npm_command()
+    env = os.environ.copy()
+    env.setdefault("SHELL_ELECTRON_HOST", "1")
+    env.setdefault("SHELL_ELECTRON_BACKEND_ROOT", str(ROOT))
+    print("Starting Shell AI Electron desktop...", flush=True)
+    return subprocess.call([npm, "run", "electron:dev"], cwd=str(WEB_UI_ROOT), env=env)
+
+
+def main() -> int:
     try:
-        from shell_ui.app_bootstrap import configure_qt_application
+        _ensure_shell_defaults()
+        _load_shell_config()
+        _ensure_renderer_build()
+        return _launch_electron()
+    except KeyboardInterrupt:
+        return 130
+    except Exception as exc:
+        print(f"FATAL: {exc}", flush=True)
+        print(traceback.format_exc(), flush=True)
+        if sys.stdout.isatty():
+            input("Press Enter to exit...")
+        return 1
 
-        configure_qt_application(app)
-    except Exception as _font_err:
-        print(f"Font bootstrap failed (non-fatal): {_font_err}", flush=True)
-    dp = QPalette()
-    _dark = QColor(4, 7, 16); _darker = QColor(2, 3, 10)
-    dp.setColor(QPalette.ColorRole.Window, _dark)
-    dp.setColor(QPalette.ColorRole.WindowText, QColor(200, 210, 220))
-    dp.setColor(QPalette.ColorRole.Base, _darker)
-    dp.setColor(QPalette.ColorRole.Text, QColor(200, 210, 220))
-    dp.setColor(QPalette.ColorRole.Button, _dark)
-    dp.setColor(QPalette.ColorRole.ButtonText, QColor(200, 210, 220))
-    app.setPalette(dp)
 
-    sys.excepthook = lambda *a: print(f"UNCAUGHT: {''.join(traceback.format_exception(*a))}", flush=True)
-
-    # ---- Boot splash ----------------------------------------------------
-    # ShellHoloUI() can take 3-5s on cold start. Show a Mac-style splash
-    # immediately so the user sees branded feedback instead of a blank
-    # screen. Wrapped in try/except so a broken splash never blocks boot.
-    splash = None
-    try:
-        from shell_ui.splash_screen import SplashScreen
-        splash = SplashScreen(total_duration_ms=3000)
-        splash.show()
-        # Pump events so the splash actually paints before the heavy
-        # ShellHoloUI constructor below blocks the event loop.
-        app.processEvents()
-    except Exception as _splash_err:
-        print(f"Splash failed (non-fatal): {_splash_err}", flush=True)
-        splash = None
-
-    print("Creating UI...", flush=True)
-    w = ShellHoloUI() if use_legacy_ui else ShellWebUI()
-    if _brand_icon:
-        w.setWindowIcon(QIcon(_brand_icon))
-    # Fit inside the visible desktop work area. This prevents the macOS Dock
-    # or Windows taskbar from covering the bottom action rows.
-    try:
-        geo = app.primaryScreen().availableGeometry()
-        w.resize(min(1280, max(960, geo.width() - 40)),
-                 min(720, max(620, geo.height() - 60)))
-        w.move(geo.x() + max(20, (geo.width() - w.width()) // 2),
-               geo.y() + max(20, (geo.height() - w.height()) // 2))
-    except Exception:
-        w.resize(1180, 640)
-    w.show()
-    ui_name = "legacy PyQt UI" if use_legacy_ui else "Shell AI Web UI"
-    print(f"Shell OS 1.0.0 is live with {ui_name}. Window open. Created by mdshoebking.", flush=True)
-
-    # Once the main window is up, fade the splash out smoothly.
-    if splash is not None:
-        try:
-            splash.dismiss()
-        except Exception as _splash_dismiss_err:
-            print(f"Splash dismiss failed (non-fatal): {_splash_dismiss_err}", flush=True)
-
-    app.exec()
-    print("App closed normally.", flush=True)
-except Exception as e:
-    print(f"FATAL: {e}", flush=True)
-    print(traceback.format_exc(), flush=True)
-    if sys.stdout.isatty():
-        input("Press Enter to exit...")
+if __name__ == "__main__":
+    raise SystemExit(main())
