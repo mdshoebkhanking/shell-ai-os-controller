@@ -172,6 +172,34 @@ def _project_slug_from_text(raw: str, fallback: str = "shell_site") -> str:
     return slug or fallback
 
 
+def _build_subject_from_text(raw: str, *, kind: str) -> str:
+    stop_words = (
+        r"\b(?:please|pls|make|create|build|generate|design|scaffold|develop|code|website|webpage|web\s+page|"
+        r"landing\s+page|site|app|application|software|dashboard|tool|banao|bana|banado|banaao|bana\s+do|"
+        r"kar\s+do|with|for|ke\s+liye|ka|ki|ek|a|an)\b"
+    )
+    text = re.sub(stop_words, " ", str(raw or ""), flags=re.I)
+    text = _clean(text)
+    if text:
+        return text
+    return "business" if kind == "website" else "productivity"
+
+
+def _build_brief_from_text(raw: str, *, kind: str) -> str:
+    subject = _build_subject_from_text(raw, kind=kind)
+    if kind == "website":
+        return (
+            f"Build a polished responsive website for {subject}. "
+            "Include a strong hero, clear value proposition, feature/service sections, proof or highlights, "
+            "and a contact/CTA section. Do not echo the request text as page copy."
+        )
+    return (
+        f"Build a full-stack app for {subject}. "
+        "Include a useful dashboard, create/read/update flows, persistent backend data, responsive UI, "
+        "and clear empty/error states. Do not echo the request text as page copy."
+    )
+
+
 def _game_name_from_text(raw: str) -> str:
     lower = str(raw or "").lower()
     known_games = (
@@ -433,6 +461,22 @@ def _user_file_save_content(raw: str, filename: str) -> str:
     return text
 
 
+def _user_file_content_task(raw: str, content: str, file_type: str) -> str:
+    topic = _clean(content)
+    lower = str(raw or "").lower()
+    if not topic:
+        topic = _clean(raw)
+    if re.search(r"\b(movie|film|short\s+film|script|screenplay|scene|dialogue|dialog)\b", lower):
+        return f"Write an original movie script about {topic}."
+    if re.search(r"\b(report|analysis|summary|essay|article)\b", lower):
+        return f"Write a concise structured report about {topic}."
+    if re.search(r"\b(letter|application|email\s+draft)\b", lower):
+        return f"Write a polished letter about {topic}."
+    if str(file_type or "").lower() == "pdf":
+        return f"Write a polished PDF document about {topic}."
+    return f"Write useful file content about {topic}."
+
+
 def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
     if not re.search(
         r"\b(save|create|make|new|write|generate|banao|bana|banado|banaao|bana\s+do|kar\s+do|karke\s+do)\b",
@@ -456,6 +500,8 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
         {
             "filename": filename,
             "content": content,
+            "content_request": _user_file_content_task(raw, content, file_type),
+            "raw_request": _strip_quotes(raw),
             "destination": destination,
             "file_type": file_type,
             "overwrite": overwrite,
@@ -772,7 +818,7 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             "shell_code_engine:create_fullstack_app_tool",
             {
                 "project_name": _project_slug_from_text(raw, "shell_site"),
-                "app_type": _strip_quotes(raw),
+                "app_type": _build_brief_from_text(raw, kind="website"),
             },
             confidence=0.91,
         )
@@ -792,7 +838,7 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             "shell_code_engine:create_fullstack_app_tool",
             {
                 "project_name": _project_slug_from_text(raw, "shell_app"),
-                "app_type": _strip_quotes(raw),
+                "app_type": _build_brief_from_text(raw, kind="app"),
             },
             confidence=0.9,
         )

@@ -37,10 +37,19 @@ _CACHED_MODEL_PATH: Path | None = None
 _CACHED_MODEL_LOAD_MS: float | None = None
 _STALE_PROVIDER_FALLBACK_MARKERS = (
     "ai provider abhi available nahi hai",
+    "ai provider not available",
+    "ai provider is not available",
     "api key set karoge",
     "api key set karoge to main",
     "provider is not available",
+    "provider not available",
+    "provider unavailable",
+    "no ai provider",
+    "no provider available",
+    "all brains failed",
     "set an api key",
+    "missing api key",
+    "api key missing",
 )
 
 

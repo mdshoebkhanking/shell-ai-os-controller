@@ -357,6 +357,31 @@ def test_offline_chat_retries_when_model_repeats_stale_fallback(monkeypatch, tmp
     assert calls == [history, []]
 
 
+def test_provider_unavailable_variants_are_never_emitted_or_saved(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    emitted = []
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+    monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "AI provider not available. Set an API key.")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "")
+
+    result = bridge._chat_message(["what is recursion?", {"source": "text"}])
+    history = bridge._read_history_file()
+
+    assert result["success"] is True
+    assert "provider" not in result["reply"].lower()
+    assert "api key" not in result["reply"].lower()
+    assert all("provider" not in bridge._history_text(item).lower() for item in history if item.get("role") == "model")
+    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["reply"] == result["reply"]
+
+
 def test_brain_fallback_retries_offline_llm_with_raw_prompt_after_context_poison(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
@@ -643,7 +668,8 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
         assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
         assert route["args"]["destination"] == "documents"
         assert route["args"]["file_type"] == "pdf"
-        assert route["args"]["content"] == "AI tools"
+        assert route["args"]["content"] == "Generated PDF body about AI tools."
+        assert "content_request" not in route["args"]
         return {"status": "success", "result": "Created file: Documents/ai_tools.pdf"}
 
     def fallback_should_not_run(*_args, **_kwargs):
@@ -651,6 +677,11 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
 
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
     monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(
+        bridge,
+        "_generated_artifact_content",
+        lambda request, **_kwargs: "Generated PDF body about AI tools.",
+    )
     monkeypatch.setattr(bridge, "_brain_chat_fallback", fallback_should_not_run)
 
     result = bridge._chat_message(["AI tools ke bare mein pdf bana do", {"source": "text"}])
@@ -661,6 +692,36 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
     assert "Created file" in result["reply"]
     assert "cannot" not in result["reply"].lower()
     assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["success"] is True
+
+
+def test_movie_script_pdf_chat_generates_script_content_before_file_tool(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    QCoreApplication.instance() or QCoreApplication([])
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+        assert route["args"]["file_type"] == "pdf"
+        assert "Scene 1" in route["args"]["content"]
+        assert "movie script" not in route["args"]["content"].lower()[:40]
+        return {"status": "success", "result": "Created file: Documents/movie_script.pdf"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(
+        bridge,
+        "_generated_artifact_content",
+        lambda request, **_kwargs: "Title\n\nScene 1 - Interior\nA real script body.",
+    )
+
+    result = bridge._chat_message(["movie script ka pdf banao", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert "Created file" in result["reply"]
 
 
 def test_code_write_blocked_reply_names_relevant_safety_settings():

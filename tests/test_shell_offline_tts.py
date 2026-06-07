@@ -322,6 +322,7 @@ def test_play_wav_async_uses_winsound_on_windows(monkeypatch, tmp_path):
 def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
     import shell_offline_tts
 
+    shell_offline_tts._reset_cached_kokoro_for_tests()
     model_dir = tmp_path / "kokoro"
     model_dir.mkdir()
     (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
@@ -367,6 +368,43 @@ def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
     assert result["amplitudeFrameMs"] > 0
     assert result["amplitudeFrames"]
     assert captured_audio["sample_rate"] == 24000
+
+
+def test_kokoro_speak_reuses_cached_engine_after_prewarm(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    shell_offline_tts._reset_cached_kokoro_for_tests()
+    model_dir = tmp_path / "kokoro"
+    model_dir.mkdir()
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    instances = []
+
+    class FakeKokoro:
+        def __init__(self, model, voices) -> None:
+            instances.append((model, voices))
+
+        def create(self, text, voice, speed, lang):
+            return [0.1, 0.0], 24000
+
+    fake_kokoro = types.ModuleType("kokoro_onnx")
+    fake_kokoro.Kokoro = FakeKokoro
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", fake_kokoro)
+    monkeypatch.setenv("SHELL_LANGUAGE", "english")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+    monkeypatch.setattr(shell_offline_tts, "_write_float_wav", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(shell_offline_tts, "_play_wav_async", lambda _path: FakeSpeechProcess())
+
+    prewarm = shell_offline_tts.prewarm_offline_tts()
+    first = shell_offline_tts._speak_kokoro("Shell voice one")
+    second = shell_offline_tts._speak_kokoro("Shell voice two")
+
+    assert prewarm["success"] is True
+    assert first["success"] is True
+    assert second["success"] is True
+    assert len(instances) == 1
 
 
 def test_backend_bridge_prefers_offline_tts(monkeypatch):

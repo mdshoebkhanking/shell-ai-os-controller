@@ -77,7 +77,8 @@ def test_direct_website_build_route_uses_code_engine_not_chat_fallback():
     assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
     assert route["kind"] == "tool"
     assert route["args"]["project_name"] == "bakery"
-    assert route["args"]["app_type"] == "website banao landing page for bakery"
+    assert route["args"]["app_type"].startswith("Build a polished responsive website for bakery")
+    assert "Do not echo the request text" in route["args"]["app_type"]
 
 
 def test_direct_app_build_route_uses_code_engine_not_agent_chat():
@@ -86,7 +87,8 @@ def test_direct_app_build_route_uses_code_engine_not_agent_chat():
     assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
     assert route["kind"] == "tool"
     assert route["args"]["project_name"] == "todo_with_login"
-    assert route["args"]["app_type"] == "todo app banao with login"
+    assert route["args"]["app_type"].startswith("Build a full-stack app for todo login")
+    assert "Do not echo the request text" in route["args"]["app_type"]
 
 
 def test_direct_game_build_route_uses_playable_game_builder():
@@ -230,13 +232,12 @@ def test_natural_desktop_file_save_route():
 
     assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
     assert route["kind"] == "tool"
-    assert route["args"] == {
-        "filename": "notes.txt",
-        "content": "hello shell",
-        "destination": "desktop",
-        "file_type": "txt",
-        "overwrite": False,
-    }
+    assert route["args"]["filename"] == "notes.txt"
+    assert route["args"]["content"] == "hello shell"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "txt"
+    assert route["args"]["overwrite"] is False
+    assert route["args"]["content_request"] == "Write useful file content about hello shell."
 
 
 def test_natural_desktop_pdf_save_route():
@@ -247,6 +248,7 @@ def test_natural_desktop_pdf_save_route():
     assert route["args"]["destination"] == "desktop"
     assert route["args"]["file_type"] == "pdf"
     assert route["args"]["content"] == "quantum battery"
+    assert route["args"]["content_request"] == "Write a polished PDF document about quantum battery."
 
 
 def test_natural_pdf_save_without_destination_defaults_to_documents():
@@ -257,6 +259,18 @@ def test_natural_pdf_save_without_destination_defaults_to_documents():
     assert route["args"]["destination"] == "documents"
     assert route["args"]["file_type"] == "pdf"
     assert route["args"]["content"] == "AI tools"
+    assert route["args"]["content_request"] == "Write a polished PDF document about AI tools."
+
+
+def test_natural_movie_script_pdf_route_keeps_topic_and_requests_script_content():
+    route = route_natural_command("movie script ka pdf banao")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["destination"] == "documents"
+    assert route["args"]["file_type"] == "pdf"
+    assert route["args"]["content"] == "movie script"
+    assert route["args"]["content_request"] == "Write an original movie script about movie script."
 
 
 def test_natural_workspace_read_file_route():

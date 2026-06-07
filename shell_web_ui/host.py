@@ -33,7 +33,7 @@ except Exception:  # pragma: no cover - handled by the launcher
     QWebEngineView = None  # type: ignore
 
 try:
-    from shell_offline_tts import offline_tts_status, speak_offline_tts
+    from shell_offline_tts import offline_tts_status, prewarm_offline_tts, speak_offline_tts
 except Exception:  # pragma: no cover - fallback keeps the host importable
     def offline_tts_status() -> dict[str, Any]:
         return {
@@ -48,6 +48,14 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
         return {
             "success": False,
             "available": False,
+            "engine": "fallback",
+            "message": "Offline TTS service could not be imported.",
+        }
+
+    def prewarm_offline_tts() -> dict[str, Any]:
+        return {
+            "success": False,
+            "prewarmed": False,
             "engine": "fallback",
             "message": "Offline TTS service could not be imported.",
         }
@@ -117,6 +125,22 @@ CHAT_PROVIDER_PROBE_HOSTS = {
     "HF_API_KEY": "huggingface.co",
     "HUGGINGFACE_API_KEY": "huggingface.co",
 }
+STALE_PROVIDER_FALLBACK_MARKERS = (
+    "ai provider abhi available nahi hai",
+    "ai provider not available",
+    "ai provider is not available",
+    "api key set karoge",
+    "api key set karoge to main",
+    "provider is not available",
+    "provider not available",
+    "provider unavailable",
+    "no ai provider",
+    "no provider available",
+    "all brains failed",
+    "set an api key",
+    "missing api key",
+    "api key missing",
+)
 
 
 def _shell_language() -> str:
@@ -182,6 +206,19 @@ class ShellBackendBridge(QObject):
         self._cloud_tts_speaker: Any | None = None
         self._cloud_tts_fallback_text = ""
         self._chat_provider_network_cache: tuple[float, str, bool] = (0.0, "", False)
+        self._maybe_prewarm_offline_tts()
+
+    def _maybe_prewarm_offline_tts(self) -> None:
+        if not self._env_flag_enabled("SHELL_OFFLINE_TTS_PREWARM", default=True):
+            return
+
+        def run() -> None:
+            try:
+                prewarm_offline_tts()
+            except Exception:
+                pass
+
+        self._start_background_task("ShellOfflineTTSPrewarm", run)
 
     @pyqtSlot(str, str, result=str)
     def call(self, channel: str, payload: str = "[]") -> str:
@@ -602,10 +639,10 @@ class ShellBackendBridge(QObject):
             return []
 
     def _write_history_file(self, messages: list[Any]) -> None:
-        HISTORY_PATH.write_text(json.dumps(messages[-80:], ensure_ascii=False, indent=2), encoding="utf-8")
+        HISTORY_PATH.write_text(json.dumps(self._visible_history_messages(messages)[-80:], ensure_ascii=False, indent=2), encoding="utf-8")
 
     def _get_history(self, _args: list[Any]) -> list[Any]:
-        return self._read_history_file()
+        return self._visible_history_messages(self._read_history_file())
 
     def _clear_history(self, _args: list[Any]) -> dict[str, Any]:
         self._write_history_file([])
@@ -849,6 +886,9 @@ class ShellBackendBridge(QObject):
                                         "entry": entry,
                                     },
                                 )
+                            else:
+                                route = self._prepare_artifact_route(route, previous_messages=previous_messages)
+                                route = self._prepare_code_build_route(route)
                             activity_descriptor = self._activity_descriptor(
                                 text,
                                 route,
@@ -907,6 +947,9 @@ class ShellBackendBridge(QObject):
                 source=source,
                 entry=entry,
             )
+
+        if success and self._is_stale_provider_fallback_reply(reply):
+            reply = self._local_chat_answer(processing_text or text)
 
         messages.append({"role": "model", "parts": [{"text": reply}]})
         self._write_history_file(messages)
@@ -1048,6 +1091,151 @@ class ShellBackendBridge(QObject):
         if not isinstance(args, dict):
             return ""
         return str(args.get("description") or args.get("prompt") or "").strip()
+
+    @staticmethod
+    def _artifact_topic_from_request(request: str) -> str:
+        text = re.sub(
+            r"\b(?:write|create|make|generate|banao|bana|banado|banaao|kar\s+do|pdf|document|file|"
+            r"polished|original|concise|structured|report|movie|film|script|screenplay|about|ke\s+bare\s+mein|"
+            r"ka|ki|ke|ek|a|an)\b",
+            " ",
+            str(request or ""),
+            flags=re.I,
+        )
+        return " ".join(text.split()).strip(" .:-") or "Shell AI"
+
+    @classmethod
+    def _local_artifact_content(cls, request: str, *, file_type: str = "") -> str:
+        normalized = " ".join(str(request or "").split()).strip()
+        topic = cls._artifact_topic_from_request(normalized)
+        lower = normalized.lower()
+        if re.search(r"\b(movie|film|short film|script|screenplay|scene|dialogue|dialog)\b", lower):
+            title = topic.title()
+            return (
+                f"{title}\n\n"
+                "Genre: Drama / Thriller\n"
+                "Logline: A focused protagonist faces one urgent choice that changes the direction of their life.\n\n"
+                "Characters:\n"
+                "- Ayaan: determined, observant, and carrying a quiet pressure.\n"
+                "- Meera: practical, sharp, and willing to challenge easy answers.\n"
+                "- Rafiq: the friend who notices danger before anyone else.\n\n"
+                "Scene 1 - Interior, late evening\n"
+                "Ayaan studies a flickering laptop screen while rain taps the window. A file opens with a timestamp he does not recognize.\n\n"
+                "AYAAN\n"
+                "This was created tomorrow.\n\n"
+                "MEERA\n"
+                "Then someone is warning you before it happens.\n\n"
+                "Scene 2 - Street outside the old cinema\n"
+                "The city lights blur in the rain. Rafiq arrives breathless, holding a torn ticket with the same timestamp.\n\n"
+                "RAFIQ\n"
+                "You need to leave before midnight. They already know you saw it.\n\n"
+                "Scene 3 - Final choice\n"
+                "Ayaan stands at the cinema door. Behind it is the evidence; outside is safety. He turns back to Meera.\n\n"
+                "AYAAN\n"
+                "If we run, this happens to someone else.\n\n"
+                "Meera nods. Together, they open the door.\n\n"
+                "Ending note: The story closes on the projector starting by itself, revealing the first frame of tomorrow."
+            )
+        if re.search(r"\b(report|analysis|summary|essay|article)\b", lower) or file_type == "pdf":
+            return (
+                f"{topic.title()}\n\n"
+                f"Overview\n{topic} par yeh short document clear points mein useful context deta hai.\n\n"
+                "Key Points\n"
+                "1. Main idea ko simple language mein define karo.\n"
+                "2. Practical examples add karo jisse reader ko topic immediately samajh aaye.\n"
+                "3. Risks, benefits, aur next steps ko separate sections mein rakho.\n\n"
+                "Practical Use\n"
+                "Is content ko presentation, notes, ya quick reference document ke base ke roop mein use kiya ja sakta hai.\n\n"
+                "Conclusion\n"
+                f"{topic} ko samajhne ke liye best approach hai: clear definition, real examples, aur actionable next steps."
+            )
+        return (
+            f"{topic.title()}\n\n"
+            f"Yeh document {topic} ke liye Shell AI ne local mode mein draft kiya hai.\n\n"
+            "Main points:\n"
+            "- Topic ko clear objective ke saath start karo.\n"
+            "- Important details ko short sections mein divide karo.\n"
+            "- End mein next steps ya conclusion add karo."
+        )
+
+    def _generated_artifact_content(self, request: str, *, file_type: str = "", previous_messages: list[Any] | None = None) -> str:
+        task = " ".join(str(request or "").split()).strip()
+        if not task:
+            return ""
+        system_prompt = (
+            "You are Shell AI writing finished artifact content for a file/PDF. "
+            f"{_shell_language_instruction()} "
+            "Return only the actual content that should be saved. Do not describe that you are creating it. "
+            "Never echo the user's request as the whole answer. Include useful sections and concrete details."
+        )
+        if self._should_try_provider_chat():
+            provider_reply = self._provider_chat_reply(task, system_prompt)
+            if provider_reply and not self._is_stale_provider_fallback_reply(provider_reply):
+                return provider_reply
+        offline_reply = self._offline_chat_reply(task, system_prompt, previous_messages)
+        if offline_reply:
+            return offline_reply
+        return self._local_artifact_content(task, file_type=file_type)
+
+    def _prepare_artifact_route(self, route: dict[str, Any], *, previous_messages: list[Any] | None = None) -> dict[str, Any]:
+        tool = str(route.get("tool") or "")
+        args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        if tool != "shell_workspace_tools:create_user_file_tool" or not isinstance(args, dict):
+            return route
+        content_request = str(args.get("content_request") or "").strip()
+        if not content_request:
+            return route
+        file_type = str(args.get("file_type") or "").strip().lower()
+        generated = self._generated_artifact_content(content_request, file_type=file_type, previous_messages=previous_messages)
+        if not generated:
+            return route
+        next_args = dict(args)
+        next_args["content"] = generated
+        next_args.pop("content_request", None)
+        next_args.pop("raw_request", None)
+        return {**route, "args": next_args}
+
+    @classmethod
+    def _local_build_brief(cls, request: str) -> str:
+        raw = " ".join(str(request or "").split()).strip()
+        lower = raw.lower()
+        kind = "website" if re.search(r"\b(website|webpage|web page|landing page|site)\b", lower) else "app"
+        subject = re.sub(
+            r"\b(?:please|pls|make|create|build|generate|design|scaffold|develop|code|website|webpage|web\s+page|"
+            r"landing\s+page|site|app|application|software|dashboard|tool|banao|bana|banado|banaao|bana\s+do|"
+            r"kar\s+do|with|for|ke\s+liye|ka|ki|ek|a|an)\b",
+            " ",
+            raw,
+            flags=re.I,
+        )
+        subject = " ".join(subject.split()).strip(" .:-") or ("business" if kind == "website" else "productivity")
+        if kind == "website":
+            return (
+                f"Build a polished responsive website for {subject}. Include a strong hero, value proposition, "
+                "feature/service sections, proof or highlights, and a contact/CTA section. Do not echo the request text as page copy."
+            )
+        return (
+            f"Build a full-stack app for {subject}. Include a useful dashboard, create/read/update flows, persistent backend data, "
+            "responsive UI, and clear empty/error states. Do not echo the request text as page copy."
+        )
+
+    def _prepare_code_build_route(self, route: dict[str, Any]) -> dict[str, Any]:
+        tool = str(route.get("tool") or "")
+        args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        if tool != "shell_code_engine:create_fullstack_app_tool" or not isinstance(args, dict):
+            return route
+        app_type = str(args.get("app_type") or "").strip()
+        if not app_type:
+            return route
+        if re.search(r"\b(?:banao|bana|banado|banaao|kar\s+do)\b", app_type, re.I) or re.match(
+            r"^\s*(?:website|webpage|landing\s+page|site|app)\b",
+            app_type,
+            re.I,
+        ):
+            next_args = dict(args)
+            next_args["app_type"] = self._local_build_brief(app_type)
+            return {**route, "args": next_args}
+        return route
 
     @staticmethod
     def _safe_upload_filename(name: str) -> str:
@@ -1315,13 +1503,20 @@ class ShellBackendBridge(QObject):
     @staticmethod
     def _is_stale_provider_fallback_reply(text: str) -> bool:
         normalized = " ".join(str(text or "").lower().split())
-        markers = (
-            "ai provider abhi available nahi hai",
-            "api key set karoge",
-            "provider is not available",
-            "set an api key",
-        )
-        return any(marker in normalized for marker in markers)
+        return any(marker in normalized for marker in STALE_PROVIDER_FALLBACK_MARKERS)
+
+    @classmethod
+    def _visible_history_messages(cls, messages: list[Any]) -> list[Any]:
+        clean: list[Any] = []
+        for message in messages or []:
+            if not isinstance(message, dict):
+                continue
+            role = str(message.get("role") or "").strip().lower()
+            text = cls._history_text(message)
+            if role == "model" and cls._is_stale_provider_fallback_reply(text):
+                continue
+            clean.append(message)
+        return clean
 
     def _offline_llm_history(self, previous_messages: list[Any] | None) -> list[Any]:
         clean: list[Any] = []
@@ -1492,7 +1687,7 @@ class ShellBackendBridge(QObject):
             timeout = max(4.0, float(os.environ.get("SHELL_WEB_CHAT_TIMEOUT", "8")))
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 reply = pool.submit(_ask_brain).result(timeout=timeout)
-            if reply and not reply.lower().startswith("all brains failed"):
+            if reply and not self._is_stale_provider_fallback_reply(reply):
                 return self._compact_chat_reply(reply)
         except Exception:
             pass
@@ -1601,10 +1796,11 @@ class ShellBackendBridge(QObject):
                 "Shell action intent samajh aa gaya, lekin is request ka exact safe tool route nahi mila. "
                 "Thoda specific command likho, jaise `PDF banao`, `image banao`, `open calculator`, ya `screenshot lo`."
             )
-        return (
-            "Mujhe sawaal mil gaya, lekin AI provider abhi available nahi hai. "
-            "API key set karoge to main is par proper detailed jawab de paungi."
-        )
+        if language == "english":
+            return "I can answer locally, but this request needs more detail. Tell me the exact topic, format, or action you want."
+        if language == "hindi":
+            return "Main local mode mein jawab de sakti hoon, lekin is request ke liye thodi aur detail chahiye. Topic, format, ya action clear batao."
+        return "Main local mode mein jawab de sakti hoon. Is request ke liye topic, format, ya exact action thoda clear batao."
 
     @classmethod
     def _format_agent_success_reply(cls, tool: str, rendered_text: str) -> str:

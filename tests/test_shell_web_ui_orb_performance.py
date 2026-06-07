@@ -71,7 +71,8 @@ def test_sphere_preserves_desktop_particle_orb_for_packaged_windows():
     main = read_project_file("shell_web_ui/src/main.tsx")
     host = read_project_file("shell_web_ui/host.py")
 
-    assert "shell-windows-perf" in main
+    assert "shellPerfMode !== 'windows'" in main
+    assert "explicitSafePerfMode" in main
     assert "shell_perf=windows" in host
     assert "const cssOnlyOrb" not in sphere
     assert "<Canvas" in sphere
@@ -99,10 +100,14 @@ def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
     assert "}, FACE_SCAN_INTERVAL_MS)" in dashboard
 
 
-def test_windows_perf_mode_removes_expensive_paint_effects():
+def test_windows_perf_mode_is_explicit_safe_mode_not_default_packaged_mode():
     css = read_project_file("shell_web_ui/src/assets/main.css")
+    main = read_project_file("shell_web_ui/src/main.tsx")
     perf_css = css[css.index(".shell-windows-perf .shell-ui-root") : css.index(".shell-tabs {")]
 
+    assert "explicitSafePerfMode" in main
+    assert "['safe', 'low', 'eco'].includes(shellPerfMode)" in main
+    assert "shellPerfMode === 'windows' ||" not in main
     assert ".shell-windows-perf .shell-liquid-panel::before" in perf_css
     assert ".shell-windows-perf .shell-workstream-panel::after" in perf_css
     assert ".shell-windows-perf .shell-control-surface::before" in perf_css
@@ -118,8 +123,9 @@ def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
 
     assert "const PRELOAD_TAB_GAP_MS = 180" in shell_ai
-    assert "new URLSearchParams(window.location.search).get('shell_perf')" in shell_ai
-    assert "if (shellPerfMode === 'windows') return true" in shell_ai
+    assert "new URLSearchParams(window.location.search)" in shell_ai
+    assert "if (shellPerfMode === 'windows') return false" in shell_ai
+    assert "if (shellSearchParams.get('shell_host') === 'pyqt') return false" in shell_ai
     assert "HISTORY_ACTIVE_POLL_MS = 900" in shell_ai
     assert "HISTORY_IDLE_POLL_MS = 2500" in shell_ai
     assert "HISTORY_BACKGROUND_POLL_MS = 6000" in shell_ai

@@ -59,8 +59,10 @@ const shouldPreloadShellTabs = () => {
   const preference = localStorage.getItem('shell_preload_tabs')
   if (preference === '1') return true
   if (preference === '0') return false
-  const shellPerfMode = new URLSearchParams(window.location.search).get('shell_perf')
-  if (shellPerfMode === 'windows') return true
+  const shellSearchParams = new URLSearchParams(window.location.search)
+  const shellPerfMode = (shellSearchParams.get('shell_perf') || '').trim().toLowerCase()
+  if (shellPerfMode === 'windows') return false
+  if (shellSearchParams.get('shell_host') === 'pyqt') return false
   return !/Windows/i.test(navigator.userAgent)
 }
 

@@ -565,17 +565,17 @@ body {
   inset: 14%;
   z-index: 1;
   border-radius: 999px;
-  opacity: 0.28;
+  opacity: 0.4;
   transform: translate3d(0, 0, 0) scale(var(--shell-orb-scale));
   transition:
     transform 160ms var(--shell-liquid-ease),
     opacity 180ms var(--shell-liquid-ease);
   background:
-    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.13), transparent 62%),
-    radial-gradient(circle at 48% 48%, rgba(8, 24, 21, 0.10), transparent 54%);
+    radial-gradient(circle at 50% 50%, rgba(126, 211, 186, 0.2), transparent 62%),
+    radial-gradient(circle at 48% 48%, rgba(8, 24, 21, 0.14), transparent 54%);
   box-shadow:
-    0 0 24px rgba(94, 234, 212, 0.13),
-    inset 0 0 34px rgba(126, 211, 186, 0.08);
+    0 0 32px rgba(94, 234, 212, 0.2),
+    inset 0 0 38px rgba(126, 211, 186, 0.12);
   filter: saturate(1.08);
   contain: paint;
   overflow: hidden;
@@ -616,11 +616,11 @@ body {
 }
 
 .shell-orb-stage:not(.shell-orb-stage-active) .shell-orb-fallback {
-  opacity: 0.22;
+  opacity: 0.32;
 }
 
 .shell-orb-stage-speaking .shell-orb-fallback {
-  opacity: 0.42;
+  opacity: 0.56;
   filter: saturate(1.25);
 }
 

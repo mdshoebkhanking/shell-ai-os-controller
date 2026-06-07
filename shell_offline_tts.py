@@ -40,6 +40,11 @@ KOKORO_DEFAULT_VOICES = {
 }
 KOKORO_REALISTIC_FEMALE_VOICE = "af_heart"
 KOKORO_HINDI_NATIVE_VOICE = "hf_alpha"
+_KOKORO_ENGINE_LOCK = threading.Lock()
+_KOKORO_SYNTHESIS_LOCK = threading.Lock()
+_KOKORO_ENGINE: Any | None = None
+_KOKORO_ENGINE_KEY: tuple[str, int, str, int, str] | None = None
+_KOKORO_ENGINE_LOAD_MS: float | None = None
 HINGLISH_ROUTING_HINTS = frozenset(
     {
         "aap",
@@ -938,28 +943,90 @@ def _prepare_kokoro_espeak_data_layout(data_path: Path) -> None:
                 continue
 
 
+def _kokoro_asset_signature(model: Path, voices: Path) -> tuple[str, int, str, int, str]:
+    try:
+        model_stat = model.stat()
+        model_mtime = int(model_stat.st_mtime_ns)
+    except Exception:
+        model_mtime = 0
+    try:
+        voices_stat = voices.stat()
+        voices_mtime = int(voices_stat.st_mtime_ns)
+    except Exception:
+        voices_mtime = 0
+    espeak_marker = "|".join(
+        (
+            os.environ.get("PHONEMIZER_ESPEAK_LIBRARY", ""),
+            os.environ.get("PHONEMIZER_ESPEAK_DATA_PATH", ""),
+        )
+    )
+    return (str(model.resolve()), model_mtime, str(voices.resolve()), voices_mtime, espeak_marker)
+
+
+def _create_kokoro_engine(model: Path, voices: Path) -> Any:
+    from kokoro_onnx import Kokoro
+
+    espeak_config = _kokoro_espeak_config()
+    try:
+        return Kokoro(str(model), str(voices), espeak_config=espeak_config)
+    except TypeError:
+        return Kokoro(str(model), str(voices))
+
+
+def _get_kokoro_engine(model: Path, voices: Path) -> Any:
+    global _KOKORO_ENGINE, _KOKORO_ENGINE_KEY, _KOKORO_ENGINE_LOAD_MS
+
+    key = _kokoro_asset_signature(model, voices)
+    with _KOKORO_ENGINE_LOCK:
+        if _KOKORO_ENGINE is not None and _KOKORO_ENGINE_KEY == key:
+            return _KOKORO_ENGINE
+        started = time.perf_counter()
+        engine = _create_kokoro_engine(model, voices)
+        _KOKORO_ENGINE = engine
+        _KOKORO_ENGINE_KEY = key
+        _KOKORO_ENGINE_LOAD_MS = (time.perf_counter() - started) * 1000.0
+        return engine
+
+
+def prewarm_offline_tts() -> dict[str, Any]:
+    """Load the packaged Kokoro engine without playing audio."""
+    status = offline_tts_status()
+    if not status.get("available") or str(status.get("engine") or "").lower() != "kokoro":
+        return {"success": False, "prewarmed": False, "engine": status.get("engine", "kokoro"), "status": status}
+    model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
+    if not model or not voices:
+        return {"success": False, "prewarmed": False, "engine": "kokoro", "message": "Kokoro model assets are missing."}
+    try:
+        _get_kokoro_engine(model, voices)
+    except Exception as exc:
+        return {"success": False, "prewarmed": False, "engine": "kokoro", "message": str(exc), "status": status}
+    return {
+        "success": True,
+        "prewarmed": True,
+        "engine": "kokoro",
+        "loadMs": _KOKORO_ENGINE_LOAD_MS,
+        "status": status,
+    }
+
+
 def _speak_kokoro(text: str) -> dict[str, Any]:
     model, voices, _model_dir = _find_kokoro_model(_candidate_model_dirs("kokoro"))
     if not model or not voices:
         return {"success": False, "available": False, "engine": "kokoro", "message": "Kokoro model assets are missing."}
     try:
-        from kokoro_onnx import Kokoro
+        engine = _get_kokoro_engine(model, voices)
     except Exception as exc:
         return {"success": False, "available": False, "engine": "kokoro", "message": f"kokoro_onnx unavailable: {exc}"}
 
     speed = float(os.environ.get("SHELL_NATURAL_TTS_SPEED", "1.0") or "1.0")
     wav_path = _tts_audio_path("kokoro")
 
-    espeak_config = _kokoro_espeak_config()
-    try:
-        engine = Kokoro(str(model), str(voices), espeak_config=espeak_config)
-    except TypeError:
-        engine = Kokoro(str(model), str(voices))
     segments = _prepare_kokoro_segments(text)
-    rendered_segments = [
-        engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
-        for segment in segments
-    ]
+    with _KOKORO_SYNTHESIS_LOCK:
+        rendered_segments = [
+            engine.create(_kokoro_synthesis_text_for(segment), voice=segment.voice, speed=speed, lang=segment.locale)
+            for segment in segments
+        ]
     samples, sample_rate = _join_kokoro_audio(rendered_segments)
     _write_float_wav(wav_path, samples, int(sample_rate))
     reactivity = _audio_reactivity_metadata(samples, int(sample_rate))
@@ -1043,4 +1110,12 @@ def speak_offline_tts(text: str) -> dict[str, Any]:
     return {"success": False, "available": False, "engine": engine, "message": f"Unsupported offline TTS engine: {engine}"}
 
 
-__all__ = ["offline_tts_status", "speak_offline_tts"]
+def _reset_cached_kokoro_for_tests() -> None:
+    global _KOKORO_ENGINE, _KOKORO_ENGINE_KEY, _KOKORO_ENGINE_LOAD_MS
+    with _KOKORO_ENGINE_LOCK:
+        _KOKORO_ENGINE = None
+        _KOKORO_ENGINE_KEY = None
+        _KOKORO_ENGINE_LOAD_MS = None
+
+
+__all__ = ["offline_tts_status", "prewarm_offline_tts", "speak_offline_tts"]
