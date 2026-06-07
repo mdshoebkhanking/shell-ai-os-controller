@@ -2,8 +2,14 @@
 
 ## Unreleased
 
-## 1.0.15 - Windows setup EXE release refresh
+## 1.0.15 - Packaged backend tool catalog rebuild
 
+- Fixed packaged Electron backend root detection so installed EXE builds scan
+  the Shell app source root instead of the PyInstaller `_internal` folder.
+- Restored chat-routed local tools in the Windows EXE, including Shell goal
+  orchestration, full-stack app creation, and YouTube playback routing.
+- Added a packaged backend catalog probe to Windows acceptance so future EXE
+  releases fail before upload if these chat-routed tools disappear.
 - Published the current Shell OS code line on main with the Windows installer
   branch-artifact runtime timeout fix included.
 - Revalidated CI, security, and release workflows on the latest main commit

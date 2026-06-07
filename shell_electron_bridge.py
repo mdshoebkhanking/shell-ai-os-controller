@@ -13,8 +13,34 @@ from typing import Any
 from aiohttp import web
 
 
-ROOT = Path(__file__).resolve().parent
+def _project_root() -> Path:
+    for env_name in ("SHELL_APP_ROOT", "SHELL_INSTALL_ROOT"):
+        configured = os.environ.get(env_name, "").strip()
+        if not configured:
+            continue
+        candidate = Path(configured).resolve()
+        if (candidate / "shell_web_ui").exists() and (candidate / "shell_tool_catalog.py").exists():
+            return candidate
+    cwd = Path.cwd().resolve()
+    if (cwd / "shell_web_ui").exists() and (cwd / "shell_tool_catalog.py").exists():
+        return cwd
+    return Path(__file__).resolve().parent
+
+
+ROOT = _project_root()
+for candidate in (ROOT, ROOT / "shell_web_ui"):
+    text = str(candidate)
+    if text not in sys.path:
+        sys.path.insert(0, text)
+os.environ.setdefault("SHELL_APP_ROOT", str(ROOT))
+os.environ.setdefault("SHELL_INSTALL_ROOT", str(ROOT))
+os.environ.setdefault("SHELL_RUNTIME_DIR", str(ROOT / ".shell_runtime"))
 PORT_HINT = ROOT / ".shell_electron_bridge_port"
+REQUIRED_BACKEND_TOOL_IDS = (
+    "shell_agent_orchestrator:orchestrate_shell_goal_tool",
+    "shell_code_engine:create_fullstack_app_tool",
+    "shell_browser_CTRL:play_youtube_video",
+)
 
 
 def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> dict[str, Any]:
@@ -110,14 +136,46 @@ async def run(port: int) -> None:
         await asyncio.sleep(3600)
 
 
+def _backend_probe() -> int:
+    from shell_tool_catalog import discover_tool_catalog
+    from shell_tool_gateway import execute_tool_sync
+
+    rows = discover_tool_catalog(ROOT)
+    ids = {str(row.get("id") or "") for row in rows}
+    missing = [tool_id for tool_id in REQUIRED_BACKEND_TOOL_IDS if tool_id not in ids]
+    execution_result: dict[str, Any] | None = None
+    if not missing:
+        execution_result = execute_tool_sync(
+            "shell_agent_orchestrator:orchestrate_shell_goal_tool",
+            {
+                "goal": "status check only",
+                "execute": False,
+                "approved": False,
+            },
+        )
+    payload = {
+        "ok": not missing and isinstance(execution_result, dict) and execution_result.get("status") == "success",
+        "root": str(ROOT),
+        "toolCount": len(ids),
+        "requiredTools": list(REQUIRED_BACKEND_TOOL_IDS),
+        "missingTools": missing,
+        "orchestratorStatus": execution_result.get("status") if isinstance(execution_result, dict) else "",
+    }
+    print("SHELL_BACKEND_PROBE_JSON=" + json.dumps(payload, sort_keys=True), flush=True)
+    return 0 if payload["ok"] else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Shell AI Electron backend bridge.")
     parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--shell-ai-backend-probe", action="store_true")
     args = parser.parse_args(argv)
     os.environ.setdefault("SHELL_CHAT_PROVIDER_MODE", os.environ.get("SHELL_CHAT_PROVIDER_MODE", "auto"))
     os.environ.setdefault("SHELL_OFFLINE_LLM_ASYNC_UI", "1")
     os.environ.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
     os.environ.setdefault("SHELL_IMAGE_LOCAL_FALLBACK", "1")
+    if args.shell_ai_backend_probe:
+        return _backend_probe()
     port = args.port or _pick_port()
     try:
         asyncio.run(run(port))

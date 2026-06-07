@@ -21,13 +21,14 @@ if str(ROOT) not in sys.path:
 REPORT_PATH = ROOT / ".shell_runtime" / "windows_acceptance_report.json"
 SCREENS_DIR = ROOT / ".shell_runtime" / "windows_acceptance_screens"
 APP_EXE = ROOT / "ShellAIApp" / "ShellAI.exe"
+BACKEND_EXE = ROOT / "ShellAIBackend" / "ShellAIBackend.exe"
 APP_ICON = ROOT / "shell-ai.ico"
 RAM_WARN_MB = 1400
 RAM_FAIL_MB = 2200
 
 
 def configure_probe_root(root: Path) -> None:
-    global ROOT, REPORT_PATH, SCREENS_DIR, APP_EXE, APP_ICON
+    global ROOT, REPORT_PATH, SCREENS_DIR, APP_EXE, BACKEND_EXE, APP_ICON
 
     ROOT = root.resolve()
     if str(ROOT) not in sys.path:
@@ -35,6 +36,7 @@ def configure_probe_root(root: Path) -> None:
     REPORT_PATH = ROOT / ".shell_runtime" / "windows_acceptance_report.json"
     SCREENS_DIR = ROOT / ".shell_runtime" / "windows_acceptance_screens"
     APP_EXE = ROOT / "ShellAIApp" / "ShellAI.exe"
+    BACKEND_EXE = ROOT / "ShellAIBackend" / "ShellAIBackend.exe"
     APP_ICON = ROOT / "shell-ai.ico"
 
 
@@ -477,6 +479,53 @@ def check_frozen_runtime_probe(*, warn_on_timeout: bool = False) -> Check:
     )
 
 
+def check_electron_backend_tool_catalog() -> Check:
+    if not platform.system().lower().startswith("win"):
+        return Check("Electron backend tool catalog", False, "BLOCKED", "Must run on Windows.")
+    if not BACKEND_EXE.exists():
+        return Check("Electron backend tool catalog", False, "WARN", f"Skipped because {BACKEND_EXE} is not installed.")
+    env = os.environ.copy()
+    env["SHELL_APP_ROOT"] = str(ROOT)
+    env["SHELL_INSTALL_ROOT"] = str(ROOT)
+    env["SHELL_RUNTIME_DIR"] = str(ROOT / ".shell_runtime")
+    result = run_cmd(
+        [BACKEND_EXE, "--shell-ai-backend-probe"],
+        name="Electron backend tool catalog",
+        timeout=90,
+        env=env,
+    )
+    details = dict(result.details)
+    marker = ""
+    for line in reversed(str(result.message or "").splitlines()):
+        if line.startswith("SHELL_BACKEND_PROBE_JSON="):
+            marker = line.split("=", 1)[1]
+            break
+    if marker:
+        try:
+            payload = json.loads(marker)
+            details["payload"] = payload
+            if result.ok and payload.get("ok") is True:
+                return Check(
+                    "Electron backend tool catalog",
+                    True,
+                    "PASS",
+                    f"Packaged backend discovered {payload.get('toolCount')} tools including chat-routed tools.",
+                    details,
+                )
+            missing = payload.get("missingTools") if isinstance(payload, dict) else []
+            return Check(
+                "Electron backend tool catalog",
+                False,
+                "FAIL",
+                f"Packaged backend is missing chat-routed tools: {missing}",
+                details,
+            )
+        except Exception as exc:
+            details["payload"] = marker[-1200:]
+            return Check("Electron backend tool catalog", False, "FAIL", f"Backend probe payload is invalid JSON: {exc}", details)
+    return Check("Electron backend tool catalog", result.ok, result.status, result.message, details)
+
+
 def _offline_llm_catalog_ready(status: Any) -> tuple[bool, int]:
     if not isinstance(status, dict) or status.get("runtimeDownloads") is not True:
         return False, 0
@@ -781,6 +830,7 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(check_frozen_offline_tts_path(py))
         checks.append(check_frozen_offline_llm_catalog(py))
         checks.append(check_frozen_runtime_probe(warn_on_timeout=args.warn_on_runtime_probe_timeout))
+        checks.append(check_electron_backend_tool_catalog())
         if not args.runtime_only:
             checks.append(check_windows_app_open_smoke(py))
             checks.append(check_bundled_exe_memory())

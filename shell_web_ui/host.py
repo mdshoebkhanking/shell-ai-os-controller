@@ -131,7 +131,18 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
     CODING_MODEL_CATEGORY = "coding"
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+def _project_root() -> Path:
+    for env_name in ("SHELL_APP_ROOT", "SHELL_INSTALL_ROOT"):
+        configured = os.environ.get(env_name, "").strip()
+        if not configured:
+            continue
+        candidate = Path(configured).resolve()
+        if (candidate / "shell_web_ui").exists() and (candidate / "shell_tool_catalog.py").exists():
+            return candidate
+    return Path(__file__).resolve().parents[1]
+
+
+PROJECT_ROOT = _project_root()
 WEB_UI_ROOT = Path(__file__).resolve().parent
 WEB_DIST_INDEX = WEB_UI_ROOT / "dist" / "index.html"
 HISTORY_PATH = PROJECT_ROOT / ".shell_runtime" / "web_ui_history.json"

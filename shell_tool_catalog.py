@@ -15,7 +15,18 @@ from pathlib import Path
 from typing import Any, Optional, Union
 
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+def _project_root() -> Path:
+    for env_name in ("SHELL_APP_ROOT", "SHELL_INSTALL_ROOT"):
+        configured = os.environ.get(env_name, "").strip()
+        if not configured:
+            continue
+        candidate = Path(configured).resolve()
+        if (candidate / "shell_tool_catalog.py").exists():
+            return candidate
+    return Path(__file__).resolve().parent
+
+
+PROJECT_ROOT = _project_root()
 _DISCOVER_TOOL_CACHE: dict[tuple[str, tuple[tuple[str, int, int], ...]], list[dict[str, Any]]] = {}
 _DISK_CACHE_VERSION = 2
 _DISK_CACHE_PATH = PROJECT_ROOT / ".shell_runtime" / "tool_catalog_cache.json"

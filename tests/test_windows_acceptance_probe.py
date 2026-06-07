@@ -197,13 +197,20 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     desktop_entry = (Path(__file__).resolve().parents[1] / "tools" / "windows_app" / "shellai_desktop_entry.py").read_text(
         encoding="utf-8"
     )
+    backend_bridge = (Path(__file__).resolve().parents[1] / "shell_electron_bridge.py").read_text(encoding="utf-8")
 
     assert "--app-root" in source
     assert "--runtime-only" in source
     assert "check_frozen_offline_llm_catalog" in source
     assert "check_frozen_runtime_probe" in source
+    assert "check_electron_backend_tool_catalog" in source
+    assert "--shell-ai-backend-probe" in source
     assert "llm_catalog_ready" in source
     assert "--shell-ai-runtime-probe" in source
+    assert "shell_agent_orchestrator:orchestrate_shell_goal_tool" in backend_bridge
+    assert "shell_code_engine:create_fullstack_app_tool" in backend_bridge
+    assert "shell_browser_CTRL:play_youtube_video" in backend_bridge
+    assert "SHELL_BACKEND_PROBE_JSON" in backend_bridge
     assert "_candidate_failure_summary(tts)" in source
     assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry
     assert "offline_tts_module" in desktop_entry

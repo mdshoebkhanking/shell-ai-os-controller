@@ -110,6 +110,9 @@ async function startBridge() {
     SHELL_IMAGE_LOCAL_FALLBACK: process.env.SHELL_IMAGE_LOCAL_FALLBACK || '1',
     SHELL_OFFLINE_LLM_ASYNC_UI: process.env.SHELL_OFFLINE_LLM_ASYNC_UI || '1',
     SHELL_WINDOWS_PERFORMANCE_MODE: process.env.SHELL_WINDOWS_PERFORMANCE_MODE || 'balanced',
+    SHELL_APP_ROOT: REPO_ROOT,
+    SHELL_INSTALL_ROOT: REPO_ROOT,
+    SHELL_RUNTIME_DIR: path.join(REPO_ROOT, '.shell_runtime'),
     SHELL_ELECTRON_HOST: '1'
   }
   bridgeProcess = spawn(command, packagedBackend ? ['--port', '0'] : [BRIDGE_SCRIPT, '--port', '0'], {
