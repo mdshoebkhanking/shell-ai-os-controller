@@ -426,7 +426,7 @@ def check_frozen_runtime_probe(*, warn_on_timeout: bool = False) -> Check:
     except subprocess.TimeoutExpired:
         status = "WARN" if warn_on_timeout else "FAIL"
         message = (
-            "Runtime probe timed out on the branch artifact runner; strict release acceptance still treats this as a failure."
+            "Runtime probe timed out on the hosted Windows artifact runner; manual UAT is still required."
             if warn_on_timeout
             else "Runtime probe timed out."
         )
@@ -760,7 +760,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--warn-on-runtime-probe-timeout",
         action="store_true",
-        help="Treat packaged Electron runtime probe timeout as a warning for non-release branch artifacts.",
+        help="Treat packaged Electron runtime probe timeout as a warning on hosted Windows artifact runners.",
     )
     args = parser.parse_args(argv)
     if args.app_root:
