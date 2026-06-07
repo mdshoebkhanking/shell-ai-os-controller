@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 1.0.15 - Windows setup EXE release refresh
+
+- Published the current Shell OS code line on main with the Windows installer
+  branch-artifact runtime timeout fix included.
+- Revalidated CI, security, and release workflows on the latest main commit
+  before preparing the next Windows setup EXE release.
+- Bumped release metadata to `1.0.15` so GitHub release artifacts are named
+  consistently for the new setup EXE.
+
 ## 1.0.14 - On-demand offline brain and EXE smoothness
 
 - Removed bundled offline GGUF chat models from the Windows setup EXE; Shell now
