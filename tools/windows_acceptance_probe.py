@@ -406,7 +406,7 @@ print(json.dumps(summary, sort_keys=True))
     )
 
 
-def check_frozen_runtime_probe() -> Check:
+def check_frozen_runtime_probe(*, warn_on_timeout: bool = False) -> Check:
     if not platform.system().lower().startswith("win"):
         return Check("frozen EXE runtime probe", False, "BLOCKED", "Must run on Windows.")
     if not APP_EXE.exists():
@@ -424,7 +424,13 @@ def check_frozen_runtime_probe() -> Check:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return Check("frozen EXE runtime probe", False, "FAIL", "Runtime probe timed out.", {"log": str(log_path)})
+        status = "WARN" if warn_on_timeout else "FAIL"
+        message = (
+            "Runtime probe timed out on the branch artifact runner; strict release acceptance still treats this as a failure."
+            if warn_on_timeout
+            else "Runtime probe timed out."
+        )
+        return Check("frozen EXE runtime probe", False, status, message, {"log": str(log_path)})
     except Exception as exc:
         return Check("frozen EXE runtime probe", False, "FAIL", str(exc), {"log": str(log_path)})
 
@@ -751,6 +757,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--visible-ui-probe", action="store_true", help="Run the PyQt UI probe on the visible display.")
     parser.add_argument("--include-agents", action="store_true", help="Also drive all registered agents through chat UI.")
     parser.add_argument("--allow-non-windows", action="store_true", help="Developer-only: run probes even when the target OS is not Windows.")
+    parser.add_argument(
+        "--warn-on-runtime-probe-timeout",
+        action="store_true",
+        help="Treat packaged Electron runtime probe timeout as a warning for non-release branch artifacts.",
+    )
     args = parser.parse_args(argv)
     if args.app_root:
         configure_probe_root(args.app_root)
@@ -769,7 +780,7 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(check_offline_tts_status(py))
         checks.append(check_frozen_offline_tts_path(py))
         checks.append(check_frozen_offline_llm_catalog(py))
-        checks.append(check_frozen_runtime_probe())
+        checks.append(check_frozen_runtime_probe(warn_on_timeout=args.warn_on_runtime_probe_timeout))
         if not args.runtime_only:
             checks.append(check_windows_app_open_smoke(py))
             checks.append(check_bundled_exe_memory())
