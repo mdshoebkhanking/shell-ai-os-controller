@@ -146,9 +146,9 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in start
     assert "SHELL_WINDOWS_MIN_VOLUME=65" in one_click
     assert "SHELL_WINDOWS_PERFORMANCE_MODE=balanced" in start
-    assert "SHELL_OFFLINE_LLM_CONTEXT=1024" in start
-    assert "SHELL_OFFLINE_LLM_BATCH=64" in start
-    assert "SHELL_OFFLINE_LLM_MAX_TOKENS=160" in start
+    assert "SHELL_OFFLINE_LLM_CONTEXT=768" in start
+    assert "SHELL_OFFLINE_LLM_BATCH=32" in start
+    assert "SHELL_OFFLINE_LLM_MAX_TOKENS=96" in start
     assert "OPENBLAS_NUM_THREADS=1" in start
     assert "MKL_NUM_THREADS=1" in start
     for script in (start, one_click, repair, acceptance):
@@ -159,9 +159,11 @@ def test_windows_launchers_use_modern_diagnostic_path():
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in repair
     assert "SHELL_IMAGE_LOCAL_FALLBACK=1" in acceptance
     assert "tools\\build_windows_installer.py" in exe_builder
-    assert "bundle ShellAI.exe with PyInstaller" in exe_builder
+    assert "bundle ShellAI.exe with Electron/electron-builder" in exe_builder
+    assert "bundle the local Python backend as ShellAIBackend.exe" in exe_builder
     assert "JRSoftware.InnoSetup" in exe_builder
     assert "--installer-engine inno" in exe_builder
+    assert "--desktop-runtime electron" in exe_builder
     assert "shell-ai-os-controller-setup-[VERSION].exe" in exe_builder
     assert "installer\\bootstrap.py repair --yes --skip-system" in exe_builder
     assert "tools\\stage_kokoro_tts_assets.py --variant int8" in exe_builder
@@ -201,9 +203,9 @@ def test_bootstrap_applies_windows_runtime_performance_defaults(monkeypatch):
     assert env["MKL_NUM_THREADS"] == "1"
     assert env["NUMEXPR_NUM_THREADS"] == "1"
     assert env["SHELL_WINDOWS_PERFORMANCE_MODE"] == "balanced"
-    assert env["SHELL_OFFLINE_LLM_CONTEXT"] == "1024"
-    assert env["SHELL_OFFLINE_LLM_BATCH"] == "64"
-    assert env["SHELL_OFFLINE_LLM_MAX_TOKENS"] == "160"
+    assert env["SHELL_OFFLINE_LLM_CONTEXT"] == "768"
+    assert env["SHELL_OFFLINE_LLM_BATCH"] == "32"
+    assert env["SHELL_OFFLINE_LLM_MAX_TOKENS"] == "96"
     assert "SHELL_OFFLINE_LLM_THREADS" not in env
 
 
@@ -263,7 +265,7 @@ def test_windows_nsis_installer_config_creates_shortcuts_startup_and_icons():
     assert "Windows EXE build requires packaged Kokoro offline TTS assets" in builder
     assert "Offline LLM GGUF assets are intentionally not bundled" in builder
     assert "runtime_downloads" in builder
-    assert "Bundled ShellAI.exe has no extractable icon resource" in builder
+    assert "Electron ShellAI.exe has no extractable icon resource" in builder
     assert "Windows setup EXE has no extractable icon resource" in builder
     assert "No packaged sherpa-onnx STT model assets detected" in builder
     assert 'CreateShortCut "$SMSTARTUP\\Shell AI OS Controller.lnk"' in nsi
@@ -495,16 +497,15 @@ def test_release_workflow_stages_kokoro_assets_for_windows_installer():
 
 
 def test_shell_brand_logo_is_used_across_windows_app_surfaces():
-    launch = open("launch.py", encoding="utf-8").read()
     host = open("shell_web_ui/host.py", encoding="utf-8").read()
     index = open("shell_web_ui/index.html", encoding="utf-8").read()
     builder = open("tools/build_windows_installer.py", encoding="utf-8").read()
+    electron_main = open("shell_web_ui/electron/main.cjs", encoding="utf-8").read()
     desktop_entry = open("tools/windows_app/shellai_desktop_entry.py", encoding="utf-8").read()
 
-    for content in (launch, host, index, builder):
+    for content in (host, index, builder, electron_main):
         assert "shell-logo.png" in content
-    assert "setWindowIcon" in launch
-    assert "setWindowIcon" in host
+    assert "nativeImage.createFromPath" in electron_main
     assert 'rel="icon"' in index
     assert "--shell-ai-runtime-probe" in desktop_entry
 
@@ -577,7 +578,8 @@ def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):
     bootstrap.install_python_deps(tmp_path)
 
     assert any("shell_ui/requirements_ui.txt" in " ".join(call).replace("\\", "/") for call in calls)
-    assert "PyQt6.QtWebEngineWidgets" in bootstrap.UI_IMPORTS
+    assert "PyQt6" not in bootstrap.CORE_IMPORTS
+    assert all("PyQt6" not in key for key in bootstrap.UI_IMPORTS)
 
 
 def test_bootstrap_installs_and_builds_shell_web_ui(monkeypatch):

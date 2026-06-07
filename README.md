@@ -46,7 +46,7 @@
 ## What Shell Is
 
 Shell AI OS Controller is a Python desktop assistant and automation platform
-that connects a React/Vite/WebGL interface embedded in PyQt WebEngine with AI
+that connects a React/Vite/WebGL interface running in Electron with AI
 providers, voice, local tools, desktop automation, Telegram, email, browser
 control, memory, RAG, telemetry, and structured runtime diagnostics.
 
@@ -111,7 +111,7 @@ Shell is designed around visible confidence:
 | Email | SMTP sending with clear Gmail app-password diagnostics |
 | Media | Image generation, QR tools, PDF tools, YouTube summaries, OCR hooks |
 | Runtime | Health checks, readiness states, logs, production release gates |
-| Telemetry | PyQtGraph-backed live CPU/RAM/GPU/network charts with legacy QPainter rollback |
+| Telemetry | Browser-rendered CPU/RAM/GPU/network charts with Python runtime metrics |
 | Installer | One-click Windows bootstrap plus macOS/Linux launch helpers |
 | ShellAI Core | `python -m shellai` CLI, agent loop, model routing, memory, skills, tools, monitor, cron, daemon |
 | AI OS Fabric | Coordinator/Shell/Safety/Memory/UI/Optimizer agents wired in-process behind stable APIs |
@@ -120,7 +120,7 @@ Shell is designed around visible confidence:
 | Secure Sandbox | Optional per-run coding workspace with timeout enforcement, secret-scrubbed environment, audit log, rollback cleanup, and network import guard |
 | Workflow Checkpoints | Optional agent workflow persistence with last-action tracking, SQLite/JSON storage, resume loading, and auditable rollback checkpoints |
 | Safety | SAFE/ASK/BLOCK shell policy, dry-run behavior, audit logs, blocked destructive commands |
-| Web UI | React/Vite/WebGL Shell Neural OS renderer embedded in PyQt WebEngine with emerald glass panels, live transcript/chart rail, central particle orb, settings, gallery, tools, and telemetry cards |
+| Web UI | React/Vite/WebGL Shell Neural OS renderer hosted by Electron with emerald glass panels, live transcript/chart rail, central particle orb, settings, gallery, tools, and telemetry cards |
 | Shell Neural Features | Streaming voice state, permanent core memory, deep focus sessions, remote access records, project folder scanning, coding context packs, and background process inspection |
 
 ## Current Repo Status
@@ -142,23 +142,16 @@ Details:
 
 ## Shell Neural UI
 
-Shell's primary desktop interface now uses a React/Vite renderer embedded in
-PyQt WebEngine. The renderer lives in `shell_web_ui/` and keeps Shell's Python
-backend, tool gateway, voice pipeline, memory, RAG, and safety model behind a
-QWebChannel bridge. The older PyQt interface is preserved for rollback in
-`shell_ui/`. Local migration backups such as `shell_ui_LEGACY/` are ignored and
-should not be committed.
+Shell's primary desktop interface now uses a React/Vite renderer hosted by
+Electron. The renderer lives in `shell_web_ui/` and keeps Shell's Python
+backend, tool gateway, voice pipeline, memory, RAG, and safety model behind an
+Electron IPC bridge backed by `shell_electron_bridge.py` and the pure-Python
+`ShellBackendBridge`.
 
 The web renderer is the default path:
 
 ```bash
 .codex_ui_venv/bin/python launch.py
-```
-
-Rollback to the previous PyQt UI:
-
-```bash
-SHELL_LEGACY_UI=1 .codex_ui_venv/bin/python launch.py
 ```
 
 For renderer development:
@@ -167,7 +160,7 @@ For renderer development:
 cd shell_web_ui
 npm install
 npm run dev
-SHELL_WEB_UI_URL=http://127.0.0.1:5173 ../.codex_ui_venv/bin/python ../launch.py
+SHELL_ELECTRON_DEV_URL=http://127.0.0.1:5173 ../.codex_ui_venv/bin/python ../launch.py
 ```
 
 For packaged/local launch without the dev server, build once:
@@ -209,9 +202,8 @@ latency notes are tracked in
 
 ### Performance Flags
 
-- `SHELL_PYQTGRAPH_ENABLED=1` (default) uses PyQtGraph for live telemetry
-  charts. Set `SHELL_PYQTGRAPH_ENABLED=0` to roll back to the preserved legacy
-  QPainter chart implementation.
+- Live telemetry charts are rendered in the React/Electron UI from Python
+  runtime metrics.
 - `SHELL_WAKE_WORD_ENABLED=0` (default) keeps hands-free wake detection off
   until explicitly tested. Enable with `SHELL_WAKE_WORD_ENABLED=1` and provide a
   custom "Hey Shell" openWakeWord model via `SHELL_WAKE_WORD_MODEL_PATHS`.
@@ -242,15 +234,13 @@ latency notes are tracked in
   point `SHELL_LOCAL_STT_MODEL_DIR` at a sherpa-onnx Whisper export, set
   `SHELL_LOCAL_STT_MODEL_KIND=whisper`, and set
   `SHELL_LOCAL_STT_LANGUAGE=hi` or another Whisper language code.
-- `SHELL_OFFLINE_LLM=1` (default when packaged assets exist) enables the
-  local offline chat brain. Release builds stage
-  `Falcon-H1-1.5B-Deep-Instruct-GGUF` under
-  `models/llm/falcon-h1-1.5b-deep/` and use `llama-cpp-python` for typed chat,
-  chart text, and voice-originated replies when cloud providers are
-  unavailable. Runtime code does not download the model; if the GGUF/runtime is
-  missing, Settings reports `FALLBACK` and Shell keeps the smaller
-  deterministic local answers. The model is transparently reported in release
-  metadata and is distributed under the Falcon-LLM License.
+- `SHELL_OFFLINE_LLM=1` enables the local offline chat brain when the user has
+  installed a GGUF model from Settings > General > Offline Brain. Windows setup
+  builds do not bundle chat GGUF files by default; they bundle the runtime and
+  expose small on-demand model choices for low-memory PCs. Shell uses
+  `llama-cpp-python` for typed chat, chart text, and voice-originated replies
+  when cloud providers are unavailable. If no model/runtime is ready, Settings
+  reports `FALLBACK` and Shell keeps deterministic local answers.
 - Windows launchers enable `SHELL_WINDOWS_PERFORMANCE_MODE=balanced` by
   default. This caps the bundled offline LLM context/batch/token defaults and
   limits BLAS worker threads so entry-level Windows PCs stay responsive. Power
@@ -285,10 +275,7 @@ latency notes are tracked in
   Optional settings include `SHELL_WORKFLOW_CHECKPOINTS_BACKEND=sqlite|json`,
   `SHELL_WORKFLOW_CHECKPOINTS_PATH`, and
   `SHELL_WORKFLOW_CHECKPOINTS_MAX_PER_WORKFLOW`.
-- `SHELL_LEGACY_UI=0` (default) launches the new Shell Web UI through
-  PyQt WebEngine. Set `SHELL_LEGACY_UI=1` for rollback to the previous PyQt
-  interface.
-- `SHELL_WEB_UI_URL` points the PyQt host at a running Vite dev server instead
+- `SHELL_ELECTRON_DEV_URL` points Electron at a running Vite dev server instead
   of `shell_web_ui/dist/index.html`.
 - `VITE_SHELL_WEB_USE_GEMINI=1` re-enables the renderer's direct Gemini live
   voice path during web UI development. By default, the power/mic controls call
@@ -297,9 +284,9 @@ latency notes are tracked in
 ## Screenshots
 
 Current public screenshots are stored in `screenshots/current/`. They are real
-1440x900 PNG captures from the running Shell Web UI through PyQt WebEngine, not
-handmade mockups. These screenshots are the primary visuals for README, docs,
-and the landscape Remotion demo.
+1440x900 PNG captures from the running Shell Web UI, not handmade mockups.
+These screenshots are the primary visuals for README, docs, and the landscape
+Remotion demo.
 
 | Dashboard | Control Center |
 | --- | --- |
@@ -359,8 +346,8 @@ High-level flow:
 
 ```text
 User
-  -> React Web UI in PyQt WebEngine / Voice / Telegram
-  -> QWebChannel + Shell Hub + Runtime State
+  -> React Web UI in Electron / Voice / Telegram
+  -> Electron IPC + Shell Hub + Runtime State
   -> NL Router + Tool Gateway + Agent Orchestrator
   -> Local Tools / APIs / Desktop Automation / Browser Automation
   -> Structured Result + Logs + UI Event Stream
@@ -381,8 +368,8 @@ User / CLI / Desktop feature flag
 .
 ├── agent.py                         # Main AI agent runtime
 ├── shellai/                         # ShellAI Core CLI, agent loop, fabric, memory, skills, tools
-├── shell_web_ui/                    # React/Vite/WebGL renderer embedded by PyQt WebEngine
-├── shell_ui/                        # Legacy PyQt desktop interface and shared boot assets
+├── shell_web_ui/                    # React/Vite/WebGL renderer and Electron desktop shell
+├── shell_ui/                        # Retired legacy desktop UI assets kept for historical compatibility
 ├── core/shellai_bridge.py           # Feature-flagged desktop bridge to ShellAI Core
 ├── shell_tool_gateway.py            # Tool execution gateway
 ├── shell_telegram.py                # Telegram bot integration

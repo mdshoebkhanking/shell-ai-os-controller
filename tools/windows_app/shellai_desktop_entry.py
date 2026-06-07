@@ -91,7 +91,6 @@ def _add_frozen_dll_dirs() -> None:
         internal / "onnxruntime" / "capi",
         internal / "sherpa_onnx" / "lib",
         internal / "llama_cpp" / "lib",
-        internal / "PyQt6" / "Qt6" / "bin",
         internal / "numpy.libs",
         internal / "espeakng_loader",
         internal / "_soundfile_data",
@@ -106,7 +105,6 @@ _add_frozen_dll_dirs()
 
 os.environ.setdefault("PYTHONUTF8", "1")
 os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-os.environ.setdefault("SHELL_LEGACY_UI", "0")
 os.environ.setdefault("SHELL_V2_STREAM", "1")
 os.environ.setdefault("SHELL_IMAGE_LOCAL_FALLBACK", "1")
 os.environ.setdefault("SHELL_DESKTOP_BUNDLED", "1")

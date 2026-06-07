@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, Suspense, lazy, useCallback, useRef, useTransition } from 'react'
+import { useState, useEffect, useLayoutEffect, Suspense, lazy, useCallback, useRef } from 'react'
 import {
   RiWifiLine,
   RiLayoutGridLine,
@@ -35,15 +35,19 @@ const GalleryView = lazy(loadGalleryView)
 const ControlCenter = lazy(loadControlCenterView)
 const PhoneView = lazy(loadPhoneView)
 
-const shellTabViewLoaders = [
-  loadAppsView,
-  loadNotesView,
-  loadSettingsView,
-  loadGalleryView,
-  loadControlCenterView
-]
+const shellTabLoadersById: Record<string, () => Promise<unknown>> = {
+  Apps: loadAppsView,
+  NOTES: loadNotesView,
+  GALLERY: loadGalleryView,
+  CONTROL: loadControlCenterView,
+  SETTINGS: loadSettingsView,
+  Macros: loadWorkFlowEditorView,
+  PHONE: loadPhoneView
+}
 
-const PRELOAD_TAB_GAP_MS = 360
+const shellTabViewLoaders = Object.values(shellTabLoadersById)
+
+const PRELOAD_TAB_GAP_MS = 90
 const HISTORY_ACTIVE_POLL_MS = 900
 const HISTORY_IDLE_POLL_MS = 2500
 const HISTORY_BACKGROUND_POLL_MS = 6000
@@ -60,9 +64,15 @@ const shouldPreloadShellTabs = () => {
   const shellSearchParams = new URLSearchParams(window.location.search)
   const shellPerfMode = (shellSearchParams.get('shell_perf') || '').trim().toLowerCase()
   if (shellPerfMode === 'low' || shellPerfMode === 'eco' || shellPerfMode === 'safe') return false
-  if (shellSearchParams.get('shell_host') === 'pyqt') return true
-  if (shellPerfMode === 'windows') return true
+  if (shellSearchParams.get('shell_host') === 'electron') return true
+  if (shellPerfMode === 'windows') return false
   return !/Windows/i.test(navigator.userAgent)
+}
+
+const preloadShellTabById = (tabId: string) => {
+  const loadView = shellTabLoadersById[tabId]
+  if (!loadView) return
+  void loadView().catch(() => undefined)
 }
 
 const preloadShellTabViews = async (isCancelled: () => boolean) => {
@@ -118,7 +128,6 @@ const ShellAI = (props: ShellProps) => {
   const [chatHistory, setChatHistory] = useState<any[]>([])
   const [showSourceModal, setShowSourceModal] = useState(false)
   const [showMoreTabs, setShowMoreTabs] = useState(false)
-  const [, startTabTransition] = useTransition()
   const historyClearVersionRef = useRef(0)
   const historyRequestInFlightRef = useRef(false)
   const lastHistorySignatureRef = useRef('')
@@ -160,14 +169,14 @@ const ShellAI = (props: ShellProps) => {
     const idleWindow = window as ShellIdleWindow
 
     if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
-      const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 1800 })
+      const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 700 })
       return () => {
         cancelled = true
         idleWindow.cancelIdleCallback?.(idleHandle)
       }
     }
 
-    const timer = window.setTimeout(preloadTabs, 1200)
+    const timer = window.setTimeout(preloadTabs, 700)
     return () => {
       cancelled = true
       window.clearTimeout(timer)
@@ -265,11 +274,10 @@ const ShellAI = (props: ShellProps) => {
   }, [])
 
   const selectShellTab = useCallback((tabId: string) => {
-    startTabTransition(() => {
-      setActiveTab(tabId)
-    })
+    preloadShellTabById(tabId)
+    setActiveTab(tabId)
     setShowMoreTabs(false)
-  }, [startTabTransition])
+  }, [])
 
   const activeView = () => {
     if (activeTab === 'DASHBOARD') {
@@ -328,6 +336,8 @@ const ShellAI = (props: ShellProps) => {
                   tabButtonRefs.current[tab.id] = element
                 }}
                 aria-label={`Open ${tab.id} view`}
+                onFocus={() => preloadShellTabById(tab.id)}
+                onMouseEnter={() => preloadShellTabById(tab.id)}
                 onClick={() => selectShellTab(tab.id)}
                 className={`shell-tab cursor-pointer px-3 xl:px-4 py-1.5 text-[10px] font-bold tracking-widest rounded-full flex shrink-0 items-center justify-center gap-2 min-w-24 ${
                   activeTab === tab.id ? 'shell-tab-active' : ''
@@ -354,6 +364,8 @@ const ShellAI = (props: ShellProps) => {
                 <button
                   key={tab.id}
                   aria-label={`Open ${tab.id} view`}
+                  onFocus={() => preloadShellTabById(tab.id)}
+                  onMouseEnter={() => preloadShellTabById(tab.id)}
                   onClick={() => selectShellTab(tab.id)}
                   className={`shell-control-button cursor-pointer rounded-xl border px-3 py-2 text-left text-[10px] font-black tracking-widest flex items-center gap-2 ${
                     activeTab === tab.id
@@ -390,6 +402,8 @@ const ShellAI = (props: ShellProps) => {
             <button
               key={tab.id}
               aria-label={`Open ${tab.id} view`}
+              onFocus={() => preloadShellTabById(tab.id)}
+              onMouseEnter={() => preloadShellTabById(tab.id)}
               onClick={() => selectShellTab(tab.id)}
               className={`shell-control-button cursor-pointer min-w-20 px-3 py-2 rounded-xl text-[9px] font-black tracking-widest flex flex-col items-center gap-1 border ${
                 activeTab === tab.id

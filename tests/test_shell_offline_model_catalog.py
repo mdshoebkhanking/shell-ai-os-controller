@@ -10,9 +10,12 @@ def test_offline_model_catalog_exposes_tiered_download_options(monkeypatch, tmp_
     options = payload["options"]
 
     assert payload["runtimeDownloads"] is True
-    assert len(options) >= 6
+    assert payload["category"] == "chat"
+    assert len(options) >= 4
+    assert len(catalog.model_options(None)) >= 7
     assert any(option["id"] == "smollm2-135m-q4" and option["min_ram_gb"] <= 2 for option in options)
     assert any(option["id"] == "qwen2.5-0.5b-q4" and option["recommended"] for option in options)
+    assert any(option.id == "qwen2.5-coder-1.5b-q4" for option in catalog.model_options("coding"))
     assert all(option["downloadUrl"].startswith("https://huggingface.co/") for option in options)
     assert all(len(option["sha256"]) == 64 for option in options)
 

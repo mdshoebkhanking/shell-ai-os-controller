@@ -11,11 +11,11 @@ Shell is now five runtime surfaces behind one guarded backend:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│  React/Vite/WebGL renderer inside PyQt WebEngine                 │
+│  React/Vite/WebGL renderer inside Electron                       │
 │  Dashboard, chart chat, transcript, Settings, Gallery, Tools     │
 └──────────────────────────────────────────────────────────────────┘
                                  │
-                                 │  QWebChannel + hub events
+                                 │  Electron IPC + hub events
                                  ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │  Shell Python host and runtime                                   │
@@ -33,8 +33,7 @@ Shell is now five runtime surfaces behind one guarded backend:
     wake/VAD flags         RAG, sandbox, checkpoints     Telegram, image APIs
 ```
 
-The visible app defaults to the Web UI path. The preserved PyQt UI remains
-available only as a rollback path with `SHELL_LEGACY_UI=1`. The classic voice
+The visible app defaults to the Electron Web UI path. The classic voice
 path can use Gemini/LiveKit or local fallbacks, while ShellAI Core can route
 planning/summarization calls through OpenAI-compatible providers, OpenRouter,
 or local Ollama depending on `~/.shellai/config.json` and environment
@@ -47,7 +46,8 @@ under policy, readiness, and safety gates.
 
 ShellAI Core is the opt-in backend brain added for shell and desktop OS
 automation. It is intentionally separate from the classic desktop behavior so
-the PyQt app can keep working while the new agent loop matures.
+the Electron app can keep using the existing backend while the new agent loop
+matures.
 
 ```
 CLI / Desktop bridge / future daemon
@@ -189,9 +189,10 @@ functions into `agent.py`'s `tools_list`.
 | `shell_hub.py` | aiohttp + Socket.IO server. Bridges agent/runtime state to the UI. Issues LiveKit tokens on `/token`. |
 | `shell_windows_mcp.py` | CursorTouch Windows-MCP stdio adapter. Exposes real MCP desktop tools (`Click`, `Type`, `Screenshot`, `Snapshot`, `App`, `Shell`, etc.) to UI/chat. |
 | `mcp_server.py` / `shell_mcp_server.py` | Legacy HTTP JSON-action server kept for compatibility. It is no longer the UI's MCP surface. |
-| `shell_web_ui/host.py` | PyQt WebEngine host for the React renderer. Exposes Shell bridge APIs, system metrics, tool execution, Gallery, media permissions, voice state, and settings. |
+| `shell_web_ui/host.py` | Pure-Python backend bridge for the React/Electron renderer. Exposes Shell bridge APIs, system metrics, tool execution, Gallery, media permissions, voice state, and settings. |
 | `shell_web_ui/src/` | React/Vite/WebGL Shell UI: Dashboard chart/chat, Settings, Gallery, Phone, Control Center, Notes, orb, animation system, and Shell bridge client. |
-| `shell_ui/shell_cinematic_full.py` | Preserved PyQt6 legacy UI and rollback implementation behind `SHELL_LEGACY_UI=1`. |
+| `shell_electron_bridge.py` | HTTP/SSE bridge process started by Electron. It forwards IPC calls to the pure-Python Shell backend bridge. |
+| `shell_ui/shell_cinematic_full.py` | Retired legacy desktop UI source kept outside the default launch, installer, and Windows package path. |
 | `ShellAICoreWorker` in `shell_ui/shell_cinematic_full.py` | Optional legacy worker that routes chat text through ShellAI Core when `SHELLAI_BACKEND_MODE=shellai_core`. Web UI routes through the bridge/host path. |
 | `shell_ui/shell_orb_*.py` | Orb renderer variants (OpenGL, particle, pygame). |
 | `launch.py` / `launch_ui.pyw` | UI entry points. |
@@ -313,8 +314,8 @@ and hiding the `AttributeError` behind a `return True`.
 - **NLP / ML** — fuzzywuzzy, sentence-transformers, scikit-learn,
   youtube-transcript-api, yt-dlp, deep-translator.
 - **Communication** — instagrapi, speechrecognition.
-- **UI** — React, Vite, TypeScript, PyQt6, PyQt6-WebEngine, QWebChannel,
-  PyOpenGL, GPUtil, pygame-ce, ursina.
+- **UI** — React, Vite, TypeScript, Electron, PyOpenGL, GPUtil, pygame-ce,
+  ursina.
 - **Utilities** — pyfiglet, cryptography, yfinance.
 - **Testing** — pytest, pytest-asyncio, pytest-timeout.
 

@@ -9,7 +9,7 @@ import IndexRoot from './IndexRoot'
 const shellSearchParams = new URLSearchParams(window.location.search)
 const shellPerfMode = (shellSearchParams.get('shell_perf') || '').trim().toLowerCase()
 const isWindowsShellHost =
-  /Windows/i.test(navigator.userAgent || '') || shellSearchParams.get('shell_host') === 'pyqt'
+  /Windows/i.test(navigator.userAgent || '') || shellSearchParams.get('shell_host') === 'electron'
 const explicitSafePerfMode = ['safe', 'low', 'eco'].includes(shellPerfMode)
 const prefersWindowsPerf =
   explicitSafePerfMode ||

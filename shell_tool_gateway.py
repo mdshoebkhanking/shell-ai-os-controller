@@ -13,6 +13,7 @@ import inspect
 import json
 import os
 import time
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -217,7 +218,50 @@ async def execute_tool(tool_id: str, args: Any = None) -> dict[str, Any]:
         raise
 
 
+async def _close_provider_sessions() -> None:
+    try:
+        from brain.provider_transport import close_aiohttp_sessions
+
+        result = close_aiohttp_sessions()
+        if inspect.isawaitable(result):
+            await result
+    except Exception:
+        pass
+
+
+async def _execute_tool_with_cleanup(tool_id: str, args: Any = None) -> dict[str, Any]:
+    try:
+        return await execute_tool(tool_id, args)
+    finally:
+        await _close_provider_sessions()
+
+
+def _execute_tool_sync_in_worker_thread(tool_id: str, args: Any = None) -> dict[str, Any]:
+    result_holder: dict[str, Any] = {}
+    error_holder: dict[str, BaseException] = {}
+
+    def run() -> None:
+        try:
+            result_holder["result"] = asyncio.run(_execute_tool_with_cleanup(tool_id, args))
+        except BaseException as exc:
+            error_holder["error"] = exc
+
+    thread = threading.Thread(target=run, name="ShellToolGatewaySyncWorker", daemon=True)
+    thread.start()
+    thread.join()
+    if "error" in error_holder:
+        raise error_holder["error"]
+    return result_holder["result"]
+
+
 def execute_tool_sync(tool_id: str, args: Any = None) -> dict[str, Any]:
+    try:
+        running_loop = asyncio.get_running_loop()
+    except RuntimeError:
+        running_loop = None
+    if running_loop is not None and running_loop.is_running():
+        return _execute_tool_sync_in_worker_thread(tool_id, args)
+
     policy = asyncio.get_event_loop_policy()
     try:
         previous_loop = policy.get_event_loop()
@@ -226,14 +270,8 @@ def execute_tool_sync(tool_id: str, args: Any = None) -> dict[str, Any]:
     loop = asyncio.new_event_loop()
     try:
         policy.set_event_loop(loop)
-        return loop.run_until_complete(execute_tool(tool_id, args))
+        return loop.run_until_complete(_execute_tool_with_cleanup(tool_id, args))
     finally:
-        try:
-            from brain.provider_transport import close_aiohttp_sessions
-
-            loop.run_until_complete(close_aiohttp_sessions())
-        except Exception:
-            pass
         pending = [task for task in asyncio.all_tasks(loop) if not task.done()]
         if pending:
             for task in pending:

@@ -12,7 +12,7 @@ def test_sphere_matches_original_voice_reactive_orb():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
 
     assert "const CustomParticleSphere = ({" in sphere
-    assert "count = 2000" in sphere
+    assert "count = 1600" in sphere
     assert "voiceLevel = 0" in sphere
     assert "speaking = false" in sphere
     assert "const ORB_BASE_COLOR = '#7ED3BA'" in sphere
@@ -27,18 +27,18 @@ def test_sphere_matches_original_voice_reactive_orb():
     assert "colorTarget.lerpColors(colorMid, colorEnd" in sphere
 
 
-def test_sphere_preserves_original_particle_expansion_on_gpu():
+def test_sphere_uses_iris_style_particle_body_reactivity():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
 
     assert "spreadFactors" in sphere
-    assert "attribute float spreadFactor" in sphere
-    assert "const ORB_EXPANSION_STRENGTH = 0.4" in sphere
+    assert "originalPositions" in sphere
+    assert "const ORB_EXPANSION_STRENGTH = 0.32" in sphere
     assert "const ORB_PARTICLE_RADIUS = 1.93" in sphere
-    assert "position * (1.0 + uVolume * spreadFactor * uExpansionStrength)" in sphere
     assert "vector.normalize().multiplyScalar(ORB_PARTICLE_RADIUS)" in sphere
-    assert "geometry.attributes.position.needsUpdate = true" not in sphere
-    assert "currentPos[ix]" not in sphere
-    assert "originalPositions" not in sphere
+    assert "currentPos[ix] = originalPositions[ix] * scale" in sphere
+    assert "positionAttribute.needsUpdate = true" in sphere
+    assert "pointsMaterial" in sphere
+    assert "shaderMaterial" not in sphere
 
 
 def test_sphere_uses_windows_friendly_canvas_runtime_settings():
@@ -50,11 +50,11 @@ def test_sphere_uses_windows_friendly_canvas_runtime_settings():
     assert "powerPreference: 'default'" in sphere
     assert "if (document.hidden) return" in sphere
     assert "const ORB_PARTICLE_SIZE = 0.011" in sphere
-    assert "const ORB_ROTATION_Y_SPEED = 0.14" in sphere
+    assert "const ORB_ROTATION_Y_SPEED = 0.05" in sphere
+    assert "const ORB_ROTATION_Z_SPEED = 0.05" in sphere
     assert "mesh.current.rotation.y += delta * ORB_ROTATION_Y_SPEED" in sphere
-    assert "shaderMaterial" in sphere
-    assert "uScale" in sphere
-    assert "uSize" in sphere
+    assert "pointsMaterial" in sphere
+    assert "materialRef.current.size = ORB_PARTICLE_SIZE * state.gl.getPixelRatio()" in sphere
 
 
 def test_dashboard_uses_original_orb_wrapper():
@@ -70,13 +70,12 @@ def test_sphere_preserves_desktop_particle_orb_for_packaged_windows():
     sphere = read_project_file("shell_web_ui/src/components/Sphere.tsx")
     css = read_project_file("shell_web_ui/src/assets/main.css")
     main = read_project_file("shell_web_ui/src/main.tsx")
-    host = read_project_file("shell_web_ui/host.py")
+    electron_main = read_project_file("shell_web_ui/electron/main.cjs")
 
     assert "shellPerfMode !== 'windows'" in main
     assert "explicitSafePerfMode" in main
-    assert "shell_perf=windows" in host
-    assert 'in {"low", "eco"}' in host
-    assert 'in {"balanced", "low", "eco"}' not in host
+    assert "shell_perf" in electron_main
+    assert "process.platform === 'win32' ? 'windows' : 'desktop'" in electron_main
     assert "const cssOnlyOrb" not in sphere
     assert "<Canvas" in sphere
     assert "shell-orb-canvas" in sphere
@@ -89,6 +88,16 @@ def test_sphere_preserves_desktop_particle_orb_for_packaged_windows():
     assert ".shell-orb-particle-drift" not in css[css.index(".shell-orb-stage") : css.index(".shell-liquid-dock")]
     assert "rgba(0, 240, 255" not in css[css.index(".shell-orb-stage") : css.index(".shell-liquid-dock")]
     assert ".shell-windows-perf .shell-liquid-panel" in css
+
+
+def test_electron_e2e_reports_orb_reaction_after_tts():
+    electron_main = read_project_file("shell_web_ui/electron/main.cjs")
+
+    assert "const readOrbReaction = () =>" in electron_main
+    assert "document.querySelector('.shell-orb-stage')" in electron_main
+    assert "stage?.classList.contains('shell-orb-stage-speaking')" in electron_main
+    assert "latest.speaking || latest.level > 0.04" in electron_main
+    assert "orbReaction" in electron_main
 
 
 def test_dashboard_throttles_face_scan_on_windows_or_low_core_devices():
@@ -125,10 +134,14 @@ def test_windows_perf_mode_is_explicit_safe_mode_not_default_packaged_mode():
 def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
 
-    assert "const PRELOAD_TAB_GAP_MS = 360" in shell_ai
+    assert "const PRELOAD_TAB_GAP_MS = 90" in shell_ai
     assert "new URLSearchParams(window.location.search)" in shell_ai
-    assert "if (shellSearchParams.get('shell_host') === 'pyqt') return true" in shell_ai
-    assert "if (shellPerfMode === 'windows') return true" in shell_ai
+    assert "if (shellSearchParams.get('shell_host') === 'electron') return true" in shell_ai
+    assert "if (shellPerfMode === 'windows') return false" in shell_ai
+    assert "preloadShellTabById(tab.id)" in shell_ai
+    assert "onMouseEnter={() => preloadShellTabById(tab.id)}" in shell_ai
+    assert "useTransition" not in shell_ai
+    assert "if (preference === '1') return true" in shell_ai
     assert "shellPerfMode === 'low' || shellPerfMode === 'eco' || shellPerfMode === 'safe'" in shell_ai
     assert "HISTORY_ACTIVE_POLL_MS = 900" in shell_ai
     assert "HISTORY_IDLE_POLL_MS = 2500" in shell_ai

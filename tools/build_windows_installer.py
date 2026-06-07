@@ -52,6 +52,8 @@ WEB_UI_DIST = WEB_UI_ROOT / "dist"
 WEB_UI_DIST_INDEX = WEB_UI_DIST / "index.html"
 APP_BUNDLE_DIR = APP_STAGE / "ShellAIApp"
 APP_BUNDLE_EXE = APP_BUNDLE_DIR / "ShellAI.exe"
+BACKEND_BUNDLE_DIR = APP_STAGE / "ShellAIBackend"
+BACKEND_BUNDLE_EXE = BACKEND_BUNDLE_DIR / "ShellAIBackend.exe"
 APP_EXE_RELATIVE = r"ShellAIApp\ShellAI.exe"
 TTS_MODEL_STAGE = APP_STAGE / "models" / "tts"
 LLM_MODEL_STAGE = APP_STAGE / "models" / "llm"
@@ -70,6 +72,9 @@ ICON_ICO = ICON_BUILD_DIR / "shell-ai.ico"
 APP_ICON_NAME = "shell-ai.ico"
 APP_ICON_STAGE = APP_STAGE / APP_ICON_NAME
 ICON_CORNER_RADIUS_RATIO = 0.28
+ELECTRON_BUILDER_CONFIG = WEB_UI_ROOT / "electron" / "builder.config.cjs"
+ELECTRON_OUTPUT_DIR = DIST_DIR / "electron"
+ELECTRON_WIN_UNPACKED_DIR = ELECTRON_OUTPUT_DIR / "win-unpacked"
 PYINSTALLER_HIDDEN_IMPORTS = [
     "aiohttp",
     "aiohttp.web",
@@ -82,7 +87,6 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "shell_offline_llm",
     "shell_offline_model_catalog",
     "shell_tool_gateway",
-    "shell_ui.splash_screen",
     "shell_web_ui.host",
     "socketio",
     "kokoro_onnx",
@@ -105,10 +109,6 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "phonemizer.backend.espeak.voice",
     "phonemizer.backend.espeak.words_mismatch",
     "phonemizer.backend.espeak.wrapper",
-    "PyQt6.QtGui",
-    "PyQt6.QtWebChannel",
-    "PyQt6.QtWebEngineCore",
-    "PyQt6.QtWebEngineWidgets",
 ]
 PYINSTALLER_COLLECT_ALL = [
     "espeakng_loader",
@@ -131,8 +131,6 @@ PYINSTALLER_COPY_METADATA = [
     "onnxruntime",
     "phonemizer-fork",
     "psutil",
-    "PyQt6",
-    "PyQt6-WebEngine",
     "python-dotenv",
     "python-engineio",
     "python-socketio",
@@ -257,15 +255,27 @@ def _npm_command() -> str:
     return shutil.which("npm.cmd") or shutil.which("npm") or "npm"
 
 
-def ensure_web_ui_build() -> None:
-    if WEB_UI_DIST_INDEX.exists():
+def ensure_web_ui_dependencies() -> None:
+    package_json = WEB_UI_ROOT / "package.json"
+    if not package_json.exists():
+        raise RuntimeError("shell_web_ui/package.json is missing; cannot install bundled renderer dependencies.")
+    bin_name = "electron-builder.cmd" if platform.system().lower() == "windows" else "electron-builder"
+    electron_builder_bin = WEB_UI_ROOT / "node_modules" / ".bin" / bin_name
+    if electron_builder_bin.exists():
+        return
+    npm = _npm_command()
+    install_cmd = [npm, "ci"] if (WEB_UI_ROOT / "package-lock.json").exists() else [npm, "install"]
+    subprocess.run(install_cmd, cwd=str(WEB_UI_ROOT), check=True)
+
+
+def ensure_web_ui_build(*, force: bool = False) -> None:
+    if WEB_UI_DIST_INDEX.exists() and not force:
         return
     package_json = WEB_UI_ROOT / "package.json"
     if not package_json.exists():
         raise RuntimeError("shell_web_ui/package.json is missing; cannot build bundled renderer.")
+    ensure_web_ui_dependencies()
     npm = _npm_command()
-    install_cmd = [npm, "ci"] if (WEB_UI_ROOT / "package-lock.json").exists() else [npm, "install"]
-    subprocess.run(install_cmd, cwd=str(WEB_UI_ROOT), check=True)
     subprocess.run([npm, "run", "build"], cwd=str(WEB_UI_ROOT), check=True)
     if not WEB_UI_DIST_INDEX.exists():
         raise RuntimeError("Shell Web UI build finished but shell_web_ui/dist/index.html is missing.")
@@ -561,6 +571,131 @@ def build_bundled_desktop_app(app_icon: Path | None = None) -> dict[str, object]
     }
 
 
+def build_electron_desktop_app(app_icon: Path | None = None) -> dict[str, object]:
+    if platform.system().lower() != "windows":
+        raise RuntimeError("Electron ShellAI.exe packaging requires Windows with Node.js and electron-builder.")
+    if not ELECTRON_BUILDER_CONFIG.exists():
+        raise RuntimeError(f"Electron builder config is missing: {ELECTRON_BUILDER_CONFIG}")
+    ensure_web_ui_dependencies()
+    ensure_web_ui_build(force=True)
+    if ELECTRON_OUTPUT_DIR.exists():
+        shutil.rmtree(ELECTRON_OUTPUT_DIR)
+    if APP_BUNDLE_DIR.exists():
+        shutil.rmtree(APP_BUNDLE_DIR)
+    npm = _npm_command()
+    subprocess.run(
+        [
+            npm,
+            "exec",
+            "electron-builder",
+            "--",
+            "--dir",
+            "--win",
+            "--config",
+            str(ELECTRON_BUILDER_CONFIG.relative_to(WEB_UI_ROOT)),
+        ],
+        cwd=str(WEB_UI_ROOT),
+        check=True,
+    )
+    if not ELECTRON_WIN_UNPACKED_DIR.exists():
+        candidates = [path for path in ELECTRON_OUTPUT_DIR.glob("*-unpacked") if path.is_dir()]
+        if len(candidates) == 1:
+            source_dir = candidates[0]
+        else:
+            raise RuntimeError(f"electron-builder finished but win-unpacked output is missing: {ELECTRON_WIN_UNPACKED_DIR}")
+    else:
+        source_dir = ELECTRON_WIN_UNPACKED_DIR
+    shutil.copytree(source_dir, APP_BUNDLE_DIR)
+    if not APP_BUNDLE_EXE.exists():
+        raise RuntimeError(f"Electron app was built but ShellAI.exe is missing: {APP_BUNDLE_EXE}")
+    return {
+        "runtime": "electron",
+        "app_dir": str(APP_BUNDLE_DIR),
+        "app_exe": str(APP_BUNDLE_EXE),
+        "app_icon": str(app_icon) if app_icon else "",
+        "installed_icon": str(APP_ICON_STAGE) if APP_ICON_STAGE.exists() else "",
+        "app_exe_icon_count": windows_icon_resource_count(APP_BUNDLE_EXE),
+        "electron_output": str(source_dir),
+        "app_size_bytes": sum(path.stat().st_size for path in APP_BUNDLE_DIR.rglob("*") if path.is_file()),
+    }
+
+
+def build_electron_backend_bridge(app_icon: Path | None = None) -> dict[str, object]:
+    if platform.system().lower() != "windows":
+        raise RuntimeError("ShellAIBackend.exe compilation requires Windows with PyInstaller.")
+    bridge_entry = ROOT / "shell_electron_bridge.py"
+    if not bridge_entry.exists():
+        raise RuntimeError(f"Electron backend bridge entry is missing: {bridge_entry}")
+
+    pyinstaller_probe = subprocess.run(
+        [sys.executable, "-m", "PyInstaller", "--version"],
+        cwd=str(ROOT),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+    if pyinstaller_probe.returncode != 0:
+        raise RuntimeError("PyInstaller is not installed. Run Repair_ShellAI.bat or install shell_ui/requirements_ui.txt.")
+
+    dist_root = STAGING_ROOT / "pyinstaller_backend_dist"
+    work_root = STAGING_ROOT / "pyinstaller_backend_build"
+    spec_root = STAGING_ROOT / "pyinstaller_backend_spec"
+    for path in (dist_root, work_root, spec_root, BACKEND_BUNDLE_DIR):
+        if path.exists():
+            shutil.rmtree(path)
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onedir",
+        "--name",
+        "ShellAIBackend",
+        "--distpath",
+        str(dist_root),
+        "--workpath",
+        str(work_root),
+        "--specpath",
+        str(spec_root),
+        "--paths",
+        str(ROOT),
+    ]
+    for hidden_import in PYINSTALLER_HIDDEN_IMPORTS:
+        cmd.extend(["--hidden-import", hidden_import])
+    for package in PYINSTALLER_COLLECT_ALL:
+        if importlib.util.find_spec(package) is None:
+            print(f"Skipping PyInstaller collect-all for missing optional package: {package}")
+            continue
+        cmd.extend(["--collect-all", package])
+    for package in _available_pyinstaller_copy_metadata():
+        cmd.extend(["--copy-metadata", package])
+    if app_icon and app_icon.exists():
+        cmd.extend(["--icon", str(app_icon)])
+    cmd.append(str(bridge_entry))
+    subprocess.run(cmd, cwd=str(ROOT), check=True)
+    built = dist_root / "ShellAIBackend"
+    if not BACKEND_BUNDLE_EXE.exists():
+        built_exe = built / "ShellAIBackend.exe"
+    else:
+        built_exe = BACKEND_BUNDLE_EXE
+    if not built_exe.exists():
+        raise RuntimeError(f"PyInstaller finished but backend bridge is missing: {built_exe}")
+    shutil.move(str(built), str(BACKEND_BUNDLE_DIR))
+    espeak_layout = _ensure_espeak_data_compat_layout(BACKEND_BUNDLE_DIR)
+    return {
+        "runtime": "python-bridge",
+        "app_dir": str(BACKEND_BUNDLE_DIR),
+        "app_exe": str(BACKEND_BUNDLE_EXE),
+        "app_exe_icon_count": windows_icon_resource_count(BACKEND_BUNDLE_EXE),
+        "excluded_gui_modules": [],
+        "espeak_data_layout": espeak_layout,
+        "app_size_bytes": sum(path.stat().st_size for path in BACKEND_BUNDLE_DIR.rglob("*") if path.is_file()),
+    }
+
+
 def find_inno_compiler() -> str | None:
     configured = os.environ.get("INNO_SETUP_COMPILER", "").strip()
     candidates = [configured] if configured else []
@@ -661,11 +796,14 @@ def build_windows_installer(
     strict: bool,
     skip_app_build: bool = False,
     installer_engine: str = "inno",
+    desktop_runtime: str = "electron",
 ) -> dict[str, object]:
     if not skip_release_check:
         run_release_check(strict=strict)
     if installer_engine not in {"nsis", "inno"}:
         raise RuntimeError(f"Unsupported installer engine: {installer_engine}")
+    if desktop_runtime != "electron":
+        raise RuntimeError(f"Unsupported desktop runtime: {desktop_runtime}")
     marker = stage_release_files()
     model_assets_report = copy_staged_model_assets_to_stage()
     offline_tts_report = offline_tts_stage_report()
@@ -692,6 +830,7 @@ def build_windows_installer(
         "version": version(),
         "staging_dir": str(APP_STAGE),
         "installer_engine": installer_engine,
+        "desktop_runtime": desktop_runtime,
         "installer_script": str(NSIS_SCRIPT if installer_engine == "nsis" else INNO_SCRIPT),
         "installer_compiler": compiler or "",
         "icon": icon_report,
@@ -700,6 +839,7 @@ def build_windows_installer(
         "source_file_count": marker["source_file_count"],
         "model_assets": model_assets_report,
         "bundled_app": app_report,
+        "backend_bridge": {"status": "not-built", "expected_app_exe": str(BACKEND_BUNDLE_EXE)},
         "offline_tts": offline_tts_report,
         "offline_llm": offline_llm_report,
         "offline_stt": offline_stt_report,
@@ -713,11 +853,15 @@ def build_windows_installer(
             raise RuntimeError(f"Windows .exe installer compilation requires Windows with {engine_name}.")
         if skip_app_build:
             report["bundled_app"] = {"status": "skipped", "expected_app_exe": str(APP_BUNDLE_EXE)}
+            report["backend_bridge"] = {"status": "skipped", "expected_app_exe": str(BACKEND_BUNDLE_EXE)}
         else:
-            app_report = build_bundled_desktop_app(app_icon)
+            backend_report = build_electron_backend_bridge(app_icon)
+            backend_report["status"] = "success"
+            report["backend_bridge"] = backend_report
+            app_report = build_electron_desktop_app(app_icon)
             app_report["status"] = "success"
             if int(app_report.get("app_exe_icon_count") or 0) <= 0:
-                raise RuntimeError("Bundled ShellAI.exe has no extractable icon resource.")
+                raise RuntimeError("Electron ShellAI.exe has no extractable icon resource.")
             report["bundled_app"] = app_report
         if installer_engine == "nsis":
             if not makensis:
@@ -755,6 +899,12 @@ def main(argv: list[str] | None = None) -> int:
         default="inno",
         help="Windows setup compiler to use. Inno Setup is the default for large offline-model bundles; NSIS remains available for smaller fallback builds.",
     )
+    parser.add_argument(
+        "--desktop-runtime",
+        choices=("electron",),
+        default="electron",
+        help="Desktop shell runtime to package. Electron is the Windows release runtime.",
+    )
     args = parser.parse_args(argv)
     try:
         report = build_windows_installer(
@@ -763,6 +913,7 @@ def main(argv: list[str] | None = None) -> int:
             strict=not args.no_strict,
             skip_app_build=args.skip_app_build,
             installer_engine=args.installer_engine,
+            desktop_runtime=args.desktop_runtime,
         )
     except Exception as exc:
         print(f"Windows installer build failed: {exc}")
@@ -770,6 +921,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Shell AI Windows installer {report['status']}")
     print(f"Version: {report['version']}")
     print(f"Installer engine: {report.get('installer_engine')}")
+    print(f"Desktop runtime: {report.get('desktop_runtime')}")
     print(f"Staging: {report['staging_dir']}")
     bundled = report.get("bundled_app") or {}
     if isinstance(bundled, dict):

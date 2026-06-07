@@ -17,24 +17,10 @@ import traceback
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Any
-
-from PyQt6.QtCore import QObject, QUrl, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMainWindow, QVBoxLayout, QWidget
+from typing import Any, Callable
 
 try:
-    from PyQt6.QtWebChannel import QWebChannel
-    from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
-    from PyQt6.QtWebEngineWidgets import QWebEngineView
-except Exception:  # pragma: no cover - handled by the launcher
-    QWebChannel = None  # type: ignore
-    QWebEnginePage = None  # type: ignore
-    QWebEngineSettings = None  # type: ignore
-    QWebEngineView = None  # type: ignore
-
-try:
-    from shell_offline_tts import offline_tts_status, prewarm_offline_tts, speak_offline_tts
+    from shell_offline_tts import offline_tts_status, prewarm_offline_tts, prime_offline_tts_cache, speak_offline_tts
 except Exception:  # pragma: no cover - fallback keeps the host importable
     def offline_tts_status() -> dict[str, Any]:
         return {
@@ -61,13 +47,21 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
             "message": "Offline TTS service could not be imported.",
         }
 
+    def prime_offline_tts_cache(_phrases: list[str] | tuple[str, ...] | None = None) -> dict[str, Any]:
+        return {
+            "success": False,
+            "primed": 0,
+            "engine": "fallback",
+            "message": "Offline TTS service could not be imported.",
+        }
+
 try:
     from shell_voice_runtime import TTSSpeaker
 except Exception:  # pragma: no cover - cloud voice is optional in the host
     TTSSpeaker = None  # type: ignore
 
 try:
-    from shell_offline_llm import generate_offline_reply, offline_llm_status
+    from shell_offline_llm import generate_offline_coding_reply, generate_offline_reply, offline_coding_llm_status, offline_llm_status
 except Exception:  # pragma: no cover - fallback keeps the host importable
     def offline_llm_status() -> dict[str, Any]:
         return {
@@ -90,31 +84,51 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
 
         return _FallbackResult()
 
+    def offline_coding_llm_status() -> dict[str, Any]:
+        return {
+            "success": True,
+            "available": False,
+            "status": "fallback",
+            "engine": "fallback",
+            "category": "coding",
+            "reason": "Offline coding LLM service could not be imported.",
+            "candidates": [],
+        }
+
+    def generate_offline_coding_reply(_text: str, **_kwargs: Any) -> Any:
+        return generate_offline_reply(_text, **_kwargs)
+
 try:
     from shell_offline_model_catalog import (
+        CHAT_MODEL_CATEGORY,
+        CODING_MODEL_CATEGORY,
         catalog_payload as offline_llm_catalog_payload,
         get_model_option as get_offline_model_option,
         model_install_dir as offline_model_install_dir,
         write_model_metadata as write_offline_model_metadata,
     )
 except Exception:  # pragma: no cover - fallback keeps the host importable
-    def offline_llm_catalog_payload() -> dict[str, Any]:
+    def offline_llm_catalog_payload(category: str = "chat") -> dict[str, Any]:
         return {
             "success": False,
+            "category": category,
             "runtimeDownloads": True,
             "options": [],
             "installedModels": [],
             "reason": "Offline model catalog could not be imported.",
         }
 
-    def get_offline_model_option(_model_id: str) -> Any:
+    def get_offline_model_option(_model_id: str, category: str | None = None) -> Any:
         return None
 
     def offline_model_install_dir(model_id: str) -> Path:
         return PROJECT_ROOT / ".shell_runtime" / "models" / "llm" / str(model_id)
 
-    def write_offline_model_metadata(_option: Any, *, model_path: Path) -> None:
+    def write_offline_model_metadata(_option: Any, *, model_path: Path, category: str | None = None) -> None:
         return None
+
+    CHAT_MODEL_CATEGORY = "chat"
+    CODING_MODEL_CATEGORY = "coding"
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +143,7 @@ UPLOADS_DIR = PROJECT_ROOT / ".shell_runtime" / "uploads"
 UPDATES_DIR = PROJECT_ROOT / ".shell_runtime" / "updates"
 UPDATE_STATE_PATH = UPDATES_DIR / "update_state.json"
 DEFAULT_UPDATE_REPO = "mdshoebkhanking/shell-ai-os-controller"
+CRITICAL_OFFLINE_TTS_PHRASES = ("Command center ready.",)
 ALLOWED_SHELL_LANGUAGES = {"hinglish", "english", "hindi"}
 CHAT_PROVIDER_SECRET_GROUPS = (
     ("GOOGLE_API_KEY", "GEMINI_API_KEY"),
@@ -212,17 +227,12 @@ def _json_response(data: Any = None, *, ok: bool = True, error: str = "") -> str
     return json.dumps({"ok": ok, "data": data, "error": error}, ensure_ascii=False)
 
 
-class ShellBackendBridge(QObject):
-    """QWebChannel bridge used by the React renderer.
+class ShellBackendBridge:
+    """Pure Python backend bridge used by Electron and tests."""
 
-    The JS side calls this bridge through a single generic `call(channel, args)`
-    slot so new UI features can be added without changing Qt slot signatures.
-    """
-
-    eventEmitted = pyqtSignal(str, str)
-
-    def __init__(self, parent: QObject | None = None) -> None:
-        super().__init__(parent)
+    def __init__(self, parent: Any | None = None) -> None:
+        self._parent = parent
+        self._event_listeners: list[Callable[[str, Any], None]] = []
         HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
         self._voice_listener = None
         self._voice_input_unavailable_state = False
@@ -230,26 +240,40 @@ class ShellBackendBridge(QObject):
         self._speech_process: subprocess.Popen[Any] | None = None
         self._speech_job_lock = threading.Lock()
         self._speech_job_id = 0
+        self._chat_job_lock = threading.Lock()
+        self._chat_job_id = 0
+        self._history_lock = threading.RLock()
         self._cloud_tts_speaker: Any | None = None
         self._cloud_tts_fallback_text = ""
         self._chat_provider_network_cache: tuple[float, str, bool] = (0.0, "", False)
         self._offline_llm_download_lock = threading.Lock()
         self._offline_llm_downloads: dict[str, dict[str, Any]] = {}
+        self._offline_tts_critical_prime_ready = threading.Event()
         self._maybe_prewarm_offline_tts()
+
+    def add_event_listener(self, listener: Callable[[str, Any], None]) -> None:
+        if callable(listener) and listener not in self._event_listeners:
+            self._event_listeners.append(listener)
 
     def _maybe_prewarm_offline_tts(self) -> None:
         if not self._env_flag_enabled("SHELL_OFFLINE_TTS_PREWARM", default=True):
+            self._offline_tts_critical_prime_ready.set()
             return
 
         def run() -> None:
             try:
                 prewarm_offline_tts()
+                if self._env_flag_enabled("SHELL_OFFLINE_TTS_PRECACHE", default=True):
+                    prime_offline_tts_cache(CRITICAL_OFFLINE_TTS_PHRASES)
+                    self._offline_tts_critical_prime_ready.set()
+                    prime_offline_tts_cache()
+                else:
+                    self._offline_tts_critical_prime_ready.set()
             except Exception:
-                pass
+                self._offline_tts_critical_prime_ready.set()
 
         self._start_background_task("ShellOfflineTTSPrewarm", run)
 
-    @pyqtSlot(str, str, result=str)
     def call(self, channel: str, payload: str = "[]") -> str:
         try:
             args = json.loads(payload or "[]")
@@ -261,7 +285,11 @@ class ShellBackendBridge(QObject):
             return _json_response(None, ok=False, error=f"{exc}\n{traceback.format_exc()}")
 
     def emit_event(self, channel: str, payload: Any) -> None:
-        self.eventEmitted.emit(channel, json.dumps(payload, ensure_ascii=False))
+        for listener in list(self._event_listeners):
+            try:
+                listener(channel, payload)
+            except Exception:
+                pass
 
     def _next_speech_job_id(self) -> int:
         with self._speech_job_lock:
@@ -271,6 +299,11 @@ class ShellBackendBridge(QObject):
     def _current_speech_job_id(self) -> int:
         with self._speech_job_lock:
             return self._speech_job_id
+
+    def _next_chat_job_id(self) -> str:
+        with self._chat_job_lock:
+            self._chat_job_id += 1
+            return f"offline-chat-{int(time.time() * 1000)}-{self._chat_job_id}"
 
     def _invalidate_speech_jobs(self) -> None:
         with self._speech_job_lock:
@@ -313,6 +346,11 @@ class ShellBackendBridge(QObject):
             "offline-llm-status": self._offline_llm_status,
             "offline-llm-catalog": self._offline_llm_catalog,
             "offline-llm-download": self._offline_llm_download,
+            "offline-llm-select": self._offline_llm_select,
+            "offline-coding-llm-status": self._offline_coding_llm_status,
+            "offline-coding-llm-catalog": self._offline_coding_llm_catalog,
+            "offline-coding-llm-download": self._offline_coding_llm_download,
+            "offline-coding-llm-select": self._offline_coding_llm_select,
             "probe-voice-amplitude": self._probe_voice_amplitude,
             "speak-text": self._speak_text,
             "stop-speech": self._stop_speech,
@@ -664,13 +702,18 @@ class ShellBackendBridge(QObject):
             return ["Shell AI"]
 
     def _read_history_file(self) -> list[Any]:
-        try:
-            return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            return []
+        with self._history_lock:
+            try:
+                return json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                return []
 
     def _write_history_file(self, messages: list[Any]) -> None:
-        HISTORY_PATH.write_text(json.dumps(self._visible_history_messages(messages)[-80:], ensure_ascii=False, indent=2), encoding="utf-8")
+        with self._history_lock:
+            HISTORY_PATH.write_text(
+                json.dumps(self._visible_history_messages(messages)[-80:], ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
 
     def _get_history(self, _args: list[Any]) -> list[Any]:
         return self._visible_history_messages(self._read_history_file())
@@ -872,6 +915,10 @@ class ShellBackendBridge(QObject):
         activity_descriptor: dict[str, Any] | None = None
         result: Any = None
         success = True
+        async_pending = False
+        pending_chat_id = ""
+        deferred_prompt = ""
+        deferred_previous_messages: list[Any] | None = None
         try:
             identity_reply = self._creator_identity_reply(text, source=source)
             if identity_reply:
@@ -887,72 +934,87 @@ class ShellBackendBridge(QObject):
                     elif self._is_telemetry_chart_prompt(text, entry=entry):
                         reply = self._chart_summary_reply(text)
                     else:
-                        from shell_nl_router import route_natural_command
+                        direct_route = self._direct_tool_route(text)
+                        if direct_route and direct_route.get("errorReply"):
+                            reply = str(direct_route.get("errorReply") or "").strip()
+                        else:
+                            route = direct_route if direct_route and direct_route.get("tool") else None
+                            if not route:
+                                from shell_nl_router import route_natural_command
 
-                        route = route_natural_command(text)
-                        if not (route and route.get("tool")):
-                            image_prompt = self._extract_image_generation_prompt(text)
-                            if image_prompt:
-                                route = self._image_generation_route(image_prompt)
-                        if route and route.get("tool"):
-                            if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
-                                image_prompt = (
-                                    self._clean_image_prompt(self._route_image_prompt(route))
-                                    or self._extract_image_generation_prompt(text)
-                                    or text
+                                route = route_natural_command(text)
+                            if not (route and route.get("tool")):
+                                image_prompt = self._extract_image_generation_prompt(text)
+                                if image_prompt:
+                                    route = self._image_generation_route(image_prompt)
+                            if not (route and route.get("tool")) and self._has_command_intent(text):
+                                route = self._orchestration_route(text)
+                            if route and route.get("tool"):
+                                if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
+                                    image_prompt = (
+                                        self._clean_image_prompt(self._route_image_prompt(route))
+                                        or self._extract_image_generation_prompt(text)
+                                        or text
+                                    )
+                                    route_args = dict(route.get("args") or {})
+                                    route_args["description"] = image_prompt
+                                    route_args.setdefault("use_cache", False)
+                                    route_args.setdefault("force_fresh", True)
+                                    route = {**route, "args": route_args}
+                                    image_generation_started = True
+                                    self.emit_event(
+                                        "image-gen",
+                                        {
+                                            "prompt": image_prompt,
+                                            "loading": True,
+                                            "url": "",
+                                            "source": source,
+                                            "entry": entry,
+                                        },
+                                    )
+                                else:
+                                    route = self._prepare_artifact_route(route, previous_messages=previous_messages)
+                                    route = self._prepare_code_build_route(route)
+                                activity_descriptor = self._activity_descriptor(
+                                    text,
+                                    route,
+                                    image_prompt=image_prompt,
                                 )
-                                route_args = dict(route.get("args") or {})
-                                route_args["description"] = image_prompt
-                                route_args.setdefault("use_cache", False)
-                                route_args.setdefault("force_fresh", True)
-                                route = {**route, "args": route_args}
-                                image_generation_started = True
-                                self.emit_event(
-                                    "image-gen",
-                                    {
-                                        "prompt": image_prompt,
-                                        "loading": True,
-                                        "url": "",
-                                        "source": source,
-                                        "entry": entry,
-                                    },
+                                self._emit_activity(
+                                    activity_descriptor,
+                                    status="running",
+                                    progress=34 if image_generation_started else 22,
+                                    source=source,
+                                    entry=entry,
+                                )
+                                result = self._execute_routed_tool(route)
+                                self._emit_activity(
+                                    activity_descriptor,
+                                    status="running",
+                                    message="FORMATTING RESULT",
+                                    progress=82,
+                                    source=source,
+                                    entry=entry,
+                                )
+                                reply = self._format_chat_result(route, result)
+                                tool_success = self._activity_result_success(route, result, reply)
+                                self._emit_activity(
+                                    activity_descriptor,
+                                    status="done" if tool_success else "error",
+                                    message="TASK COMPLETE" if tool_success else "TASK FAILED",
+                                    progress=100,
+                                    source=source,
+                                    entry=entry,
                                 )
                             else:
-                                route = self._prepare_artifact_route(route, previous_messages=previous_messages)
-                                route = self._prepare_code_build_route(route)
-                            activity_descriptor = self._activity_descriptor(
-                                text,
-                                route,
-                                image_prompt=image_prompt,
-                            )
-                            self._emit_activity(
-                                activity_descriptor,
-                                status="running",
-                                progress=34 if image_generation_started else 22,
-                                source=source,
-                                entry=entry,
-                            )
-                            result = self._execute_routed_tool(route)
-                            self._emit_activity(
-                                activity_descriptor,
-                                status="running",
-                                message="FORMATTING RESULT",
-                                progress=82,
-                                source=source,
-                                entry=entry,
-                            )
-                            reply = self._format_chat_result(route, result)
-                            tool_success = self._activity_result_success(route, result, reply)
-                            self._emit_activity(
-                                activity_descriptor,
-                                status="done" if tool_success else "error",
-                                message="TASK COMPLETE" if tool_success else "TASK FAILED",
-                                progress=100,
-                                source=source,
-                                entry=entry,
-                            )
-                        else:
-                            reply = self._brain_chat_fallback(processing_text, previous_messages=previous_messages)
+                                if self._should_defer_offline_brain_reply():
+                                    pending_chat_id = self._next_chat_job_id()
+                                    async_pending = True
+                                    deferred_prompt = processing_text
+                                    deferred_previous_messages = previous_messages
+                                    reply = "Local brain loading hai. Main answer background mein bana raha hoon..."
+                                else:
+                                    reply = self._brain_chat_fallback(processing_text, previous_messages=previous_messages)
             if entry == "chart":
                 reply = self._compact_chat_reply(reply, limit=360)
         except Exception as exc:
@@ -982,18 +1044,251 @@ class ShellBackendBridge(QObject):
         if success and self._is_stale_provider_fallback_reply(reply):
             reply = self._local_chat_answer(processing_text or text)
 
-        messages.append({"role": "model", "parts": [{"text": reply}]})
+        model_message = {"role": "model", "parts": [{"text": reply}]}
+        if async_pending and pending_chat_id:
+            model_message["pendingOfflineChatId"] = pending_chat_id
+        messages.append(model_message)
         self._write_history_file(messages)
         self.emit_event(
             "chat-updated",
-            {"reply": reply, "route": route, "success": success, "source": source, "voice": source == "voice"},
+            {
+                "reply": reply,
+                "route": route,
+                "success": success,
+                "source": source,
+                "voice": source == "voice" and not async_pending,
+                "pending": async_pending,
+            },
         )
-        return {"success": success, "reply": reply, "route": route, "result": result, "source": source}
+        if async_pending and pending_chat_id:
+            self._start_background_task(
+                "ShellOfflineChat",
+                lambda prompt=deferred_prompt, previous=deferred_previous_messages, pending_id=pending_chat_id: (
+                    self._finish_deferred_offline_brain_reply(
+                        prompt,
+                        previous_messages=previous,
+                        pending_chat_id=pending_id,
+                        source=source,
+                        entry=entry,
+                    )
+                ),
+            )
+        return {
+            "success": success,
+            "reply": reply,
+            "route": route,
+            "result": result,
+            "source": source,
+            "pending": async_pending,
+        }
+
+    def _should_defer_offline_brain_reply(self) -> bool:
+        mode = os.environ.get("SHELL_OFFLINE_LLM_ASYNC_UI", "auto").strip().lower()
+        if mode in {"0", "off", "false", "no", "disabled"}:
+            return False
+        if mode in {"1", "on", "true", "yes", "force"}:
+            enabled = True
+        else:
+            enabled = (
+                platform.system().lower().startswith("win")
+                or getattr(sys, "frozen", False)
+                or os.environ.get("SHELL_DESKTOP_BUNDLED", "").strip() == "1"
+            )
+        if not enabled or self._should_try_provider_chat():
+            return False
+        try:
+            status = offline_llm_status()
+        except Exception:
+            return False
+        return bool(isinstance(status, dict) and status.get("available") is True)
+
+    def _finish_deferred_offline_brain_reply(
+        self,
+        prompt: str,
+        *,
+        previous_messages: list[Any] | None,
+        pending_chat_id: str,
+        source: str,
+        entry: str,
+    ) -> None:
+        try:
+            reply = self._brain_chat_fallback(prompt, previous_messages=previous_messages)
+            if entry == "chart":
+                reply = self._compact_chat_reply(reply, limit=360)
+            if self._is_stale_provider_fallback_reply(reply):
+                reply = self._local_chat_answer(prompt)
+            if not str(reply or "").strip():
+                reply = self._local_chat_answer(prompt)
+        except Exception as exc:
+            reply = f"Local brain error: {exc}"
+
+        reply = str(reply or "").strip()
+        self._replace_pending_offline_chat_reply(pending_chat_id, reply)
+        self.emit_event(
+            "chat-updated",
+            {
+                "reply": reply,
+                "route": None,
+                "success": not reply.lower().startswith("local brain error:"),
+                "source": source,
+                "voice": source == "voice",
+                "pending": False,
+            },
+        )
+
+    def _replace_pending_offline_chat_reply(self, pending_chat_id: str, reply: str) -> None:
+        if not pending_chat_id:
+            return
+        with self._history_lock:
+            messages = self._read_history_file()
+            replaced = False
+            for message in reversed(messages):
+                if not isinstance(message, dict):
+                    continue
+                if str(message.get("pendingOfflineChatId") or "") != pending_chat_id:
+                    continue
+                message["parts"] = [{"text": reply}]
+                message.pop("pendingOfflineChatId", None)
+                replaced = True
+                break
+            if not replaced:
+                messages.append({"role": "model", "parts": [{"text": reply}]})
+            self._write_history_file(messages)
 
     def _execute_routed_tool(self, route: dict[str, Any]) -> Any:
         from shell_tool_gateway import execute_tool_sync
 
         return execute_tool_sync(str(route["tool"]), route.get("args") or {})
+
+    @classmethod
+    def _direct_tool_route(cls, text: str) -> dict[str, Any] | None:
+        raw = " ".join(str(text or "").split()).strip()
+        if not raw:
+            return None
+
+        tool_id_pattern = r"([A-Za-z0-9_.-]+(?::[A-Za-z_][A-Za-z0-9_]*)?)"
+        direct_match = re.match(
+            rf"^/(tool|agent)\s+{tool_id_pattern}(?:\s+(.*))?$",
+            raw,
+            flags=re.I | re.S,
+        )
+        if not direct_match:
+            direct_match = re.match(
+                rf"^(?:run|use|call|execute)\s+(?:shell\s+)?(tool|agent)\s+"
+                rf"{tool_id_pattern}(?:\s+(.*))?$",
+                raw,
+                flags=re.I | re.S,
+            )
+        if not direct_match:
+            direct_match = re.match(
+                rf"^(?:ask)\s+(?:shell\s+)?(agent)\s+{tool_id_pattern}(?:\s+(.*))?$",
+                raw,
+                flags=re.I | re.S,
+            )
+        if not direct_match:
+            return None
+
+        command_kind = str(direct_match.group(1) or "tool").strip().lower()
+        requested_tool_id = str(direct_match.group(2) or "").strip()
+        raw_args = str(direct_match.group(3) or "").strip()
+        item, error = cls._catalog_item_for_direct_tool(requested_tool_id)
+        if error:
+            return {"errorReply": error, "source": "chat-direct-command"}
+        if not item:
+            return None
+
+        parsed_args, args_error = cls._parse_direct_tool_args(item, raw_args, command_kind=command_kind)
+        if args_error:
+            return {"errorReply": args_error, "source": "chat-direct-command"}
+
+        tool_id = str(item.get("id") or requested_tool_id)
+        return {
+            "tool": tool_id,
+            "args": parsed_args,
+            "kind": "agent" if command_kind == "agent" else str(item.get("kind") or "tool"),
+            "confidence": 0.99,
+            "source": "chat-direct-command",
+            "direct": True,
+        }
+
+    @staticmethod
+    def _catalog_item_for_direct_tool(tool_id: str) -> tuple[dict[str, Any] | None, str]:
+        requested = str(tool_id or "").strip()
+        if not requested:
+            return None, "Tool id missing hai. Format: /tool module:function {\"arg\": \"value\"}"
+        try:
+            from shell_tool_catalog import discover_tool_catalog
+
+            tools = discover_tool_catalog(PROJECT_ROOT)
+        except Exception as exc:
+            return None, f"Shell tool catalog load nahi hua: {exc}"
+
+        by_id = {str(item.get("id") or ""): item for item in tools}
+        if requested in by_id:
+            return by_id[requested], ""
+
+        matches = [item for item in tools if str(item.get("name") or "") == requested]
+        if len(matches) == 1:
+            return matches[0], ""
+        if len(matches) > 1:
+            ids = ", ".join(str(item.get("id") or "") for item in matches[:6])
+            return None, f"'{requested}' ambiguous hai. Exact tool id use karo: {ids}"
+        return None, f"Unknown Shell tool/agent id: {requested}. Use exact catalog id, jaise /tool shell_calculator:calculate_tool {{\"expression\":\"5*9\"}}"
+
+    @staticmethod
+    def _parse_direct_tool_args(
+        item: dict[str, Any],
+        raw_args: str,
+        *,
+        command_kind: str = "tool",
+    ) -> tuple[dict[str, Any], str]:
+        text = str(raw_args or "").strip()
+        text = re.sub(r"^(?:with|using|args|arguments)\b\s*[:=-]?\s*", "", text, flags=re.I).strip()
+        if command_kind == "agent":
+            text = re.sub(r"^(?:to|for)\b\s*", "", text, flags=re.I).strip()
+
+        params = [param for param in item.get("params") or [] if isinstance(param, dict)]
+        required = [param for param in params if param.get("required")]
+        tool_id = str(item.get("id") or "")
+
+        if not text:
+            if required:
+                names = ", ".join(str(param.get("name") or "") for param in required)
+                first = str(required[0].get("name") or "arg")
+                return {}, f"Missing required argument(s) for {tool_id}: {names}. Example: /tool {tool_id} {{\"{first}\": \"...\"}}"
+            return {}, ""
+
+        if text[0] in "{[":
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError as exc:
+                return {}, f"Tool args valid JSON object nahi hai: {exc.msg}"
+            if not isinstance(payload, dict):
+                return {}, "Tool args JSON object hone chahiye, array/string nahi."
+            return payload, ""
+
+        string_required = [
+            param for param in required if "str" in str(param.get("annotation") or "").lower()
+        ]
+        if len(string_required) == 1:
+            return {str(string_required[0].get("name") or "input"): text}, ""
+        if len(params) == 1 and "str" in str(params[0].get("annotation") or "").lower():
+            return {str(params[0].get("name") or "input"): text}, ""
+        if not required:
+            return {}, ""
+
+        names = ", ".join(str(param.get("name") or "") for param in required)
+        return {}, f"{tool_id} ke liye JSON args chahiye. Required: {names}"
+
+    @staticmethod
+    def _orchestration_route(text: str) -> dict[str, Any]:
+        return {
+            "tool": "shell_agent_orchestrator:orchestrate_shell_goal_tool",
+            "args": {"goal": str(text or "").strip(), "execute": True, "approved": False},
+            "kind": "agent",
+            "confidence": 0.7,
+            "source": "web-ui-command-orchestrator",
+        }
 
     @staticmethod
     def _compact_chat_reply(reply: str, *, limit: int = 360) -> str:
@@ -1431,7 +1726,10 @@ class ShellBackendBridge(QObject):
 
     @classmethod
     def _conversation_recall_reply(cls, text: str, previous_messages: list[Any]) -> str:
-        lower = str(text or "").strip().lower()
+        raw = str(text or "").strip()
+        if cls._direct_tool_route(raw):
+            return ""
+        lower = raw.lower()
         recall_intent = any(
             token in lower
             for token in (
@@ -1835,12 +2133,43 @@ class ShellBackendBridge(QObject):
 
     @classmethod
     def _format_agent_success_reply(cls, tool: str, rendered_text: str) -> str:
+        if "orchestrate_shell_goal" in str(tool).lower():
+            return cls._format_orchestration_reply(rendered_text)
         if "research_agent" in str(tool).lower():
             cleaned = re.sub(r"^\[ResearchAgent\]\s*\([^)]*\)\s*", "", rendered_text, flags=re.I | re.S).strip()
             cleaned = re.sub(r"\s*\[Tool Execution:\s*[^\]]+\]\s*$", "", cleaned, flags=re.I | re.S).strip()
             cleaned = re.sub(r"^\*\*(summary[^*]*):\*\*\s*", r"\1: ", cleaned, flags=re.I).strip()
             return f"Deep research complete: {cls._compact_chat_reply(cleaned or rendered_text, limit=900)}"
         return f"{tool} complete: {rendered_text[:700]}"
+
+    @classmethod
+    def _format_orchestration_reply(cls, rendered_text: str) -> str:
+        try:
+            plan = json.loads(str(rendered_text or "{}"))
+        except Exception:
+            return f"Shell agent planner complete: {cls._compact_chat_reply(rendered_text, limit=700)}"
+        if not isinstance(plan, dict):
+            return f"Shell agent planner complete: {cls._compact_chat_reply(rendered_text, limit=700)}"
+
+        agent = str(plan.get("selected_agent_name") or plan.get("selected_agent_id") or "Planner Agent")
+        status = str(plan.get("status") or "").strip() or "planned"
+        execution_status = str(plan.get("execution_status") or "").strip()
+        low_level_tool = str(plan.get("low_level_tool_id") or "").strip()
+        reasons = [str(reason) for reason in plan.get("reasons") or [] if str(reason).strip()]
+        reason_text = cls._compact_chat_reply("; ".join(reasons), limit=260) if reasons else ""
+
+        if execution_status == "success":
+            tool_text = f" via {low_level_tool}" if low_level_tool else ""
+            return f"Shell agent executed: {agent}{tool_text}."
+        if execution_status == "blocked" or status == "blocked" or plan.get("requires_approval"):
+            suffix = f" Reason: {reason_text}" if reason_text else ""
+            return f"Shell agent route blocked: {agent} selected hua, lekin approval/safety required hai.{suffix}"
+        if status == "needs_planning":
+            suffix = f" Reason: {reason_text}" if reason_text else ""
+            return f"Shell agent planner ready: {agent} ne task analyze kiya. Direct safe tool route nahi mila, isliye detailed planning needed hai.{suffix}"
+        tool_text = f" Tool: {low_level_tool}." if low_level_tool else ""
+        suffix = f" Reason: {reason_text}" if reason_text else ""
+        return f"Shell agent route ready: {agent} selected hua.{tool_text}{suffix}"
 
     @staticmethod
     def _friendly_image_failure(rendered_text: str) -> str:
@@ -2010,6 +2339,12 @@ class ShellBackendBridge(QObject):
         )
 
         def run() -> None:
+            critical_prime_wait_ms = 0.0
+            if text in CRITICAL_OFFLINE_TTS_PHRASES and not self._offline_tts_critical_prime_ready.is_set():
+                wait_started = time.perf_counter()
+                wait_timeout_ms = max(0, int(os.environ.get("SHELL_OFFLINE_TTS_CRITICAL_WAIT_MS", "0") or "0"))
+                self._offline_tts_critical_prime_ready.wait(timeout=wait_timeout_ms / 1000.0)
+                critical_prime_wait_ms = (time.perf_counter() - wait_started) * 1000.0
             offline_result = speak_offline_tts(text)
             offline_process = offline_result.pop("_process", None) if isinstance(offline_result, dict) else None
             if job_id != self._current_speech_job_id():
@@ -2023,7 +2358,12 @@ class ShellBackendBridge(QObject):
             if isinstance(offline_result, dict) and offline_result.get("success"):
                 if offline_process is not None:
                     self._speech_process = offline_process
-                payload = self._speech_status_payload("speaking", offline_result, text=text)
+                payload = self._speech_status_payload(
+                    "speaking",
+                    offline_result,
+                    text=text,
+                    criticalPrimeWaitMs=round(critical_prime_wait_ms, 2),
+                )
                 if fallback_from:
                     payload["fallbackFrom"] = fallback_from
                 self.emit_event("speech-status", payload)
@@ -2144,7 +2484,19 @@ class ShellBackendBridge(QObject):
             "voice": result.get("voice", ""),
             "chars": result.get("chars", len(text)),
         }
-        for key in ("durationMs", "amplitudeFrameMs", "amplitudeFrames"):
+        if text:
+            payload["text"] = str(text)[:320]
+        for key in (
+            "durationMs",
+            "amplitudeFrameMs",
+            "amplitudeFrames",
+            "playbackBackend",
+            "cacheHit",
+            "presetHit",
+            "synthesisMs",
+            "playbackStartMs",
+            "totalMs",
+        ):
             value = result.get(key)
             if value not in (None, ""):
                 payload[key] = value
@@ -2220,9 +2572,18 @@ class ShellBackendBridge(QObject):
     def _offline_llm_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
         return offline_llm_status()
 
+    def _offline_coding_llm_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        return offline_coding_llm_status()
+
     def _offline_llm_catalog(self, _args: list[Any] | None = None) -> dict[str, Any]:
-        status = offline_llm_status()
-        catalog = offline_llm_catalog_payload()
+        return self._offline_llm_catalog_for_category(CHAT_MODEL_CATEGORY)
+
+    def _offline_coding_llm_catalog(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        return self._offline_llm_catalog_for_category(CODING_MODEL_CATEGORY)
+
+    def _offline_llm_catalog_for_category(self, category: str) -> dict[str, Any]:
+        status = offline_coding_llm_status() if category == CODING_MODEL_CATEGORY else offline_llm_status()
+        catalog = offline_llm_catalog_payload(category)
         if isinstance(status, dict):
             catalog["status"] = status
             catalog["available"] = status.get("available") is True
@@ -2233,29 +2594,22 @@ class ShellBackendBridge(QObject):
         return catalog
 
     def _offline_llm_download(self, args: list[Any]) -> dict[str, Any]:
+        return self._offline_llm_download_for_category(args, CHAT_MODEL_CATEGORY)
+
+    def _offline_coding_llm_download(self, args: list[Any]) -> dict[str, Any]:
+        return self._offline_llm_download_for_category(args, CODING_MODEL_CATEGORY)
+
+    def _offline_llm_download_for_category(self, args: list[Any], category: str) -> dict[str, Any]:
         payload = args[0] if args and isinstance(args[0], dict) else {}
         model_id = str(payload.get("modelId") or payload.get("id") or "").strip()
-        option = get_offline_model_option(model_id)
+        option = get_offline_model_option(model_id, category)
         if option is None:
             return {"success": False, "message": "Unknown offline model option.", "modelId": model_id}
 
         target_dir = offline_model_install_dir(option.id)
         target_path = target_dir / option.filename
         if target_path.exists() and target_path.is_file():
-            write_offline_model_metadata(option, model_path=target_path)
-            try:
-                from shell_offline_llm import _reset_cached_model_for_tests
-
-                _reset_cached_model_for_tests()
-            except Exception:
-                pass
-            return {
-                "success": True,
-                "status": "installed",
-                "modelId": option.id,
-                "modelPath": str(target_path),
-                "catalog": self._offline_llm_catalog(),
-            }
+            return self._offline_llm_select_for_category([{"modelId": option.id}], category)
 
         with self._offline_llm_download_lock:
             current = self._offline_llm_downloads.get(option.id)
@@ -2263,14 +2617,57 @@ class ShellBackendBridge(QObject):
                 return {"success": True, "status": current.get("status"), "modelId": option.id, "download": current}
             self._offline_llm_downloads[option.id] = {
                 "status": "queued",
+                "category": category,
                 "percent": 0,
                 "downloadedBytes": 0,
                 "totalBytes": option.size_bytes,
                 "message": "Queued",
             }
 
-        self._start_background_task("ShellOfflineModelDownload", lambda: self._download_offline_llm_model(option))
+        self._start_background_task("ShellOfflineModelDownload", lambda: self._download_offline_llm_model(option, category=category))
         return {"success": True, "status": "queued", "modelId": option.id}
+
+    def _offline_llm_select(self, args: list[Any]) -> dict[str, Any]:
+        return self._offline_llm_select_for_category(args, CHAT_MODEL_CATEGORY)
+
+    def _offline_coding_llm_select(self, args: list[Any]) -> dict[str, Any]:
+        return self._offline_llm_select_for_category(args, CODING_MODEL_CATEGORY)
+
+    def _offline_llm_select_for_category(self, args: list[Any], category: str) -> dict[str, Any]:
+        payload = args[0] if args and isinstance(args[0], dict) else {}
+        model_id = str(payload.get("modelId") or payload.get("id") or "").strip()
+        option = get_offline_model_option(model_id, category)
+        if option is None:
+            return {"success": False, "message": "Unknown offline model option.", "modelId": model_id}
+
+        target_path = offline_model_install_dir(option.id) / option.filename
+        if not target_path.exists() or not target_path.is_file():
+            label = "offline coding brain" if category == CODING_MODEL_CATEGORY else "offline brain"
+            return {
+                "success": False,
+                "status": "missing",
+                "message": f"Download this {label} before using it.",
+                "modelId": option.id,
+                "modelPath": str(target_path),
+            }
+
+        write_offline_model_metadata(option, model_path=target_path, category=category)
+        try:
+            from shell_offline_llm import _reset_cached_model_for_tests
+
+            _reset_cached_model_for_tests()
+        except Exception:
+            pass
+        catalog = self._offline_llm_catalog_for_category(category)
+        return {
+            "success": True,
+            "status": "selected",
+            "category": category,
+            "modelId": option.id,
+            "modelPath": str(target_path),
+            "message": f"{option.name} is active",
+            "catalog": catalog,
+        }
 
     def _set_offline_llm_download_state(self, model_id: str, state: dict[str, Any]) -> None:
         with self._offline_llm_download_lock:
@@ -2279,7 +2676,7 @@ class ShellBackendBridge(QObject):
             self._offline_llm_downloads[model_id] = current
         self.emit_event("offline-llm-download-event", {"modelId": model_id, **current})
 
-    def _download_offline_llm_model(self, option: Any) -> None:
+    def _download_offline_llm_model(self, option: Any, *, category: str = CHAT_MODEL_CATEGORY) -> None:
         target_dir = offline_model_install_dir(option.id)
         target_path = target_dir / option.filename
         partial_path = target_dir / f"{option.filename}.download"
@@ -2288,7 +2685,7 @@ class ShellBackendBridge(QObject):
         if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "huggingface.co":
             self._set_offline_llm_download_state(
                 option.id,
-                {"status": "error", "message": "Offline model download host is not allowed.", "percent": 0},
+                {"status": "error", "category": category, "message": "Offline model download host is not allowed.", "percent": 0},
             )
             return
 
@@ -2298,6 +2695,7 @@ class ShellBackendBridge(QObject):
             option.id,
             {
                 "status": "downloading",
+                "category": category,
                 "message": f"Downloading {option.name}",
                 "percent": 0,
                 "downloadedBytes": 0,
@@ -2324,6 +2722,7 @@ class ShellBackendBridge(QObject):
                         option.id,
                         {
                             "status": "downloading",
+                            "category": category,
                             "message": f"Downloading {option.name}",
                             "percent": percent,
                             "downloadedBytes": downloaded,
@@ -2335,6 +2734,7 @@ class ShellBackendBridge(QObject):
                 option.id,
                 {
                     "status": "verifying",
+                    "category": category,
                     "message": "Verifying model checksum",
                     "percent": 99,
                     "downloadedBytes": downloaded,
@@ -2351,6 +2751,7 @@ class ShellBackendBridge(QObject):
                     option.id,
                     {
                         "status": "error",
+                        "category": category,
                         "message": "Model checksum failed. Download was discarded.",
                         "percent": 0,
                         "sha256": actual_sha,
@@ -2359,7 +2760,7 @@ class ShellBackendBridge(QObject):
                 return
 
             partial_path.replace(target_path)
-            write_offline_model_metadata(option, model_path=target_path)
+            write_offline_model_metadata(option, model_path=target_path, category=category)
             try:
                 from shell_offline_llm import _reset_cached_model_for_tests
 
@@ -2370,12 +2771,13 @@ class ShellBackendBridge(QObject):
                 option.id,
                 {
                     "status": "installed",
+                    "category": category,
                     "message": f"{option.name} installed",
                     "percent": 100,
                     "downloadedBytes": target_path.stat().st_size,
                     "totalBytes": option.size_bytes,
                     "modelPath": str(target_path),
-                    "catalog": self._offline_llm_catalog(),
+                    "catalog": self._offline_llm_catalog_for_category(category),
                 },
             )
         except Exception as exc:
@@ -2386,7 +2788,7 @@ class ShellBackendBridge(QObject):
                 pass
             self._set_offline_llm_download_state(
                 option.id,
-                {"status": "error", "message": f"Model download failed: {exc}", "percent": 0},
+                {"status": "error", "category": category, "message": f"Model download failed: {exc}", "percent": 0},
             )
 
     def _probe_voice_amplitude(self, args: list[Any]) -> dict[str, Any]:
@@ -2804,105 +3206,6 @@ class ShellBackendBridge(QObject):
             return {"success": False, "message": str(exc)}
 
 
-class ShellWebUI(QMainWindow):
+class ShellWebUI:
     def __init__(self) -> None:
-        if QWebEngineView is None or QWebChannel is None:
-            raise RuntimeError("PyQt6 WebEngine/WebChannel is unavailable")
-
-        super().__init__()
-        self.setWindowTitle("Shell AI")
-        icon_path = _brand_icon_path()
-        if icon_path is not None:
-            self.setWindowIcon(QIcon(str(icon_path)))
-        self.resize(1280, 760)
-
-        self.bridge = ShellBackendBridge(self)
-        self.channel = QWebChannel(self)
-        self.channel.registerObject("shellBridge", self.bridge)
-
-        self.view = QWebEngineView(self)
-        self.view.page().setWebChannel(self.channel)
-        self._configure_web_permissions()
-        self._configure_web_settings()
-
-        container = QWidget(self)
-        layout = QVBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.view)
-        self.setCentralWidget(container)
-
-        self._load_renderer()
-
-    def _configure_web_settings(self) -> None:
-        if QWebEngineSettings is None:
-            return
-        settings = self.view.settings()
-        for attribute in (
-            QWebEngineSettings.WebAttribute.JavascriptEnabled,
-            QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls,
-            QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls,
-            QWebEngineSettings.WebAttribute.WebGLEnabled,
-            QWebEngineSettings.WebAttribute.ScreenCaptureEnabled,
-        ):
-            try:
-                settings.setAttribute(attribute, True)
-            except Exception:
-                pass
-        try:
-            accelerate_2d = not (
-                platform.system().lower() == "windows"
-                and os.environ.get("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced").strip().lower()
-                in {"low", "eco"}
-            )
-            settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, accelerate_2d)
-        except Exception:
-            pass
-
-    def _configure_web_permissions(self) -> None:
-        page = self.view.page()
-        if QWebEnginePage is not None:
-            try:
-                allowed_features = {
-                    QWebEnginePage.Feature.MediaAudioCapture,
-                    QWebEnginePage.Feature.MediaVideoCapture,
-                    QWebEnginePage.Feature.MediaAudioVideoCapture,
-                    QWebEnginePage.Feature.DesktopVideoCapture,
-                    QWebEnginePage.Feature.DesktopAudioVideoCapture,
-                }
-
-                def grant_media_permission(origin: QUrl, feature: Any) -> None:
-                    if feature in allowed_features:
-                        page.setFeaturePermission(
-                            origin,
-                            feature,
-                            QWebEnginePage.PermissionPolicy.PermissionGrantedByUser,
-                        )
-
-                self._feature_permission_handler = grant_media_permission
-                page.featurePermissionRequested.connect(self._feature_permission_handler)
-            except Exception:
-                pass
-
-    def _load_renderer(self) -> None:
-        dev_url = os.environ.get("SHELL_WEB_UI_URL", "").strip()
-        if dev_url:
-            self.view.load(QUrl(dev_url))
-            return
-        if WEB_DIST_INDEX.exists():
-            url = QUrl.fromLocalFile(str(WEB_DIST_INDEX))
-            if platform.system().lower().startswith("win") or os.environ.get("SHELL_DESKTOP_BUNDLED") == "1":
-                url.setQuery("shell_host=pyqt&shell_perf=windows")
-            self.view.load(url)
-            return
-        icon_path = _brand_icon_path()
-        icon_src = icon_path.as_uri() if icon_path is not None else ""
-        fallback = (
-            "<html><body style='margin:0;background:#050505;color:#10b981;"
-            "font-family:monospace;display:grid;place-items:center;height:100vh'>"
-            "<div style='text-align:center'>"
-            f"<img src='{icon_src}' alt='Shell AI' style='width:72px;height:72px;object-fit:contain;margin-bottom:18px'/>"
-            "<h2>Shell AI Web UI build missing</h2>"
-            "<p>Run <code>npm install</code> and <code>npm run build</code> in shell_web_ui.</p></div>"
-            "</body></html>"
-        )
-        self.view.setHtml(fallback, QUrl.fromLocalFile(str(WEB_UI_ROOT)))
+        raise RuntimeError("ShellWebUI Qt host is retired. Use the Electron launcher.")

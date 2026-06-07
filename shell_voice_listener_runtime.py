@@ -15,7 +15,8 @@ import os
 import re
 import time
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from shell_async_signals import WorkerThread
+from shell_async_signals import signal as runtime_signal
 
 from shell_voice_pipeline import VoicePipelineEvent, VoicePipelineManager
 
@@ -80,16 +81,16 @@ def _env_bool(name: str, default: bool) -> bool:
     return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
 
-class VoiceListenerThread(QThread):
+class VoiceListenerThread(WorkerThread):
     """Listen to microphone audio and emit recognized text."""
 
-    text_recognized = pyqtSignal(str)
-    amplitude_changed = pyqtSignal(float)
-    listening_started = pyqtSignal()
-    listening_stopped = pyqtSignal()
-    status_changed = pyqtSignal(str)
-    error_occurred = pyqtSignal(str)
-    latency_event = pyqtSignal(str, object)
+    text_recognized = runtime_signal(str)
+    amplitude_changed = runtime_signal(float)
+    listening_started = runtime_signal()
+    listening_stopped = runtime_signal()
+    status_changed = runtime_signal(str)
+    error_occurred = runtime_signal(str)
+    latency_event = runtime_signal(str, object)
 
     def __init__(self, parent=None):
         super().__init__(parent)

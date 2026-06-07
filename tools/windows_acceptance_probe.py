@@ -626,9 +626,7 @@ def check_bundled_exe_memory() -> Check:
 def check_local_tts_command(py: Path) -> Check:
     code = (
         "import json; "
-        "from PyQt6.QtCore import QCoreApplication; "
         "from shell_web_ui.host import ShellBackendBridge; "
-        "QCoreApplication.instance() or QCoreApplication([]); "
         "cmd=ShellBackendBridge()._tts_command('Shell voice test'); "
         "print(json.dumps({'available': bool(cmd), 'command': cmd[0] if cmd else ''}, sort_keys=True)); "
         "raise SystemExit(1 if cmd else 0)"

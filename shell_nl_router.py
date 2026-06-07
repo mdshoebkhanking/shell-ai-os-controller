@@ -338,6 +338,16 @@ _GAME_INTENT_RE = (
     r"\b(game|khel|snake|tetris|pong|flappy|flappy\s+bird|2048|breakout|"
     r"space\s+invaders?|runner|dino|tic\s*tac\s*toe|reaction)\b"
 )
+_CODE_LANGUAGE_RE = (
+    r"\b(python|py|javascript|typescript|java|kotlin|swift|c\+\+|cpp|c#|csharp|"
+    r"go|golang|rust|php|ruby|sql|html|css|react|node|nodejs|express|fastapi|"
+    r"flask|django|bash|shell\s+script|script|program|function|class|component|"
+    r"algorithm|api|endpoint|regex|code|coding)\b"
+)
+_CODE_ACTION_RE = (
+    r"\b(write|likho|likh\s+do|create|make|build|generate|develop|code|"
+    r"banao|bana|banado|banaao|bana\s+do|kar\s+do)\b"
+)
 
 
 def _workspace_file_path_match(raw: str) -> tuple[str, tuple[int, int]] | None:
@@ -640,6 +650,34 @@ def _telegram_route(raw: str, lower: str) -> dict[str, Any] | None:
     return None
 
 
+def _code_generation_route(raw: str, lower: str) -> dict[str, Any] | None:
+    """Route generic code-writing asks to Shell's developer agent."""
+    if re.search(r"\b(qr\s*code|barcode|verification\s+code|otp|pin\s+code|error\s+code)\b", lower, flags=re.I):
+        return None
+    direct_code_phrase = re.search(
+        r"\b(?:code|coding|script|program|function|class|component|algorithm)\s+"
+        r"(?:likho|likh\s+do|banao|bana|banado|banaao|write|create|make|build|generate|develop)\b",
+        lower,
+        flags=re.I,
+    ) or re.search(
+        r"\b(?:write|create|make|build|generate|develop|code|banao|bana|banado|banaao|bana\s+do)\s+"
+        r"(?:a\s+|an\s+|the\s+)?(?:code|script|program|function|class|component|algorithm)\b",
+        lower,
+        flags=re.I,
+    )
+    if not direct_code_phrase and not (
+        re.search(_CODE_ACTION_RE, lower, flags=re.I)
+        and re.search(_CODE_LANGUAGE_RE, lower, flags=re.I)
+    ):
+        return None
+    return _route(
+        "shell_agents:developer_agent_tool",
+        {"task": _strip_quotes(raw)},
+        kind="agent",
+        confidence=0.89,
+    )
+
+
 def _autonomous_route(raw: str, lower: str) -> dict[str, Any] | None:
     resume_match = re.match(
         r"^(?:autonomous|autonomy|auto|agentic)\s+resume\s+([a-zA-Z0-9_-]{6,})$|^resume\s+(?:autonomous|autonomy|agentic)\s+([a-zA-Z0-9_-]{6,})$",
@@ -854,6 +892,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     workspace_create = _workspace_file_create_route(raw, lower)
     if workspace_create:
         return workspace_create
+
+    code_generation = _code_generation_route(raw, lower)
+    if code_generation:
+        return code_generation
 
     if lower.startswith(("search google", "google search", "google ")):
         query = re.sub(r"^(search\s+google|google\s+search|google)\s*(for)?\s*", "", raw, flags=re.I).strip()

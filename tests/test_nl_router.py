@@ -31,6 +31,22 @@ def test_natural_agent_route():
     assert route["args"] == {"task": "fix the login bug"}
 
 
+def test_generic_hinglish_code_request_routes_to_developer_agent():
+    route = route_natural_command("python code likho fibonacci function")
+
+    assert route["tool"] == "shell_agents:developer_agent_tool"
+    assert route["kind"] == "agent"
+    assert route["args"] == {"task": "python code likho fibonacci function"}
+
+
+def test_generic_english_code_request_routes_to_developer_agent():
+    route = route_natural_command("write code for sorting a list in javascript")
+
+    assert route["tool"] == "shell_agents:developer_agent_tool"
+    assert route["kind"] == "agent"
+    assert route["args"] == {"task": "write code for sorting a list in javascript"}
+
+
 def test_natural_list_tools_route():
     route = route_natural_command("show all tools")
 

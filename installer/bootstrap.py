@@ -28,7 +28,6 @@ SUPPORTED_NODE_MIN_20 = (20, 19, 0)
 SUPPORTED_NODE_MIN_22 = (22, 12, 0)
 
 CORE_IMPORTS = {
-    "PyQt6": "desktop UI",
     "aiohttp": "hub HTTP server",
     "socketio": "realtime UI events",
     "psutil": "system telemetry",
@@ -36,7 +35,6 @@ CORE_IMPORTS = {
 }
 
 UI_IMPORTS = {
-    "PyQt6.QtWebEngineWidgets": "UI WebEngine visualizer",
     "OpenGL": "3D UI visualizer",
     "numpy": "UI numeric rendering helpers",
     "PIL": "UI image loading",
@@ -1010,9 +1008,9 @@ def apply_runtime_performance_defaults(env: dict[str, str]) -> None:
         env.setdefault(key, "1")
     if detect_os() == "windows":
         env.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
-        env.setdefault("SHELL_OFFLINE_LLM_CONTEXT", "1024")
-        env.setdefault("SHELL_OFFLINE_LLM_BATCH", "64")
-        env.setdefault("SHELL_OFFLINE_LLM_MAX_TOKENS", "160")
+        env.setdefault("SHELL_OFFLINE_LLM_CONTEXT", "768")
+        env.setdefault("SHELL_OFFLINE_LLM_BATCH", "32")
+        env.setdefault("SHELL_OFFLINE_LLM_MAX_TOKENS", "96")
 
 
 def launch(*, repair_if_needed: bool = False) -> int:

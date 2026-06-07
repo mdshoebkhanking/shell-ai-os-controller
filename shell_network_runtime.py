@@ -13,7 +13,8 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from shell_async_signals import WorkerThread
+from shell_async_signals import signal as runtime_signal
 
 
 logger = logging.getLogger("shell.network_runtime")
@@ -76,21 +77,21 @@ def _load_socketio_module():
     return socketio, ""
 
 
-class SocketIOClient(QThread):
+class SocketIOClient(WorkerThread):
     """Optional hub event stream client loaded outside the UI startup path."""
 
-    connection_status = pyqtSignal(bool)
-    agent_speaking = pyqtSignal(bool, str)
-    agent_thinking = pyqtSignal(bool)
-    user_speaking = pyqtSignal(str)
-    system_stats = pyqtSignal(dict)
-    voice_amplitude = pyqtSignal(float)
-    deep_research = pyqtSignal(dict)
-    agent_reply = pyqtSignal(str)
-    user_message = pyqtSignal(str)
-    tool_event = pyqtSignal(dict)
-    api_key_update = pyqtSignal(dict)
-    safety_warning = pyqtSignal(str)
+    connection_status = runtime_signal(bool)
+    agent_speaking = runtime_signal(bool, str)
+    agent_thinking = runtime_signal(bool)
+    user_speaking = runtime_signal(str)
+    system_stats = runtime_signal(dict)
+    voice_amplitude = runtime_signal(float)
+    deep_research = runtime_signal(dict)
+    agent_reply = runtime_signal(str)
+    user_message = runtime_signal(str)
+    tool_event = runtime_signal(dict)
+    api_key_update = runtime_signal(dict)
+    safety_warning = runtime_signal(str)
 
     def __init__(
         self,

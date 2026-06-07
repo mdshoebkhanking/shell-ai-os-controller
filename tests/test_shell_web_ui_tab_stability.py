@@ -14,10 +14,11 @@ def test_shell_tab_pane_stays_mounted_and_avoids_surface_animation():
     css = read_project_file("shell_web_ui/src/assets/main.css")
 
     assert "key={activeTab}" not in shell_ai
-    assert "useTransition" in shell_ai
-    assert "startTabTransition" in shell_ai
+    assert "useTransition" not in shell_ai
+    assert "startTabTransition" not in shell_ai
     assert "selectShellTab(tab.id)" in shell_ai
     assert "setActiveTab(tabId)" in shell_ai
+    assert "preloadShellTabById(tabId)" in shell_ai
     assert "shell-view-layer" in shell_ai
 
     pane_match = re.search(r"\.shell-view-pane\s*\{(?P<body>.*?)\n\}", css, flags=re.DOTALL)
@@ -93,20 +94,28 @@ def test_lazy_tab_views_can_preload_before_first_switch_when_enabled():
     assert "fade-in" not in skeleton
 
 
-def test_lazy_tab_preload_is_staggered_for_packaged_pyqt_by_default():
+def test_lazy_tab_preload_is_enabled_for_packaged_electron_without_stampede():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
+    electron_main = read_project_file("shell_web_ui/electron/main.cjs")
 
-    assert "const shellTabViewLoaders = [" in shell_ai
-    assert "const PRELOAD_TAB_GAP_MS = 360" in shell_ai
-    assert "if (shellPerfMode === 'windows') return true" in shell_ai
-    assert "if (shellSearchParams.get('shell_host') === 'pyqt') return true" in shell_ai
+    assert "const shellTabLoadersById" in shell_ai
+    assert "const shellTabViewLoaders = Object.values(shellTabLoadersById)" in shell_ai
+    assert "const PRELOAD_TAB_GAP_MS = 90" in shell_ai
+    assert "if (shellPerfMode === 'windows') return false" in shell_ai
+    assert "if (shellSearchParams.get('shell_host') === 'electron') return true" in shell_ai
+    assert "if (preference === '1') return true" in shell_ai
     assert "shellPerfMode === 'low' || shellPerfMode === 'eco' || shellPerfMode === 'safe'" in shell_ai
+    assert "onFocus={() => preloadShellTabById(tab.id)}" in shell_ai
+    assert "onMouseEnter={() => preloadShellTabById(tab.id)}" in shell_ai
     assert "await waitForPreloadGap()" in shell_ai
     assert "for (const loadView of shellTabViewLoaders)" in shell_ai
     assert "await loadView()" in shell_ai
     assert "Promise.all([" not in shell_ai
     assert "let cancelled = false" in shell_ai
     assert "cancelled = true" in shell_ai
+    assert "const measureFastTabSwitch" in electron_main
+    assert "fastTabChecks.push(await measureFastTabSwitch(tabId))" in electron_main
+    assert "record.ok = record.active && !record.sawSkeleton" in electron_main
 
 
 def test_shell_root_avoids_idle_render_churn():

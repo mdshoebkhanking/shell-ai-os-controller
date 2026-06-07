@@ -67,7 +67,7 @@ def test_dashboard_voice_test_startup_text_is_english():
     assert "const hasBrowserGeminiVoiceKey = () =>" in dashboard
     assert "const useGeminiTestVoice = voiceRuntime === 'gemini' && hasBrowserGeminiVoiceKey()" in dashboard
     assert "Premium Gemini voice is active. Your private command center is standing by." in dashboard
-    assert "Offline voice is active. Your private command center is standing by." in dashboard
+    assert "Command center ready." in dashboard
     assert "voice ready hai" not in dashboard
     assert "bol raha hoon" not in dashboard
 
@@ -86,7 +86,7 @@ def test_gemini_voice_without_key_falls_through_to_backend_voice():
     )
 
 
-def test_settings_exposes_offline_tts_status_without_extra_tab():
+def test_settings_hides_kokoro_tts_card_and_separates_voice_from_models():
     settings = read_project_file("shell_web_ui/src/views/Settings.tsx")
     bridge = read_project_file("shell_web_ui/src/shellBridge.ts")
 
@@ -94,16 +94,32 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     assert "offline-llm-status" in settings
     assert "offline-llm-catalog" in settings
     assert "offline-llm-download" in settings
+    assert "offline-llm-select" in settings
+    assert "offline-coding-llm-status" in settings
+    assert "offline-coding-llm-catalog" in settings
+    assert "offline-coding-llm-download" in settings
+    assert "offline-coding-llm-select" in settings
     assert "applyOfflineTtsStatus" in settings
     assert "applyOfflineLlmStatus" in settings
     assert "downloadOfflineModel" in settings
+    assert "selectOfflineModel" in settings
+    assert "isSelected ? 'ACTIVE'" in settings
     assert "refreshOfflineTtsStatus" in settings
     assert "refreshOfflineLlmStatus" in settings
-    assert "OFFLINE TTS" in settings
     assert "OFFLINE BRAIN" in settings
-    assert "activeVoice" in settings
-    assert "offlineTtsVoice" in settings
-    assert "offlineTtsCandidateSummary" in settings
+    assert "OFFLINE CODING BRAIN" in settings
+    assert "applyOfflineCodingLlmStatus" in settings
+    assert "downloadOfflineCodingModel" in settings
+    assert "selectOfflineCodingModel" in settings
+    assert "OFFLINE TTS" not in settings
+    assert "LOCAL ONLY" not in settings
+    assert "{ id: 'backend'" not in settings
+    assert "AUTO LOCAL" in settings
+    assert "GEMINI LIVE" in settings
+    assert "OS Voice Profile" in settings
+    assert "OS Voice Profile" in settings.split("OFFLINE BRAIN", 1)[0]
+    assert settings.index("OS Voice Profile") < settings.index("OFFLINE BRAIN")
+    assert '<div className={`${cardClass} md:col-span-2`}>' in settings
     assert "offlineLlmCandidateSummary" in settings
     assert "Shell will use local OS voice fallback" not in settings
     assert "will not use local OS TTS fallback" in settings
@@ -112,8 +128,12 @@ def test_settings_exposes_offline_tts_status_without_extra_tab():
     assert "case 'offline-llm-status'" in bridge
     assert "case 'offline-llm-catalog'" in bridge
     assert "case 'offline-llm-download'" in bridge
+    assert "case 'offline-llm-select'" in bridge
+    assert "case 'offline-coding-llm-status'" in bridge
+    assert "case 'offline-coding-llm-catalog'" in bridge
+    assert "case 'offline-coding-llm-download'" in bridge
+    assert "case 'offline-coding-llm-select'" in bridge
     assert "settingsTabs = [" in settings
-    assert "OFFLINE TTS" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
     assert "OFFLINE BRAIN" not in settings.split("settingsTabs = [", 1)[1].split("]", 1)[0]
     assert "generalHydratedRef" in settings
     assert "keysHydratedRef" in settings
@@ -131,6 +151,11 @@ def test_webengine_host_exposes_settings_channels_and_language_prompt():
     assert '"offline-llm-status": self._offline_llm_status' in host
     assert '"offline-llm-catalog": self._offline_llm_catalog' in host
     assert '"offline-llm-download": self._offline_llm_download' in host
+    assert '"offline-llm-select": self._offline_llm_select' in host
+    assert '"offline-coding-llm-status": self._offline_coding_llm_status' in host
+    assert '"offline-coding-llm-catalog": self._offline_coding_llm_catalog' in host
+    assert '"offline-coding-llm-download": self._offline_coding_llm_download' in host
+    assert '"offline-coding-llm-select": self._offline_coding_llm_select' in host
     assert "from shell_settings_manager import get_settings" in host
     assert "from shell_settings_manager import set_settings" in host
     assert "ALLOWED_SHELL_LANGUAGES = {\"hinglish\", \"english\", \"hindi\"}" in host

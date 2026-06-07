@@ -15,7 +15,8 @@ import re
 import time as _time
 from collections import deque
 
-from PyQt6.QtCore import QThread, pyqtSignal
+from shell_async_signals import WorkerThread
+from shell_async_signals import signal as runtime_signal
 
 
 _EDGE_TTS_AVAILABLE = importlib.util.find_spec("edge_tts") is not None
@@ -60,13 +61,13 @@ _DEFAULT_VOICE = "en-US-AndrewMultilingualNeural"
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-class TTSSpeaker(QThread):
+class TTSSpeaker(WorkerThread):
     """Background thread that speaks Shell replies through the selected backend."""
 
-    speaking_started = pyqtSignal()
-    speaking_finished = pyqtSignal()
-    latency_event = pyqtSignal(str, object)
-    speech_error = pyqtSignal(str)
+    speaking_started = runtime_signal()
+    speaking_finished = runtime_signal()
+    latency_event = runtime_signal(str, object)
+    speech_error = runtime_signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)

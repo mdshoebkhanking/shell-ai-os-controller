@@ -178,15 +178,30 @@ def main() -> int:
         window.view.page(),
         """
         (() => {
-          const canvas = document.querySelector('canvas');
-          const rect = canvas ? canvas.getBoundingClientRect() : null;
-          return Boolean(window.shellAPI && canvas && rect && rect.width > 120 && rect.height > 120);
+          const canvases = Array.from(document.querySelectorAll('.shell-orb-stage canvas, canvas'));
+          const rect = canvases
+            .map((canvas) => canvas.getBoundingClientRect())
+            .sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
+          return Boolean(rect && rect.width > 120 && rect.height > 120);
         })()
         """,
         timeout_ms=20000,
     )
     if not ready:
-        report["errors"].append("Dashboard canvas or shellAPI did not become ready.")
+        report["diagnostics"] = run_js(
+            window.view.page(),
+            """
+            (() => ({
+              href: location.href,
+              readyState: document.readyState,
+              canvasCount: document.querySelectorAll('canvas').length,
+              shellAPI: Boolean(window.shellAPI),
+              electron: Boolean(window.electron && window.electron.ipcRenderer),
+              bodyText: (document.body && document.body.innerText || '').slice(0, 800)
+            }))()
+            """,
+        )
+        report["errors"].append("Dashboard canvas did not become ready.")
         print(json.dumps(report, indent=2, sort_keys=True))
         window.close()
         return 2
@@ -195,7 +210,10 @@ def main() -> int:
         window.view.page(),
         """
         (() => {
-          const rect = document.querySelector('canvas').getBoundingClientRect();
+          const canvases = Array.from(document.querySelectorAll('.shell-orb-stage canvas, canvas'));
+          const rect = canvases
+            .map((canvas) => canvas.getBoundingClientRect())
+            .sort((a, b) => (b.width * b.height) - (a.width * a.height))[0];
           return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
         })()
         """,

@@ -57,7 +57,7 @@ const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
   return runtime === 'gemini' || runtime === 'backend' || runtime === 'auto' ? runtime : 'auto'
 }
 
-const desktopBridgeExpected = () => Boolean((window as any).qt?.webChannelTransport)
+const desktopBridgeExpected = () => Boolean((window as any).__shellElectronBridge?.call || window.electron?.ipcRenderer)
 
 const hasGeminiVoiceKey = async () => {
   const localKey = normalizeGeminiApiKey(localStorage.getItem('shell_custom_api_key'))

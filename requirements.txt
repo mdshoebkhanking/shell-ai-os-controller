@@ -102,10 +102,7 @@ deep-translator>=1.11.4       # alternate translation backend (shell_translator)
 instagrapi>=2.0.0
 
 
-# ── UI (PyQt6 glass interface) ──────────────────────────────────────
-PyQt6>=6.6.0
-PyQt6-WebEngine>=6.6.0        # WebGL voice orb / QtWebEngine visualizer
-pyqtgraph>=0.13.7             # low-latency live telemetry charts
+# ── UI / desktop shell support ──────────────────────────────────────
 PyOpenGL>=3.1.7               # shell_ui 3D orb visualizer
 GPUtil>=1.4.0                 # GPU stats in hub + UI
 pygame-ce>=2.5.0              # audio fx in shell_music and UI particles

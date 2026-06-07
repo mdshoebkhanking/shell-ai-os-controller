@@ -3,7 +3,6 @@ import sys
 import types
 from pathlib import Path
 
-from PyQt6.QtCore import QCoreApplication
 
 
 class FakeSpeechProcess:
@@ -52,6 +51,7 @@ def test_offline_tts_status_reports_kokoro_unavailable_without_packaged_model(mo
     import shell_offline_tts
 
     monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("SHELL_OFFLINE_TTS", "1")
     monkeypatch.setenv("SHELL_NATURAL_TTS_ENGINE", "auto")
     monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(tmp_path / "missing-model"))
@@ -319,6 +319,31 @@ def test_play_wav_async_uses_winsound_on_windows(monkeypatch, tmp_path):
     assert calls[-1] == (None, fake_winsound.SND_PURGE)
 
 
+def test_play_samples_async_uses_sounddevice_without_wav_player(monkeypatch):
+    import shell_offline_tts
+
+    calls = []
+    fake_sounddevice = types.ModuleType("sounddevice")
+
+    def fake_stop():
+        calls.append(("stop",))
+
+    def fake_play(audio, sample_rate, blocking=False):
+        calls.append(("play", len(audio), sample_rate, blocking))
+
+    fake_sounddevice.stop = fake_stop
+    fake_sounddevice.play = fake_play
+
+    monkeypatch.setitem(sys.modules, "sounddevice", fake_sounddevice)
+
+    playback = shell_offline_tts._play_samples_async([0.1, 0.0, -0.1], 24000)
+
+    assert playback is not None
+    assert calls == [("stop",), ("play", 3, 24000, False)]
+    playback.terminate()
+    assert calls[-1] == ("stop",)
+
+
 def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
     import shell_offline_tts
 
@@ -353,6 +378,7 @@ def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
             {"path": path, "samples": samples, "sample_rate": sample_rate}
         ),
     )
+    monkeypatch.setattr(shell_offline_tts, "_play_samples_async", lambda _samples, _rate: None)
     monkeypatch.setattr(shell_offline_tts, "_play_wav_async", lambda _path: FakeSpeechProcess())
 
     result = shell_offline_tts._speak_kokoro("Open Chrome now. bhai kaise ho?")
@@ -368,6 +394,83 @@ def test_kokoro_speak_renders_routed_segments(monkeypatch, tmp_path):
     assert result["amplitudeFrameMs"] > 0
     assert result["amplitudeFrames"]
     assert captured_audio["sample_rate"] == 24000
+
+
+def test_kokoro_speak_reuses_cached_audio_for_repeated_phrase(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    shell_offline_tts._reset_cached_kokoro_for_tests()
+    model_dir = tmp_path / "kokoro"
+    model_dir.mkdir()
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    calls = []
+
+    class FakeKokoro:
+        def __init__(self, model, voices) -> None:
+            self.model = model
+            self.voices = voices
+
+        def create(self, text, voice, speed, lang):
+            calls.append({"text": text, "voice": voice, "speed": speed, "lang": lang})
+            return [0.1, 0.0], 24000
+
+    fake_kokoro = types.ModuleType("kokoro_onnx")
+    fake_kokoro.Kokoro = FakeKokoro
+
+    monkeypatch.setattr(shell_offline_tts, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setitem(sys.modules, "kokoro_onnx", fake_kokoro)
+    monkeypatch.setenv("SHELL_LANGUAGE", "english")
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+    monkeypatch.setattr(shell_offline_tts, "_write_float_wav", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(shell_offline_tts, "_play_samples_async", lambda _samples, _rate: FakeSpeechProcess())
+    monkeypatch.setattr(shell_offline_tts, "_play_wav_async", lambda _path: FakeSpeechProcess())
+
+    first = shell_offline_tts._speak_kokoro("Shell voice cache")
+    second = shell_offline_tts._speak_kokoro("Shell voice cache")
+
+    assert first["success"] is True
+    assert first["cacheHit"] is False
+    assert second["success"] is True
+    assert second["cacheHit"] is True
+    assert second["synthesisMs"] == 0.0
+    assert len(calls) == 1
+
+
+def test_kokoro_preset_phrase_uses_wav_without_engine(monkeypatch, tmp_path):
+    import shell_offline_tts
+
+    shell_offline_tts._reset_cached_kokoro_for_tests()
+    model_dir = tmp_path / "kokoro"
+    preset_dir = model_dir / "presets"
+    preset_dir.mkdir(parents=True)
+    (model_dir / "kokoro-v1.0.onnx").write_bytes(b"model")
+    (model_dir / "voices-v1.0.bin").write_bytes(b"voices")
+    preset_path = preset_dir / "command-center-ready.wav"
+    preset_path.write_bytes(b"wav")
+    played = []
+
+    monkeypatch.setenv("SHELL_NATURAL_TTS_MODEL_DIR", str(model_dir))
+    monkeypatch.setattr(
+        shell_offline_tts,
+        "_create_kokoro_engine",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("preset should not load Kokoro")),
+    )
+    monkeypatch.setattr(shell_offline_tts, "_play_wav_async", lambda path: played.append(path) or FakeSpeechProcess())
+    monkeypatch.setattr(
+        shell_offline_tts,
+        "_wav_reactivity_metadata",
+        lambda _path: {"durationMs": 1259, "amplitudeFrameMs": 70, "amplitudeFrames": [0.5]},
+    )
+
+    result = shell_offline_tts.speak_offline_tts("Command center ready.")
+
+    assert result["success"] is True
+    assert result["playbackBackend"] == "wav-preset"
+    assert result["cacheHit"] is True
+    assert result["presetHit"] is True
+    assert result["synthesisMs"] == 0.0
+    assert played == [preset_path]
 
 
 def test_kokoro_speak_reuses_cached_engine_after_prewarm(monkeypatch, tmp_path):
@@ -409,8 +512,6 @@ def test_kokoro_speak_reuses_cached_engine_after_prewarm(monkeypatch, tmp_path):
 
 def test_backend_bridge_prefers_offline_tts(monkeypatch):
     import shell_web_ui.host as host
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     fake_process = FakeSpeechProcess()
@@ -481,8 +582,6 @@ def test_backend_bridge_uses_gemini_voice_when_cloud_key_configured(monkeypatch)
 
         def voice_identity_snapshot(self):
             return {"gemini_voice": "Aoede"}
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
 
@@ -510,8 +609,6 @@ def test_backend_bridge_uses_gemini_voice_when_cloud_key_configured(monkeypatch)
 
 def test_backend_bridge_falls_back_to_offline_tts_without_gemini_key(monkeypatch):
     import shell_web_ui.host as host
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     fake_process = FakeSpeechProcess()
@@ -555,8 +652,6 @@ def test_backend_bridge_falls_back_to_offline_tts_without_gemini_key(monkeypatch
 
 def test_backend_bridge_queues_offline_tts_without_blocking(monkeypatch):
     import shell_web_ui.host as host
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     queued_targets = []
@@ -588,8 +683,6 @@ def test_backend_bridge_queues_offline_tts_without_blocking(monkeypatch):
 
 def test_backend_bridge_cloud_error_falls_back_to_offline_tts(monkeypatch):
     import shell_web_ui.host as host
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     fake_process = FakeSpeechProcess()
@@ -631,8 +724,6 @@ def test_backend_bridge_cloud_error_falls_back_to_offline_tts(monkeypatch):
 
 def test_backend_bridge_blocks_os_tts_when_offline_model_missing(monkeypatch):
     import shell_web_ui.host as host
-
-    QCoreApplication.instance() or QCoreApplication([])
     bridge = host.ShellBackendBridge()
     emitted = []
     popen_calls = []
