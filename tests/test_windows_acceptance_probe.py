@@ -156,8 +156,9 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
 
     assert "--app-root" in source
     assert "--runtime-only" in source
-    assert "check_frozen_offline_llm_path" in source
+    assert "check_frozen_offline_llm_catalog" in source
     assert "check_frozen_runtime_probe" in source
+    assert "llm_catalog_ready" in source
     assert "--shell-ai-runtime-probe" in source
     assert "_candidate_failure_summary(tts)" in source
     assert "SHELL_RUNTIME_PROBE_JSON" in desktop_entry

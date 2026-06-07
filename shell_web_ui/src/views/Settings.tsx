@@ -68,11 +68,58 @@ type OfflineLlmStatus = {
   language?: string
   reason?: string
   runtimeDownloads?: boolean
+  installDir?: string
+  selectedModelId?: string
+  modelPath?: string
+  modelSizeBytes?: number
+  installedModels?: OfflineModelOption[]
+  catalog?: OfflineModelCatalog
   candidates?: Array<{
     engine?: string
     available?: boolean
     reason?: string
   }>
+}
+
+type OfflineModelOption = {
+  id?: string
+  name?: string
+  family?: string
+  repo?: string
+  filename?: string
+  quantization?: string
+  sizeMb?: number
+  size_bytes?: number
+  min_ram_gb?: number
+  recommended_ram_gb?: number
+  pc_tier?: string
+  description?: string
+  strengths?: string[]
+  languages?: string[]
+  installed?: boolean
+  recommended?: boolean
+  modelPath?: string
+}
+
+type OfflineModelCatalog = {
+  success?: boolean
+  runtimeDownloads?: boolean
+  installDir?: string
+  systemRamGb?: number
+  selectedModelId?: string
+  selectedModelPath?: string
+  installedModels?: OfflineModelOption[]
+  options?: OfflineModelOption[]
+  status?: OfflineLlmStatus
+}
+
+type OfflineModelDownloadState = {
+  status?: string
+  percent?: number
+  message?: string
+  modelPath?: string
+  downloadedBytes?: number
+  totalBytes?: number
 }
 
 const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
@@ -125,6 +172,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [offlineLlmStatus, setOfflineLlmStatus] = useState<OfflineLlmStatus | null>(null)
   const [offlineLlmMessage, setOfflineLlmMessage] = useState('Offline brain status not checked yet.')
   const [offlineLlmBusy, setOfflineLlmBusy] = useState(false)
+  const [offlineModelCatalog, setOfflineModelCatalog] = useState<OfflineModelCatalog | null>(null)
+  const [offlineModelDownloads, setOfflineModelDownloads] = useState<Record<string, OfflineModelDownloadState>>({})
 
   const [geminiKey, setGeminiKey] = useState(localStorage.getItem('shell_custom_api_key') || '')
   const [groqKey, setGroqKey] = useState(localStorage.getItem('shell_groq_api_key') || '')
@@ -234,6 +283,35 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       applyOfflineLlmStatus(status)
     }).catch(() => {})
   }, [activeTab])
+
+  useEffect(() => {
+    if (!window.electron?.ipcRenderer) return
+    const handleOfflineModelEvent = (_event: unknown, payload: any) => {
+      const modelId = String(payload?.modelId || '')
+      if (modelId) {
+        setOfflineModelDownloads((current) => ({
+          ...current,
+          [modelId]: {
+            status: payload?.status,
+            percent: Number(payload?.percent || 0),
+            message: String(payload?.message || ''),
+            modelPath: payload?.modelPath,
+            downloadedBytes: Number(payload?.downloadedBytes || 0),
+            totalBytes: Number(payload?.totalBytes || 0)
+          }
+        }))
+      }
+      if (payload?.catalog?.status) {
+        applyOfflineLlmStatus(payload.catalog.status)
+      } else if (payload?.status === 'installed') {
+        refreshOfflineLlmStatus()
+      }
+    }
+    window.electron.ipcRenderer.on('offline-llm-download-event', handleOfflineModelEvent)
+    return () => {
+      window.electron?.ipcRenderer?.off?.('offline-llm-download-event', handleOfflineModelEvent)
+    }
+  }, [])
 
   useEffect(() => {
     if (activeTab !== 'keys' || keysHydratedRef.current || !window.electron?.ipcRenderer) return
@@ -448,23 +526,60 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     }
 
     setOfflineLlmStatus(status)
+    const catalog = status.catalog || ((status as any).options ? (status as any) : null)
+    if (catalog) setOfflineModelCatalog(catalog as OfflineModelCatalog)
     if (status.available) {
       setOfflineLlmMessage(`${status.modelFamily || status.label || 'Offline brain'} ready for chat and voice replies.`)
       return
     }
-    setOfflineLlmMessage(status.reason || 'No packaged offline LLM model is ready; Shell will use local fallback answers.')
+    setOfflineLlmMessage(
+      status.reason ||
+        (status.runtimeDownloads
+          ? 'Download one offline brain model below to enable local chat and voice replies.'
+          : 'Offline brain is not ready; Shell will use local fallback answers.')
+    )
   }
 
   const refreshOfflineLlmStatus = async () => {
     setOfflineLlmBusy(true)
     try {
-      const status = await window.electron?.ipcRenderer.invoke('offline-llm-status')
-      applyOfflineLlmStatus(status)
+      const catalog = await window.electron?.ipcRenderer.invoke('offline-llm-catalog')
+      if (catalog && typeof catalog === 'object') {
+        setOfflineModelCatalog(catalog)
+        applyOfflineLlmStatus((catalog as OfflineModelCatalog).status || (catalog as OfflineLlmStatus))
+      } else {
+        const status = await window.electron?.ipcRenderer.invoke('offline-llm-status')
+        applyOfflineLlmStatus(status)
+      }
     } catch (error: any) {
       setOfflineLlmStatus(null)
       setOfflineLlmMessage(`Offline brain check failed: ${error?.message || error}`)
     } finally {
       setOfflineLlmBusy(false)
+    }
+  }
+
+  const downloadOfflineModel = async (modelId: string) => {
+    if (!modelId || !window.electron?.ipcRenderer) return
+    setOfflineModelDownloads((current) => ({
+      ...current,
+      [modelId]: { status: 'queued', percent: 0, message: 'Queued' }
+    }))
+    try {
+      const result = await window.electron.ipcRenderer.invoke('offline-llm-download', { modelId })
+      if (result?.catalog?.status) applyOfflineLlmStatus(result.catalog.status)
+      if (result?.status === 'installed') await refreshOfflineLlmStatus()
+      if (result?.success === false) {
+        setOfflineModelDownloads((current) => ({
+          ...current,
+          [modelId]: { status: 'error', percent: 0, message: result?.message || 'Download failed' }
+        }))
+      }
+    } catch (error: any) {
+      setOfflineModelDownloads((current) => ({
+        ...current,
+        [modelId]: { status: 'error', percent: 0, message: `Download failed: ${error?.message || error}` }
+      }))
     }
   }
 
@@ -661,6 +776,16 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     .map((candidate) => `${String(candidate.engine || '').toUpperCase()}:${candidate.available ? 'READY' : 'NO'}`)
     .filter(Boolean)
     .join('  ')
+  const offlineModelOptions = offlineModelCatalog?.options || offlineLlmStatus?.catalog?.options || []
+  const offlineSelectedModelId =
+    offlineLlmStatus?.selectedModelId || offlineModelCatalog?.selectedModelId || ''
+  const formatOfflineModelSize = (option: OfflineModelOption) => {
+    const sizeMb = Number(option.sizeMb || 0)
+    if (sizeMb > 0) return `${sizeMb.toFixed(sizeMb >= 1000 ? 0 : 1)} MB`
+    const sizeBytes = Number(option.size_bytes || 0)
+    if (sizeBytes > 0) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
+    return 'Size unknown'
+  }
 
   const cardClass =
     'shell-settings-card border p-6 md:p-8 rounded-2xl flex flex-col gap-5 transition-all shadow-lg'
@@ -1037,6 +1162,85 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                     <div className="text-[9px] font-mono leading-relaxed text-zinc-500">
                       {offlineLlmMessage}
                     </div>
+                    {offlineModelOptions.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 gap-2">
+                        {offlineModelOptions.map((option) => {
+                          const modelId = String(option.id || '')
+                          const downloadState = offlineModelDownloads[modelId]
+                          const status = String(downloadState?.status || '')
+                          const isDownloading = status === 'queued' || status === 'downloading' || status === 'verifying'
+                          const isInstalled = Boolean(option.installed) || offlineSelectedModelId === modelId || status === 'installed'
+                          const percent = Math.max(0, Math.min(100, Number(downloadState?.percent || 0)))
+                          return (
+                            <div
+                              key={modelId}
+                              className={`rounded-lg border p-3 transition-all ${
+                                isInstalled
+                                  ? 'border-emerald-500/30 bg-emerald-500/10'
+                                  : option.recommended
+                                    ? 'border-cyan-500/25 bg-cyan-500/5'
+                                    : 'border-white/10 bg-black/30'
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-black tracking-widest text-zinc-200">
+                                      {option.name || option.family || modelId}
+                                    </span>
+                                    {option.recommended && (
+                                      <span className="rounded border border-cyan-500/30 bg-cyan-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-cyan-200">
+                                        RECOMMENDED
+                                      </span>
+                                    )}
+                                    {isInstalled && (
+                                      <span className="rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[7px] font-black tracking-widest text-emerald-200">
+                                        INSTALLED
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1 text-[8px] font-mono uppercase tracking-widest text-zinc-500">
+                                    {option.pc_tier || 'LOCAL'} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
+                                  </div>
+                                  <div className="mt-1 text-[9px] font-mono leading-relaxed text-zinc-500">
+                                    {option.description || 'Offline chat model.'}
+                                  </div>
+                                  {Array.isArray(option.strengths) && option.strengths.length > 0 && (
+                                    <div className="mt-1 truncate text-[8px] font-mono text-zinc-600">
+                                      {option.strengths.slice(0, 4).join('  /  ')}
+                                    </div>
+                                  )}
+                                  {downloadState?.message && (
+                                    <div className="mt-2 text-[8px] font-mono text-cyan-300">
+                                      {downloadState.message}
+                                    </div>
+                                  )}
+                                  {isDownloading && (
+                                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                                      <div
+                                        className="h-full rounded-full bg-cyan-300 transition-all"
+                                        style={{ width: `${percent}%` }}
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={() => downloadOfflineModel(modelId)}
+                                  disabled={!modelId || isDownloading}
+                                  className={`shrink-0 cursor-pointer rounded-md border px-2.5 py-1.5 text-[8px] font-black tracking-widest transition-all disabled:cursor-wait disabled:opacity-60 ${
+                                    isInstalled
+                                      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                                      : 'border-white/10 bg-white/5 text-zinc-300 hover:border-cyan-500/40 hover:text-cyan-200'
+                                  }`}
+                                >
+                                  {isInstalled ? 'USE' : isDownloading ? `${percent}%` : 'DOWNLOAD'}
+                                </button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                     {offlineLlmStatus?.modelFile && (
                       <div className="mt-2 truncate text-[8px] font-mono tracking-widest text-zinc-600">
                         {offlineLlmStatus.modelFile}
@@ -1080,7 +1284,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                   </div>
                   {isSystemActive && (
                     <div
-                      className="absolute inset-0 z-10"
+                      className="pointer-events-none absolute inset-0 z-10"
                       title="Disconnect AI to change voice"
                     ></div>
                   )}

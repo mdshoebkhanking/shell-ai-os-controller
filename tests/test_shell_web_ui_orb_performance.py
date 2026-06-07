@@ -18,10 +18,11 @@ def test_sphere_matches_original_voice_reactive_orb():
     assert "const ORB_BASE_COLOR = '#7ED3BA'" in sphere
     assert "const ORB_AUDIO_COLOR = '#5EEAD4'" in sphere
     assert "const ORB_PEAK_COLOR = '#ECFDF5'" in sphere
-    assert "shellService.analyser.getByteFrequencyData" in sphere
+    assert "__shellVoiceService?.analyser" in sphere
+    assert "analyser.getByteFrequencyData" in sphere
     assert "liveVolume = sum / len / 128" in sphere
     assert "const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))" in sphere
-    assert "const speechPulse = speaking ?" in sphere
+    assert "speechPulse" not in sphere
     assert "colorTarget.lerpColors(colorStart, colorMid" in sphere
     assert "colorTarget.lerpColors(colorMid, colorEnd" in sphere
 
@@ -124,10 +125,11 @@ def test_windows_perf_mode_is_explicit_safe_mode_not_default_packaged_mode():
 def test_shell_ai_uses_adaptive_history_polling_for_windows_smoothness():
     shell_ai = read_project_file("shell_web_ui/src/UI/ShellAI.tsx")
 
-    assert "const PRELOAD_TAB_GAP_MS = 180" in shell_ai
+    assert "const PRELOAD_TAB_GAP_MS = 360" in shell_ai
     assert "new URLSearchParams(window.location.search)" in shell_ai
-    assert "if (shellPerfMode === 'windows') return false" in shell_ai
-    assert "if (shellSearchParams.get('shell_host') === 'pyqt') return false" in shell_ai
+    assert "if (shellSearchParams.get('shell_host') === 'pyqt') return true" in shell_ai
+    assert "if (shellPerfMode === 'windows') return true" in shell_ai
+    assert "shellPerfMode === 'low' || shellPerfMode === 'eco' || shellPerfMode === 'safe'" in shell_ai
     assert "HISTORY_ACTIVE_POLL_MS = 900" in shell_ai
     assert "HISTORY_IDLE_POLL_MS = 2500" in shell_ai
     assert "HISTORY_BACKGROUND_POLL_MS = 6000" in shell_ai

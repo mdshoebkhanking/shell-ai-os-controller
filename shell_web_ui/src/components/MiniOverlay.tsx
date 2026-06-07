@@ -8,8 +8,7 @@ import {
   RiDragMove2Fill
 } from 'react-icons/ri'
 import { GiPowerButton } from 'react-icons/gi'
-import { shellService } from '@renderer/services/shell-voice-ai'
-import { VisionMode } from '@renderer/IndexRoot'
+import type { VisionMode } from '@renderer/IndexRoot'
 
 interface OverlayProps {
   isSystemActive: boolean
@@ -37,7 +36,8 @@ const MiniOverlay = ({
   const dataArrayRef = useRef<Uint8Array | any | null>(null)
 
   useEffect(() => {
-    if (isSystemActive && shellService.analyser) {
+    const shellService = (window as any).__shellVoiceService
+    if (isSystemActive && shellService?.analyser) {
       analyzerRef.current = shellService.analyser
       dataArrayRef.current = new Uint8Array(shellService.analyser.frequencyBinCount)
       const checkAudio = () => {

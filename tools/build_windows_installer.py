@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from shell_offline_model_catalog import OFFLINE_MODEL_OPTIONS  # noqa: E402
+
 try:
     from tools.package_public_release import iter_release_files, validate_release_file_set, version  # type: ignore # noqa: E402
     from tools.production_release_check import build_report  # type: ignore # noqa: E402
@@ -78,6 +80,7 @@ PYINSTALLER_HIDDEN_IMPORTS = [
     "shell_hub",
     "shell_local_stt",
     "shell_offline_llm",
+    "shell_offline_model_catalog",
     "shell_tool_gateway",
     "shell_ui.splash_screen",
     "shell_web_ui.host",
@@ -222,7 +225,17 @@ def stage_release_files() -> dict[str, object]:
 def copy_staged_model_assets_to_stage() -> dict[str, object]:
     copied: dict[str, object] = {}
     source_root = ROOT / "models"
-    for family in ("llm", "tts", "stt"):
+    llm_target = APP_STAGE / "models" / "llm"
+    if llm_target.exists():
+        shutil.rmtree(llm_target)
+    copied["llm"] = {
+        "status": "on-demand",
+        "files": 0,
+        "size_bytes": 0,
+        "runtime_downloads": True,
+        "reason": "Offline chat models are downloaded from Settings after install.",
+    }
+    for family in ("tts", "stt"):
         source = source_root / family
         target = APP_STAGE / "models" / family
         if not source.exists():
@@ -392,54 +405,56 @@ def require_packaged_kokoro_tts(report: dict[str, object]) -> None:
 
 def offline_llm_stage_report() -> dict[str, object]:
     model_files = [path for path in LLM_MODEL_STAGE.rglob("*.gguf") if path.is_file()] if LLM_MODEL_STAGE.exists() else []
-    total_bytes = sum(path.stat().st_size for path in model_files)
-    falcon_ready = any(path.name.lower() == PRIMARY_LLM_MODEL_FILE.lower() for path in model_files)
-    qwen_ready = any(path.name.lower() == LEGACY_LLM_MODEL_FILE.lower() for path in model_files)
-    ready = falcon_ready or qwen_ready
-    status = "ready" if ready else "fallback"
-    active_family = PRIMARY_LLM_MODEL_FAMILY if falcon_ready else LEGACY_LLM_MODEL_FAMILY if qwen_ready else PRIMARY_LLM_MODEL_FAMILY
-    active_repo = PRIMARY_LLM_MODEL_REPO if falcon_ready else LEGACY_LLM_MODEL_REPO if qwen_ready else PRIMARY_LLM_MODEL_REPO
-    reason = (
-        "Packaged offline LLM model assets detected."
-        if status == "ready"
-        else "No packaged GGUF offline LLM model assets detected; Shell will use provider/local deterministic fallback."
-    )
     return {
-        "status": status,
-        "reason": reason,
+        "status": "on-demand",
+        "reason": "Offline LLM GGUF assets are intentionally not bundled. Users install a small model from Settings.",
         "model_dir": str(LLM_MODEL_STAGE),
-        "model_file_count": len(model_files),
-        "total_size_bytes": total_bytes,
+        "model_file_count": 0,
+        "ignored_staged_model_file_count": len(model_files),
+        "total_size_bytes": 0,
         "recommended_engine": "llama-cpp-python",
-        "model_family": active_family,
-        "model_repo": active_repo,
-        "primary_model_family": PRIMARY_LLM_MODEL_FAMILY,
-        "primary_model_repo": PRIMARY_LLM_MODEL_REPO,
-        "primary_model_license": PRIMARY_LLM_MODEL_LICENSE,
-        "primary_model_license_url": PRIMARY_LLM_MODEL_LICENSE_URL,
+        "model_family": "Installable GGUF catalog",
+        "model_repo": "Hugging Face model catalog",
+        "primary_model_family": "Qwen2.5-0.5B-Instruct-GGUF",
+        "primary_model_repo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+        "primary_model_license": "Apache-2.0",
+        "primary_model_license_url": "https://www.apache.org/licenses/LICENSE-2.0",
         "language_support": ["english", "hinglish", "hindi"],
-        "runtime_downloads": False,
+        "runtime_downloads": True,
+        "catalog_options": [
+            {
+                "id": option.id,
+                "name": option.name,
+                "repo": option.repo,
+                "filename": option.filename,
+                "size_bytes": option.size_bytes,
+                "sha256": option.sha256,
+                "pc_tier": option.pc_tier,
+            }
+            for option in OFFLINE_MODEL_OPTIONS
+        ],
         "engines": {
             "llama_cpp_python": {
-                "ready": ready,
-                "primary_ready": falcon_ready,
-                "legacy_qwen_ready": qwen_ready,
-                "expected_files": [PRIMARY_LLM_MODEL_FILE],
-                "fallback_files": [LEGACY_LLM_MODEL_FILE],
-                "model_family": active_family,
+                "ready": True,
+                "model_bundled": False,
+                "runtime_downloads": True,
+                "expected_files": [],
+                "fallback_files": [],
+                "model_family": "Installable GGUF catalog",
             },
         },
     }
 
 
 def require_packaged_offline_llm(report: dict[str, object]) -> None:
+    if report.get("runtime_downloads") is True and report.get("status") == "on-demand":
+        return
     engines = report.get("engines") if isinstance(report, dict) else {}
     llama_cpp = engines.get("llama_cpp_python") if isinstance(engines, dict) else {}
     if isinstance(llama_cpp, dict) and llama_cpp.get("ready") is True:
         return
     raise RuntimeError(
-        "Windows EXE build requires packaged offline LLM GGUF assets. "
-        "Run tools\\stage_falcon_offline_llm_assets.py --variant q4_k_m before building."
+        "Windows EXE build requires the offline LLM on-demand catalog/runtime metadata."
     )
 
 

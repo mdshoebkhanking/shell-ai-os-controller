@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import base64
+import hashlib
 import mimetypes
 import os
 import platform
@@ -88,6 +89,32 @@ except Exception:  # pragma: no cover - fallback keeps the host importable
                 return {"success": False, "reply": "", "reason": self.reason}
 
         return _FallbackResult()
+
+try:
+    from shell_offline_model_catalog import (
+        catalog_payload as offline_llm_catalog_payload,
+        get_model_option as get_offline_model_option,
+        model_install_dir as offline_model_install_dir,
+        write_model_metadata as write_offline_model_metadata,
+    )
+except Exception:  # pragma: no cover - fallback keeps the host importable
+    def offline_llm_catalog_payload() -> dict[str, Any]:
+        return {
+            "success": False,
+            "runtimeDownloads": True,
+            "options": [],
+            "installedModels": [],
+            "reason": "Offline model catalog could not be imported.",
+        }
+
+    def get_offline_model_option(_model_id: str) -> Any:
+        return None
+
+    def offline_model_install_dir(model_id: str) -> Path:
+        return PROJECT_ROOT / ".shell_runtime" / "models" / "llm" / str(model_id)
+
+    def write_offline_model_metadata(_option: Any, *, model_path: Path) -> None:
+        return None
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -206,6 +233,8 @@ class ShellBackendBridge(QObject):
         self._cloud_tts_speaker: Any | None = None
         self._cloud_tts_fallback_text = ""
         self._chat_provider_network_cache: tuple[float, str, bool] = (0.0, "", False)
+        self._offline_llm_download_lock = threading.Lock()
+        self._offline_llm_downloads: dict[str, dict[str, Any]] = {}
         self._maybe_prewarm_offline_tts()
 
     def _maybe_prewarm_offline_tts(self) -> None:
@@ -282,6 +311,8 @@ class ShellBackendBridge(QObject):
             "chat-message": self._chat_message,
             "offline-tts-status": self._offline_tts_status,
             "offline-llm-status": self._offline_llm_status,
+            "offline-llm-catalog": self._offline_llm_catalog,
+            "offline-llm-download": self._offline_llm_download,
             "probe-voice-amplitude": self._probe_voice_amplitude,
             "speak-text": self._speak_text,
             "stop-speech": self._stop_speech,
@@ -2188,6 +2219,175 @@ class ShellBackendBridge(QObject):
 
     def _offline_llm_status(self, _args: list[Any] | None = None) -> dict[str, Any]:
         return offline_llm_status()
+
+    def _offline_llm_catalog(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        status = offline_llm_status()
+        catalog = offline_llm_catalog_payload()
+        if isinstance(status, dict):
+            catalog["status"] = status
+            catalog["available"] = status.get("available") is True
+            catalog["selectedModelId"] = status.get("selectedModelId") or catalog.get("selectedModelId") or ""
+            catalog["selectedModelPath"] = status.get("modelPath") or catalog.get("selectedModelPath") or ""
+        with self._offline_llm_download_lock:
+            catalog["downloads"] = dict(self._offline_llm_downloads)
+        return catalog
+
+    def _offline_llm_download(self, args: list[Any]) -> dict[str, Any]:
+        payload = args[0] if args and isinstance(args[0], dict) else {}
+        model_id = str(payload.get("modelId") or payload.get("id") or "").strip()
+        option = get_offline_model_option(model_id)
+        if option is None:
+            return {"success": False, "message": "Unknown offline model option.", "modelId": model_id}
+
+        target_dir = offline_model_install_dir(option.id)
+        target_path = target_dir / option.filename
+        if target_path.exists() and target_path.is_file():
+            write_offline_model_metadata(option, model_path=target_path)
+            try:
+                from shell_offline_llm import _reset_cached_model_for_tests
+
+                _reset_cached_model_for_tests()
+            except Exception:
+                pass
+            return {
+                "success": True,
+                "status": "installed",
+                "modelId": option.id,
+                "modelPath": str(target_path),
+                "catalog": self._offline_llm_catalog(),
+            }
+
+        with self._offline_llm_download_lock:
+            current = self._offline_llm_downloads.get(option.id)
+            if current and current.get("status") in {"queued", "downloading", "verifying"}:
+                return {"success": True, "status": current.get("status"), "modelId": option.id, "download": current}
+            self._offline_llm_downloads[option.id] = {
+                "status": "queued",
+                "percent": 0,
+                "downloadedBytes": 0,
+                "totalBytes": option.size_bytes,
+                "message": "Queued",
+            }
+
+        self._start_background_task("ShellOfflineModelDownload", lambda: self._download_offline_llm_model(option))
+        return {"success": True, "status": "queued", "modelId": option.id}
+
+    def _set_offline_llm_download_state(self, model_id: str, state: dict[str, Any]) -> None:
+        with self._offline_llm_download_lock:
+            current = dict(self._offline_llm_downloads.get(model_id) or {})
+            current.update(state)
+            self._offline_llm_downloads[model_id] = current
+        self.emit_event("offline-llm-download-event", {"modelId": model_id, **current})
+
+    def _download_offline_llm_model(self, option: Any) -> None:
+        target_dir = offline_model_install_dir(option.id)
+        target_path = target_dir / option.filename
+        partial_path = target_dir / f"{option.filename}.download"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        parsed_url = urllib.parse.urlparse(option.download_url)
+        if parsed_url.scheme != "https" or parsed_url.netloc.lower() != "huggingface.co":
+            self._set_offline_llm_download_state(
+                option.id,
+                {"status": "error", "message": "Offline model download host is not allowed.", "percent": 0},
+            )
+            return
+
+        downloaded = 0
+        digest = hashlib.sha256()
+        self._set_offline_llm_download_state(
+            option.id,
+            {
+                "status": "downloading",
+                "message": f"Downloading {option.name}",
+                "percent": 0,
+                "downloadedBytes": 0,
+                "totalBytes": option.size_bytes,
+            },
+        )
+        try:
+            request = urllib.request.Request(
+                option.download_url,
+                headers={"User-Agent": f"ShellAI/{self._get_app_version()} offline-model-downloader"},
+            )
+            with urllib.request.urlopen(request, timeout=45) as response, partial_path.open("wb") as output:
+                content_length = response.headers.get("Content-Length")
+                total_bytes = int(content_length) if content_length and content_length.isdigit() else int(option.size_bytes)
+                while True:
+                    chunk = response.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+                    digest.update(chunk)
+                    downloaded += len(chunk)
+                    percent = min(99, round((downloaded / max(1, total_bytes)) * 100))
+                    self._set_offline_llm_download_state(
+                        option.id,
+                        {
+                            "status": "downloading",
+                            "message": f"Downloading {option.name}",
+                            "percent": percent,
+                            "downloadedBytes": downloaded,
+                            "totalBytes": total_bytes,
+                        },
+                    )
+
+            self._set_offline_llm_download_state(
+                option.id,
+                {
+                    "status": "verifying",
+                    "message": "Verifying model checksum",
+                    "percent": 99,
+                    "downloadedBytes": downloaded,
+                    "totalBytes": option.size_bytes,
+                },
+            )
+            actual_sha = digest.hexdigest().lower()
+            if actual_sha != str(option.sha256).lower():
+                try:
+                    partial_path.unlink()
+                except Exception:
+                    pass
+                self._set_offline_llm_download_state(
+                    option.id,
+                    {
+                        "status": "error",
+                        "message": "Model checksum failed. Download was discarded.",
+                        "percent": 0,
+                        "sha256": actual_sha,
+                    },
+                )
+                return
+
+            partial_path.replace(target_path)
+            write_offline_model_metadata(option, model_path=target_path)
+            try:
+                from shell_offline_llm import _reset_cached_model_for_tests
+
+                _reset_cached_model_for_tests()
+            except Exception:
+                pass
+            self._set_offline_llm_download_state(
+                option.id,
+                {
+                    "status": "installed",
+                    "message": f"{option.name} installed",
+                    "percent": 100,
+                    "downloadedBytes": target_path.stat().st_size,
+                    "totalBytes": option.size_bytes,
+                    "modelPath": str(target_path),
+                    "catalog": self._offline_llm_catalog(),
+                },
+            )
+        except Exception as exc:
+            try:
+                if partial_path.exists():
+                    partial_path.unlink()
+            except Exception:
+                pass
+            self._set_offline_llm_download_state(
+                option.id,
+                {"status": "error", "message": f"Model download failed: {exc}", "percent": 0},
+            )
 
     def _probe_voice_amplitude(self, args: list[Any]) -> dict[str, Any]:
         if os.environ.get("SHELL_UI_PROBE_ENABLED", "").strip().lower() not in {"1", "true", "yes", "on"}:

@@ -78,6 +78,91 @@ const writeFallbackGallery = (images: unknown[]) => {
   } catch {}
 }
 
+const fallbackOfflineModelOptions = [
+  {
+    id: 'smollm2-135m-q4',
+    name: 'SmolLM2 135M Q4',
+    family: 'SmolLM2-135M-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 100.6,
+    pc_tier: 'Ultra low PC',
+    description: 'Smallest chat brain for very low memory machines.',
+    strengths: ['basic chat', 'short answers', 'voice replies']
+  },
+  {
+    id: 'smollm2-360m-q4',
+    name: 'SmolLM2 360M Q4',
+    family: 'SmolLM2-360M-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 258.1,
+    pc_tier: 'Low PC',
+    description: 'Balanced tiny model for 2-4 GB RAM systems.',
+    strengths: ['chat', 'summaries', 'voice replies']
+  },
+  {
+    id: 'qwen2.5-0.5b-q3',
+    name: 'Qwen2.5 0.5B Q3',
+    family: 'Qwen2.5-0.5B-Instruct-GGUF',
+    quantization: 'Q3_K_M',
+    sizeMb: 412.0,
+    pc_tier: '4 GB RAM',
+    description: 'Good general offline assistant with a small footprint.',
+    strengths: ['chat', 'Hinglish-style replies', 'simple writing']
+  },
+  {
+    id: 'qwen2.5-0.5b-q4',
+    name: 'Qwen2.5 0.5B Q4',
+    family: 'Qwen2.5-0.5B-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 468.6,
+    pc_tier: 'Recommended',
+    description: 'Recommended local brain for normal chat and voice use.',
+    strengths: ['chat', 'Hinglish-style replies', 'reasoning', 'short drafting'],
+    recommended: true
+  },
+  {
+    id: 'qwen2.5-coder-1.5b-q2',
+    name: 'Qwen2.5 Coder 1.5B Q2',
+    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
+    quantization: 'Q2_K',
+    sizeMb: 718.0,
+    pc_tier: 'Coding lite',
+    description: 'Smaller coding model for websites, scripts, and structured drafts.',
+    strengths: ['coding', 'website drafts', 'PDF/script outlines', 'tool planning']
+  },
+  {
+    id: 'qwen2.5-coder-1.5b-q4',
+    name: 'Qwen2.5 Coder 1.5B Q4',
+    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
+    quantization: 'Q4_K_M',
+    sizeMb: 1065.6,
+    pc_tier: 'Best local coding',
+    description: 'Best quality local option in this lightweight catalog.',
+    strengths: ['coding', 'website generation', 'longer drafts', 'agent planning']
+  }
+]
+
+const fallbackOfflineModelCatalog = () => ({
+  success: true,
+  runtimeDownloads: true,
+  installDir: '',
+  selectedModelId: '',
+  installedModels: [],
+  options: fallbackOfflineModelOptions,
+  status: {
+    success: true,
+    available: false,
+    status: 'fallback',
+    engine: 'browser',
+    label: 'Installable offline chat brain',
+    modelFamily: 'Qwen2.5-0.5B-Instruct-GGUF',
+    language: readShellLanguage(),
+    reason: 'Backend bridge is offline; download and local inference are available in the Shell desktop host.',
+    runtimeDownloads: true,
+    candidates: []
+  }
+})
+
 const languageReply = (key: 'backendOffline' | 'noRecall' | 'recall' | 'france' | 'pythonMemory' | 'networkProtocol' | 'filesAttached' | 'hello' | 'identity', values: Record<string, string> = {}) => {
   const language = readShellLanguage()
   const replies = {
@@ -546,17 +631,14 @@ const fallbackInvoke = async (channel: string, ...args: unknown[]) => {
         candidates: []
       }
     case 'offline-llm-status':
+      return fallbackOfflineModelCatalog().status
+    case 'offline-llm-catalog':
+      return fallbackOfflineModelCatalog()
+    case 'offline-llm-download':
       return {
-        success: true,
-        available: false,
-        status: 'fallback',
-        engine: 'browser',
-        label: 'Packaged offline chat brain',
-        modelFamily: 'Qwen3-1.7B-GGUF',
-        language: readShellLanguage(),
-        reason: 'Backend bridge is offline; packaged local LLM status is only available from the Python host.',
-        runtimeDownloads: false,
-        candidates: []
+        success: false,
+        source: 'browser-fallback',
+        error: 'Offline model downloads require the Shell desktop backend.'
       }
     case 'stop-speech':
       return { success: true, source: 'shell-speech-stop' }

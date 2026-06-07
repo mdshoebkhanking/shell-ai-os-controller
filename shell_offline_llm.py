@@ -1,8 +1,8 @@
-"""Packaged offline LLM support for Shell chat.
+"""On-demand offline LLM support for Shell chat.
 
-This module never downloads a model at runtime. Offline chat becomes available
-only when a GGUF model and a compatible local runtime have already been bundled
-with Shell or explicitly configured by environment variables.
+The Windows installer does not bundle a GGUF chat model. Offline chat becomes
+available when the user installs one from Settings, or when a GGUF model is
+explicitly configured by environment variables.
 """
 
 from __future__ import annotations
@@ -17,13 +17,25 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from shell_offline_model_catalog import (
+    catalog_payload,
+    installed_model_options,
+    option_for_filename,
+    selected_installed_model_path,
+)
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_MODEL_FAMILY = "Falcon-H1-1.5B-Deep-Instruct-GGUF"
-DEFAULT_MODEL_REPO = "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
-DEFAULT_MODEL_FILE = "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf"
-DEFAULT_MODEL_LICENSE = "Falcon-LLM License"
-DEFAULT_MODEL_LICENSE_URL = "https://falconllm.tii.ae/falcon-terms-and-conditions.html"
+DEFAULT_MODEL_FAMILY = "Qwen2.5-0.5B-Instruct-GGUF"
+DEFAULT_MODEL_REPO = "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
+DEFAULT_MODEL_FILE = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+DEFAULT_MODEL_LICENSE = "Apache-2.0"
+DEFAULT_MODEL_LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
+LEGACY_FALCON_MODEL_FAMILY = "Falcon-H1-1.5B-Deep-Instruct-GGUF"
+LEGACY_FALCON_MODEL_REPO = "tiiuae/Falcon-H1-1.5B-Deep-Instruct-GGUF"
+LEGACY_FALCON_MODEL_FILE = "Falcon-H1-1.5B-Deep-Instruct-Q4_K_M.gguf"
+LEGACY_FALCON_MODEL_LICENSE = "Falcon-LLM License"
+LEGACY_FALCON_MODEL_LICENSE_URL = "https://falconllm.tii.ae/falcon-terms-and-conditions.html"
 LEGACY_QWEN_MODEL_FAMILY = "Qwen3-1.7B-GGUF"
 LEGACY_QWEN_MODEL_REPO = "ggml-org/Qwen3-1.7B-GGUF"
 LEGACY_QWEN_MODEL_FILE = "Qwen3-1.7B-Q4_K_M.gguf"
@@ -129,6 +141,9 @@ def _candidate_model_paths() -> list[Path]:
     explicit_file = os.environ.get("SHELL_OFFLINE_LLM_MODEL_PATH", "").strip()
     if explicit_file:
         paths.append(Path(explicit_file).expanduser())
+    selected_model_path = selected_installed_model_path()
+    if selected_model_path:
+        paths.append(selected_model_path)
 
     roots: list[Path] = []
     explicit_dir = os.environ.get("SHELL_OFFLINE_LLM_MODEL_DIR", "").strip()
@@ -163,9 +178,10 @@ def _candidate_model_paths() -> list[Path]:
             ]
         )
 
-    configured_name = os.environ.get("SHELL_OFFLINE_LLM_MODEL_FILE", DEFAULT_MODEL_FILE).strip() or DEFAULT_MODEL_FILE
+    configured_name = os.environ.get("SHELL_OFFLINE_LLM_MODEL_FILE", "").strip()
     for root in roots:
-        paths.append(root / configured_name)
+        if configured_name:
+            paths.append(root / configured_name)
         paths.extend(sorted(root.glob("*.gguf")) if root.exists() else [])
     seen: set[str] = set()
     unique: list[Path] = []
@@ -186,18 +202,33 @@ def _find_model_path() -> Path | None:
 
 
 def _model_family_for_path(model_path: Path | None) -> str:
+    catalog_option = option_for_filename(model_path.name if model_path else "")
+    if catalog_option:
+        return catalog_option.family
+    if model_path and model_path.name.lower().startswith("falcon-h1-1.5b"):
+        return LEGACY_FALCON_MODEL_FAMILY
     if model_path and model_path.name.lower().startswith("qwen3-1.7b"):
         return LEGACY_QWEN_MODEL_FAMILY
     return DEFAULT_MODEL_FAMILY
 
 
 def _model_repo_for_path(model_path: Path | None) -> str:
+    catalog_option = option_for_filename(model_path.name if model_path else "")
+    if catalog_option:
+        return catalog_option.repo
+    if model_path and model_path.name.lower().startswith("falcon-h1-1.5b"):
+        return LEGACY_FALCON_MODEL_REPO
     if model_path and model_path.name.lower().startswith("qwen3-1.7b"):
         return LEGACY_QWEN_MODEL_REPO
     return DEFAULT_MODEL_REPO
 
 
 def _model_license_for_path(model_path: Path | None) -> tuple[str, str]:
+    catalog_option = option_for_filename(model_path.name if model_path else "")
+    if catalog_option:
+        return catalog_option.license, catalog_option.license_url
+    if model_path and model_path.name.lower().startswith("falcon-h1-1.5b"):
+        return LEGACY_FALCON_MODEL_LICENSE, LEGACY_FALCON_MODEL_LICENSE_URL
     if model_path and model_path.name.lower().startswith("qwen3-1.7b"):
         return LEGACY_QWEN_MODEL_LICENSE, ""
     return DEFAULT_MODEL_LICENSE, DEFAULT_MODEL_LICENSE_URL
@@ -216,21 +247,21 @@ def _status_candidate() -> OfflineLLMCandidate:
     engine = _engine_setting()
     model_path = _find_model_path()
     if _env_disabled():
-        return OfflineLLMCandidate(engine, "Packaged offline chat brain", model_path, False, "Offline LLM is disabled.")
+        return OfflineLLMCandidate(engine, "Installable offline chat brain", model_path, False, "Offline LLM is disabled.")
     if engine not in {"auto", DEFAULT_ENGINE, "llama_cpp", "llama-cpp"}:
-        return OfflineLLMCandidate(engine, "Packaged offline chat brain", model_path, False, f"Unsupported offline LLM engine: {engine}")
+        return OfflineLLMCandidate(engine, "Installable offline chat brain", model_path, False, f"Unsupported offline LLM engine: {engine}")
     if not model_path:
         return OfflineLLMCandidate(
             DEFAULT_ENGINE,
-            "Packaged offline chat brain",
+            "Installable offline chat brain",
             None,
             False,
-            "No packaged GGUF offline LLM model was found.",
+            "No offline GGUF model is installed yet. Open Settings > General > Offline Brain and download a model.",
         )
     llama_class, runtime_reason = _load_llama_class()
     if llama_class is None:
-        return OfflineLLMCandidate(DEFAULT_ENGINE, "Packaged offline chat brain", model_path, False, runtime_reason)
-    return OfflineLLMCandidate(DEFAULT_ENGINE, "Packaged offline chat brain", model_path, True, "Packaged offline LLM is ready.")
+        return OfflineLLMCandidate(DEFAULT_ENGINE, "Installable offline chat brain", model_path, False, runtime_reason)
+    return OfflineLLMCandidate(DEFAULT_ENGINE, "Installable offline chat brain", model_path, True, "Offline LLM is ready.")
 
 
 def offline_llm_status() -> dict[str, Any]:
@@ -238,6 +269,7 @@ def offline_llm_status() -> dict[str, Any]:
     model_path = candidate.model_path
     size_bytes = model_path.stat().st_size if model_path and model_path.exists() else 0
     model_license, model_license_url = _model_license_for_path(model_path)
+    catalog = catalog_payload()
     return {
         "success": True,
         "available": candidate.available,
@@ -254,7 +286,11 @@ def offline_llm_status() -> dict[str, Any]:
         "modelLicenseUrl": model_license_url,
         "language": _shell_language(),
         "languageSupport": list(SUPPORTED_SHELL_LANGUAGE_ORDER),
-        "runtimeDownloads": False,
+        "runtimeDownloads": True,
+        "installDir": catalog.get("installDir", ""),
+        "selectedModelId": catalog.get("selectedModelId", ""),
+        "installedModels": installed_model_options(),
+        "catalog": catalog,
         "candidates": [candidate.as_dict()],
         "loadMs": _CACHED_MODEL_LOAD_MS,
     }

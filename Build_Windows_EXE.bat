@@ -83,10 +83,7 @@ echo Staging offline TTS assets...
 set "SHELL_RC=!ERRORLEVEL!"
 if not "!SHELL_RC!"=="0" goto failed
 
-echo Staging offline LLM assets...
-%PY_CMD% tools\stage_falcon_offline_llm_assets.py --variant q4_k_m
-set "SHELL_RC=!ERRORLEVEL!"
-if not "!SHELL_RC!"=="0" goto failed
+echo Offline LLM models are installed on demand from Shell Settings.
 
 echo Staging offline STT assets...
 %PY_CMD% tools\stage_sherpa_stt_assets.py

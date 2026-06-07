@@ -1,22 +1,22 @@
-import { useState, useEffect, useRef } from 'react'
+import { Suspense, lazy, useState, useEffect, useRef } from 'react'
 import MiniOverlay from './components/MiniOverlay'
-import { shellService } from './services/shell-voice-ai'
 import { getScreenSourceId } from './hooks/CaptureDesktop'
 import ShellAI from './UI/ShellAI'
-import TerminalOverlay from './components/TerminalOverlay'
-import LeafletMapWidget from './Widgets/MapView'
-import ImageWidget from './Widgets/ImageWidget'
-import EmailWidget from './Widgets/EmailWidget'
-import WeatherWidget from './Widgets/WeatherWidget'
-import StockWidget from './Widgets/StockWidget'
-import LiveCodingWidget from './Widgets/LiveCodingWidget'
-import WormholeWidget from './Widgets/WormholeWidget'
-import OracleWidget from './Widgets/RagOrcaleWidget'
-import ResearchWidget from './Widgets/DeepResearch'
-import SemanticWidget from './Widgets/SematicSearch'
-import SmartDropZonesWidget from './Widgets/SmartZoneWidget'
 import { shellSpeechInstruction } from './services/language-settings'
 import { normalizeGeminiApiKey } from './services/api-key-utils'
+
+const TerminalOverlay = lazy(() => import('./components/TerminalOverlay'))
+const LeafletMapWidget = lazy(() => import('./Widgets/MapView'))
+const ImageWidget = lazy(() => import('./Widgets/ImageWidget'))
+const EmailWidget = lazy(() => import('./Widgets/EmailWidget'))
+const WeatherWidget = lazy(() => import('./Widgets/WeatherWidget'))
+const StockWidget = lazy(() => import('./Widgets/StockWidget'))
+const LiveCodingWidget = lazy(() => import('./Widgets/LiveCodingWidget'))
+const WormholeWidget = lazy(() => import('./Widgets/WormholeWidget'))
+const OracleWidget = lazy(() => import('./Widgets/RagOrcaleWidget'))
+const ResearchWidget = lazy(() => import('./Widgets/DeepResearch'))
+const SemanticWidget = lazy(() => import('./Widgets/SematicSearch'))
+const SmartDropZonesWidget = lazy(() => import('./Widgets/SmartZoneWidget'))
 
 export type VisionMode = 'camera' | 'screen' | 'none'
 
@@ -26,6 +26,31 @@ type SystemNotice = {
 }
 
 type VoiceRuntime = 'auto' | 'gemini' | 'backend'
+type ShellVoiceService = typeof import('./services/shell-voice-ai')['shellService']
+type ShellVoiceWindow = Window & {
+  __shellVoiceService?: ShellVoiceService
+}
+type IdleWindow = Window & {
+  requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+  cancelIdleCallback?: (handle: number) => void
+}
+
+let shellVoiceServicePromise: Promise<ShellVoiceService> | null = null
+
+const getShellService = async () => {
+  if ((window as ShellVoiceWindow).__shellVoiceService) {
+    return (window as ShellVoiceWindow).__shellVoiceService as ShellVoiceService
+  }
+  if (!shellVoiceServicePromise) {
+    shellVoiceServicePromise = import('./services/shell-voice-ai').then((module) => {
+      ;(window as ShellVoiceWindow).__shellVoiceService = module.shellService
+      return module.shellService
+    })
+  }
+  return shellVoiceServicePromise
+}
+
+const peekShellService = () => (window as ShellVoiceWindow).__shellVoiceService || null
 
 const normalizeVoiceRuntime = (value: unknown): VoiceRuntime => {
   const runtime = String(value || '').trim().toLowerCase()
@@ -58,6 +83,7 @@ const IndexRoot = () => {
   const [isMicMuted, setIsMicMuted] = useState(true)
   const [backendVoiceState, setBackendVoiceState] = useState('OFFLINE')
   const [systemNotice, setSystemNotice] = useState<SystemNotice | null>(null)
+  const [mountDeferredWidgets, setMountDeferredWidgets] = useState(false)
   const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntime>(() =>
     normalizeVoiceRuntime(localStorage.getItem('shell_voice_runtime'))
   )
@@ -92,6 +118,26 @@ const IndexRoot = () => {
     window.electron.ipcRenderer.on('overlay-mode', (_e, mode) => setIsOverlay(mode))
     return () => {
       window.electron.ipcRenderer.removeAllListeners('overlay-mode')
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const mount = () => {
+      if (!cancelled) setMountDeferredWidgets(true)
+    }
+    const idleWindow = window as IdleWindow
+    if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+      const handle = idleWindow.requestIdleCallback(mount, { timeout: 1800 })
+      return () => {
+        cancelled = true
+        idleWindow.cancelIdleCallback?.(handle)
+      }
+    }
+    const timer = window.setTimeout(mount, 1200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
     }
   }, [])
 
@@ -152,7 +198,7 @@ const IndexRoot = () => {
         )
         setIsSystemActive(true)
         setIsMicMuted(true)
-        shellService.setMute(true)
+        peekShellService()?.setMute(true)
         return
       }
       if (state === 'ERROR' || state === 'CLOSED') {
@@ -174,7 +220,8 @@ const IndexRoot = () => {
   useEffect(() => {
     const watchdog = setInterval(() => {
       if (usesShellBackend) return
-      if (isSystemActive && !shellService.isConnected) {
+      const shellService = peekShellService()
+      if (isSystemActive && shellService && !shellService.isConnected) {
         if (shellService.lastError) {
           setBackendVoiceState(`ERROR: ${shellService.lastError}`)
           showSystemNotice('Gemini Live failed', shellService.lastError)
@@ -189,6 +236,7 @@ const IndexRoot = () => {
 
   const toggleSystem = async () => {
     if (!isSystemActive) {
+      let shellService: ShellVoiceService | null = null
       try {
         if (usesShellBackend) {
           const result = (await window.shellAPI.startVoice()) as any
@@ -206,6 +254,7 @@ const IndexRoot = () => {
           clearSystemNotice()
           return
         }
+        shellService = await getShellService()
         await shellService.connect()
         await shellService.waitUntilReady()
         const hasMicrophoneInput = shellService.hasMicrophoneInput
@@ -233,7 +282,7 @@ const IndexRoot = () => {
         setBackendVoiceState(`ERROR: ${message}`)
         showSystemNotice('Gemini Live failed', message)
         if (err?.message === 'NO_API_KEY') {
-          shellService.lastError = message
+          if (shellService) shellService.lastError = message
         }
         setIsSystemActive(false)
         setIsMicMuted(true)
@@ -242,12 +291,12 @@ const IndexRoot = () => {
       if (usesShellBackend) {
         await window.shellAPI.stopVoice()
       } else {
-        shellService.disconnect()
+        peekShellService()?.disconnect()
       }
       setIsSystemActive(false)
       setIsMicMuted(true)
       setBackendVoiceState('OFFLINE')
-      shellService.setMute(true)
+      peekShellService()?.setMute(true)
       stopVision()
     }
   }
@@ -260,11 +309,12 @@ const IndexRoot = () => {
       )
       return
     }
-    if (!usesShellBackend && isSystemActive && !shellService.hasMicrophoneInput && isMicMuted) {
-      shellService.setMute(true)
+    const loadedShellService = peekShellService()
+    if (!usesShellBackend && isSystemActive && loadedShellService && !loadedShellService.hasMicrophoneInput && isMicMuted) {
+      loadedShellService.setMute(true)
       showSystemNotice(
         'Microphone not found',
-        shellService.lastError || 'Shell can still start and speak; voice input is disabled.'
+        loadedShellService.lastError || 'Shell can still start and speak; voice input is disabled.'
       )
       return
     }
@@ -274,12 +324,14 @@ const IndexRoot = () => {
       await window.shellAPI.call('set-voice-muted', s)
       return
     }
+    const shellService = await getShellService()
     shellService.setMute(s)
   }
 
   const speakRealVoice = async (text: string) => {
     if (!usesGeminiVoice) return false
     if (!(await hasGeminiVoiceKey())) return false
+    const shellService = await getShellService()
     try {
       if (!shellService.isConnected) {
         await shellService.connect()
@@ -410,7 +462,8 @@ const IndexRoot = () => {
 
     aiIntervalRef.current = setInterval(() => {
       const vid = processingVideoRef.current
-      if (vid && vid.readyState === 4 && shellService.socket?.readyState === WebSocket.OPEN) {
+      const shellService = peekShellService()
+      if (vid && vid.readyState === 4 && shellService?.socket?.readyState === WebSocket.OPEN) {
         const canvas = document.createElement('canvas')
         canvas.width = 800
         canvas.height = 450
@@ -418,7 +471,7 @@ const IndexRoot = () => {
         if (ctx) {
           ctx.drawImage(vid, 0, 0, canvas.width, canvas.height)
           const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]
-          shellService.sendVideoFrame(base64)
+          shellService?.sendVideoFrame(base64)
         }
       }
     }, 2000)
@@ -497,18 +550,22 @@ const IndexRoot = () => {
           </div>
         </div>
       )}
-      <SmartDropZonesWidget />
-      <SemanticWidget />
-      <OracleWidget />
-      <WormholeWidget />
-      <LeafletMapWidget />
-      <StockWidget />
-      <WeatherWidget />
-      <ImageWidget />
-      <EmailWidget />
-      <TerminalOverlay />
-      <LiveCodingWidget />
-      <ResearchWidget />
+      {mountDeferredWidgets && (
+        <Suspense fallback={null}>
+          <SmartDropZonesWidget />
+          <SemanticWidget />
+          <OracleWidget />
+          <WormholeWidget />
+          <LeafletMapWidget />
+          <StockWidget />
+          <WeatherWidget />
+          <ImageWidget />
+          <EmailWidget />
+          <TerminalOverlay />
+          <LiveCodingWidget />
+          <ResearchWidget />
+        </Suspense>
+      )}
     </div>
   )
 }

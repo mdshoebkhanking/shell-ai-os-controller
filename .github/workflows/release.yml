@@ -172,15 +172,6 @@ jobs:
       - name: Stage Kokoro offline TTS assets
         run: python tools/stage_kokoro_tts_assets.py --variant int8
 
-      - name: Cache Falcon offline LLM assets
-        uses: actions/cache@v4
-        with:
-          path: models/llm/falcon-h1-1.5b-deep
-          key: falcon-h1-1-5b-deep-gguf-q4-k-m-assets
-
-      - name: Stage Falcon offline LLM assets
-        run: python tools/stage_falcon_offline_llm_assets.py --variant q4_k_m
-
       - name: Cache sherpa-onnx offline STT assets
         uses: actions/cache@v4
         with:
@@ -291,15 +282,6 @@ jobs:
 
       - name: Stage Kokoro offline TTS assets
         run: python tools/stage_kokoro_tts_assets.py --variant int8
-
-      - name: Cache Falcon offline LLM assets
-        uses: actions/cache@v4
-        with:
-          path: models/llm/falcon-h1-1.5b-deep
-          key: falcon-h1-1-5b-deep-gguf-q4-k-m-assets
-
-      - name: Stage Falcon offline LLM assets
-        run: python tools/stage_falcon_offline_llm_assets.py --variant q4_k_m
 
       - name: Cache sherpa-onnx offline STT assets
         uses: actions/cache@v4

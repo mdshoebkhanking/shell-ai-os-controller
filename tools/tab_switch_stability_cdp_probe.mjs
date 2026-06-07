@@ -448,9 +448,11 @@ function collectConsoleEvents(events) {
         }
       }
       if (event.method === 'Runtime.exceptionThrown') {
+        const details = event.params.exceptionDetails || {}
+        const description = details.exception?.description || details.exception?.value || details.text || ''
         return {
           type: 'exception',
-          text: String(event.params.exceptionDetails?.text || event.params.exceptionDetails?.exception?.description || ''),
+          text: String(description).slice(0, 1000),
         }
       }
       return {

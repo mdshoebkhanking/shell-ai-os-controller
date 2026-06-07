@@ -26,8 +26,9 @@ def test_dashboard_orb_listens_to_backend_voice_amplitude():
     assert "amplitudeFrames" in dashboard
     assert "durationMs" in dashboard
     assert "backendLevel" in sphere
-    assert "speechPulse" in sphere
+    assert "speechPulse" not in sphere
     assert "idlePulse" in sphere
+    assert "__shellVoiceService?.analyser" in sphere
 
 
 def test_dashboard_queued_tts_does_not_start_orb_reaction():

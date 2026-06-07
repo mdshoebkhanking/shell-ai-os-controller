@@ -37,15 +37,13 @@ const PhoneView = lazy(loadPhoneView)
 
 const shellTabViewLoaders = [
   loadAppsView,
-  loadWorkFlowEditorView,
   loadNotesView,
   loadSettingsView,
   loadGalleryView,
-  loadControlCenterView,
-  loadPhoneView
+  loadControlCenterView
 ]
 
-const PRELOAD_TAB_GAP_MS = 180
+const PRELOAD_TAB_GAP_MS = 360
 const HISTORY_ACTIVE_POLL_MS = 900
 const HISTORY_IDLE_POLL_MS = 2500
 const HISTORY_BACKGROUND_POLL_MS = 6000
@@ -61,8 +59,9 @@ const shouldPreloadShellTabs = () => {
   if (preference === '0') return false
   const shellSearchParams = new URLSearchParams(window.location.search)
   const shellPerfMode = (shellSearchParams.get('shell_perf') || '').trim().toLowerCase()
-  if (shellPerfMode === 'windows') return false
-  if (shellSearchParams.get('shell_host') === 'pyqt') return false
+  if (shellPerfMode === 'low' || shellPerfMode === 'eco' || shellPerfMode === 'safe') return false
+  if (shellSearchParams.get('shell_host') === 'pyqt') return true
+  if (shellPerfMode === 'windows') return true
   return !/Windows/i.test(navigator.userAgent)
 }
 
@@ -161,14 +160,14 @@ const ShellAI = (props: ShellProps) => {
     const idleWindow = window as ShellIdleWindow
 
     if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
-      const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 900 })
+      const idleHandle = idleWindow.requestIdleCallback(preloadTabs, { timeout: 1800 })
       return () => {
         cancelled = true
         idleWindow.cancelIdleCallback?.(idleHandle)
       }
     }
 
-    const timer = window.setTimeout(preloadTabs, 150)
+    const timer = window.setTimeout(preloadTabs, 1200)
     return () => {
       cancelled = true
       window.clearTimeout(timer)

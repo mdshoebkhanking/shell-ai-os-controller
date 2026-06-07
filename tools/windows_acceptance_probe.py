@@ -352,9 +352,9 @@ print(json.dumps(shell_offline_tts.offline_tts_status(), sort_keys=True))
     )
 
 
-def check_frozen_offline_llm_path(py: Path) -> Check:
+def check_frozen_offline_llm_catalog(py: Path) -> Check:
     if not APP_EXE.exists():
-        return Check("frozen offline LLM path", False, "WARN", "Skipped because ShellAIApp/ShellAI.exe is not installed.")
+        return Check("frozen offline LLM catalog", False, "WARN", "Skipped because ShellAIApp/ShellAI.exe is not installed.")
     code = rf"""
 import json
 import sys
@@ -367,26 +367,28 @@ setattr(sys, "_MEIPASS", str(Path({str(APP_EXE)!r}).parent / "_internal"))
 shell_offline_llm.PROJECT_ROOT = Path(getattr(sys, "_MEIPASS"))
 print(json.dumps(shell_offline_llm.offline_llm_status(), sort_keys=True))
 """
-    result = run_cmd([py, "-c", code], name="frozen offline LLM path", timeout=30)
+    result = run_cmd([py, "-c", code], name="frozen offline LLM catalog", timeout=30)
     if not result.ok:
         return result
     try:
         payload = json.loads(result.message.splitlines()[-1])
     except Exception:
-        return Check("frozen offline LLM path", False, "FAIL", result.message, result.details)
-    if payload.get("available"):
+        return Check("frozen offline LLM catalog", False, "FAIL", result.message, result.details)
+    catalog = payload.get("catalog") if isinstance(payload, dict) else {}
+    options = catalog.get("options") if isinstance(catalog, dict) else []
+    if payload.get("runtimeDownloads") is True and isinstance(options, list) and len(options) >= 4:
         return Check(
-            "frozen offline LLM path",
+            "frozen offline LLM catalog",
             True,
             "PASS",
-            f"Offline LLM resolved from {payload.get('modelPath')}",
+            f"Offline LLM uses on-demand catalog with {len(options)} model options.",
             {**result.details, "status": payload},
         )
     return Check(
-        "frozen offline LLM path",
+        "frozen offline LLM catalog",
         False,
         "FAIL",
-        f"Frozen EXE layout cannot resolve offline LLM: {payload.get('reason')}",
+        f"Frozen EXE does not expose the on-demand offline LLM catalog: {payload.get('reason')}",
         {**result.details, "status": payload},
     )
 
@@ -438,9 +440,16 @@ def check_frozen_runtime_probe() -> Check:
     tts = payload.get("offline_tts") if isinstance(payload, dict) else {}
     llm = payload.get("offline_llm") if isinstance(payload, dict) else {}
     tts_ready = isinstance(tts, dict) and tts.get("available") is True
-    llm_ready = isinstance(llm, dict) and llm.get("available") is True
-    if proc.returncode == 0 and tts_ready and llm_ready:
-        return Check("frozen EXE runtime probe", True, "PASS", "Frozen EXE resolved Kokoro TTS and offline LLM.", details)
+    llm_catalog = llm.get("catalog") if isinstance(llm, dict) else {}
+    llm_options = llm_catalog.get("options") if isinstance(llm_catalog, dict) else []
+    llm_catalog_ready = (
+        isinstance(llm, dict)
+        and llm.get("runtimeDownloads") is True
+        and isinstance(llm_options, list)
+        and len(llm_options) >= 4
+    )
+    if proc.returncode == 0 and tts_ready and llm_catalog_ready:
+        return Check("frozen EXE runtime probe", True, "PASS", "Frozen EXE resolved Kokoro TTS and offline LLM catalog.", details)
     return Check(
         "frozen EXE runtime probe",
         False,
@@ -448,7 +457,7 @@ def check_frozen_runtime_probe() -> Check:
         (
             f"Frozen EXE runtime incomplete: tts_ready={tts_ready}"
             f" ({_candidate_failure_summary(tts) if isinstance(tts, dict) else 'unknown'}), "
-            f"llm_ready={llm_ready} ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
+            f"llm_catalog_ready={llm_catalog_ready} ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
             f"exit={proc.returncode}"
         ),
         details,
@@ -745,7 +754,7 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(check_voice_runtime(py))
         checks.append(check_offline_tts_status(py))
         checks.append(check_frozen_offline_tts_path(py))
-        checks.append(check_frozen_offline_llm_path(py))
+        checks.append(check_frozen_offline_llm_catalog(py))
         checks.append(check_frozen_runtime_probe())
         if not args.runtime_only:
             checks.append(check_windows_app_open_smoke(py))

@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 1.0.14 - On-demand offline brain and EXE smoothness
+
+- Removed bundled offline GGUF chat models from the Windows setup EXE; Shell now
+  exposes an on-demand offline model catalog from Settings so users can install
+  the right small model for their PC after setup.
+- Added six verified GGUF model choices with RAM tiers, download URLs, SHA256
+  checks, and automatic integration into the offline chat/voice path after
+  download.
+- Kept Kokoro offline voice packaged while updating Windows installer metadata,
+  acceptance probes, and GitHub release workflow expectations for the new
+  runtime-download offline brain model.
+- Reduced packaged Web UI startup pressure by lazy-loading Gemini voice/runtime
+  widgets and deferring non-critical background widgets after first paint.
+- Preserved the current Shell UI design while keeping the Canvas particle orb
+  voice-reactive only to real analyser/backend amplitude, with no pre-voice
+  synthetic pulse.
+
 ## 1.0.13 - Windows EXE orb, offline voice, and smoothness
 
 - Restored the original Canvas particle orb in packaged Windows mode with

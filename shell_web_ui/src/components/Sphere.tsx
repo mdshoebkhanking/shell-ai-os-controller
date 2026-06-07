@@ -1,7 +1,6 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 import { useRef, useMemo, type CSSProperties } from 'react'
 import * as THREE from 'three'
-import { shellService } from '@renderer/services/shell-voice-ai'
 
 const ORB_BASE_COLOR = '#7ED3BA'
 const ORB_AUDIO_COLOR = '#5EEAD4'
@@ -110,8 +109,9 @@ const CustomParticleSphere = ({
     mesh.current.rotation.z += delta * ORB_ROTATION_Z_SPEED
 
     let liveVolume = 0
-    if (speaking && shellService.analyser) {
-      shellService.analyser.getByteFrequencyData(dataArray)
+    const analyser = (window as any).__shellVoiceService?.analyser as AnalyserNode | undefined
+    if (speaking && analyser) {
+      analyser.getByteFrequencyData(dataArray)
 
       let sum = 0
       const len = dataArray.length
@@ -122,10 +122,9 @@ const CustomParticleSphere = ({
     }
 
     const backendLevel = Math.min(1, Math.max(0, voiceLevel || 0))
-    const speechPulse = speaking ? 0.18 + Math.sin(state.clock.elapsedTime * 8) * 0.08 : 0
     // Keep queued/idle states visually honest: only actual speech/audio amplitude drives expansion.
     const idlePulse = active && !speaking ? 0 : 0
-    const targetVolume = Math.min(1, Math.max(liveVolume, backendLevel, speechPulse, idlePulse))
+    const targetVolume = Math.min(1, Math.max(liveVolume, backendLevel, idlePulse))
     smoothedVolumeRef.current += (targetVolume - smoothedVolumeRef.current) * Math.min(1, delta * 9)
     const volume = smoothedVolumeRef.current
 
@@ -162,7 +161,7 @@ const CustomParticleSphere = ({
 }
 
 const Sphere = ({ voiceLevel = 0, active = false, speaking = false }: SphereProps) => {
-  const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0.22)) : 0
+  const fallbackLevel = speaking ? Math.min(1, Math.max(0, voiceLevel || 0)) : 0
   const fallbackScale = 0.92 + fallbackLevel * 0.1
   const stageStyle = {
     '--shell-orb-level': fallbackLevel.toFixed(3),
