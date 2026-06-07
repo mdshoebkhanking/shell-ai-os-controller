@@ -2652,7 +2652,7 @@ class ShellWebUI(QMainWindow):
             accelerate_2d = not (
                 platform.system().lower() == "windows"
                 and os.environ.get("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced").strip().lower()
-                in {"balanced", "low", "eco"}
+                in {"low", "eco"}
             )
             settings.setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, accelerate_2d)
         except Exception:

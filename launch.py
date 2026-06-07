@@ -6,8 +6,7 @@ os.environ.setdefault('NUMEXPR_NUM_THREADS', '1')
 if sys.platform.startswith('win'):
     os.environ.setdefault('SHELL_WINDOWS_PERFORMANCE_MODE', 'balanced')
     if getattr(sys, "frozen", False) or os.environ.get("SHELL_DESKTOP_BUNDLED") == "1":
-        os.environ.setdefault("SHELL_WEBENGINE_RENDERER", "safe-software")
-        os.environ.setdefault("QT_OPENGL", "software")
+        os.environ.setdefault("SHELL_WEBENGINE_RENDERER", "balanced")
 
 def _default_webengine_flags():
     renderer = os.environ.get("SHELL_WEBENGINE_RENDERER", "balanced").strip().lower()
@@ -20,10 +19,10 @@ def _default_webengine_flags():
 
 
 # QtWebEngine / Chromium switches must be set before QtWebEngine is imported.
-# Keep the default conservative for Windows EXE/RDP machines: allow WebGL and
-# SwiftShader fallback, but do not force blocklisted GPU paths or disable the
-# software rasterizer fallback. Those two flags were a common cause of black
-# frames/flicker on weak Windows graphics drivers.
+# Keep the default Chrome-like for Windows EXE machines: allow WebGL/hardware
+# compositing first, while still keeping SwiftShader available as Chromium's
+# fallback. Explicit SHELL_WEBENGINE_RENDERER=software/safe-software remains
+# available for driver-specific support cases.
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", _default_webengine_flags())
 
 faulthandler.enable()

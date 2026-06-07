@@ -541,7 +541,7 @@ def check_bundled_exe_memory() -> Check:
 
     env = os.environ.copy()
     env.setdefault("SHELL_WINDOWS_PERFORMANCE_MODE", "balanced")
-    env.setdefault("SHELL_WEBENGINE_RENDERER", "safe-software")
+    env.setdefault("SHELL_WEBENGINE_RENDERER", "balanced")
     started = time.perf_counter()
     proc = subprocess.Popen([str(APP_EXE)], cwd=str(ROOT), env=env)
     samples: list[dict[str, Any]] = []

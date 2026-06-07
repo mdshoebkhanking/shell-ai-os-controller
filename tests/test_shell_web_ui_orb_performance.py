@@ -74,6 +74,8 @@ def test_sphere_preserves_desktop_particle_orb_for_packaged_windows():
     assert "shellPerfMode !== 'windows'" in main
     assert "explicitSafePerfMode" in main
     assert "shell_perf=windows" in host
+    assert 'in {"low", "eco"}' in host
+    assert 'in {"balanced", "low", "eco"}' not in host
     assert "const cssOnlyOrb" not in sphere
     assert "<Canvas" in sphere
     assert "shell-orb-canvas" in sphere
