@@ -365,7 +365,21 @@ sys.frozen = True
 sys.executable = {str(APP_EXE)!r}
 setattr(sys, "_MEIPASS", str(Path({str(APP_EXE)!r}).parent / "_internal"))
 shell_offline_llm.PROJECT_ROOT = Path(getattr(sys, "_MEIPASS"))
-print(json.dumps(shell_offline_llm.offline_llm_status(), sort_keys=True))
+status = shell_offline_llm.offline_llm_status()
+catalog = status.get("catalog") if isinstance(status, dict) else {{}}
+options = catalog.get("options") if isinstance(catalog, dict) else []
+installed = status.get("installedModels") if isinstance(status, dict) else []
+summary = {{
+    "success": bool(status.get("success")) if isinstance(status, dict) else False,
+    "available": bool(status.get("available")) if isinstance(status, dict) else False,
+    "runtimeDownloads": status.get("runtimeDownloads") if isinstance(status, dict) else None,
+    "reason": status.get("reason") if isinstance(status, dict) else "",
+    "optionsCount": len(options) if isinstance(options, list) else 0,
+    "installedModelsCount": len(installed) if isinstance(installed, list) else 0,
+    "selectedModelId": status.get("selectedModelId") if isinstance(status, dict) else "",
+    "installDir": status.get("installDir") if isinstance(status, dict) else "",
+}}
+print(json.dumps(summary, sort_keys=True))
 """
     result = run_cmd([py, "-c", code], name="frozen offline LLM catalog", timeout=30)
     if not result.ok:
@@ -374,14 +388,13 @@ print(json.dumps(shell_offline_llm.offline_llm_status(), sort_keys=True))
         payload = json.loads(result.message.splitlines()[-1])
     except Exception:
         return Check("frozen offline LLM catalog", False, "FAIL", result.message, result.details)
-    catalog = payload.get("catalog") if isinstance(payload, dict) else {}
-    options = catalog.get("options") if isinstance(catalog, dict) else []
-    if payload.get("runtimeDownloads") is True and isinstance(options, list) and len(options) >= 4:
+    options_count = int(payload.get("optionsCount") or 0)
+    if payload.get("runtimeDownloads") is True and options_count >= 4:
         return Check(
             "frozen offline LLM catalog",
             True,
             "PASS",
-            f"Offline LLM uses on-demand catalog with {len(options)} model options.",
+            f"Offline LLM uses on-demand catalog with {options_count} model options.",
             {**result.details, "status": payload},
         )
     return Check(
@@ -440,14 +453,7 @@ def check_frozen_runtime_probe() -> Check:
     tts = payload.get("offline_tts") if isinstance(payload, dict) else {}
     llm = payload.get("offline_llm") if isinstance(payload, dict) else {}
     tts_ready = isinstance(tts, dict) and tts.get("available") is True
-    llm_catalog = llm.get("catalog") if isinstance(llm, dict) else {}
-    llm_options = llm_catalog.get("options") if isinstance(llm_catalog, dict) else []
-    llm_catalog_ready = (
-        isinstance(llm, dict)
-        and llm.get("runtimeDownloads") is True
-        and isinstance(llm_options, list)
-        and len(llm_options) >= 4
-    )
+    llm_catalog_ready, llm_options_count = _offline_llm_catalog_ready(llm)
     if proc.returncode == 0 and tts_ready and llm_catalog_ready:
         return Check("frozen EXE runtime probe", True, "PASS", "Frozen EXE resolved Kokoro TTS and offline LLM catalog.", details)
     return Check(
@@ -457,11 +463,21 @@ def check_frozen_runtime_probe() -> Check:
         (
             f"Frozen EXE runtime incomplete: tts_ready={tts_ready}"
             f" ({_candidate_failure_summary(tts) if isinstance(tts, dict) else 'unknown'}), "
-            f"llm_catalog_ready={llm_catalog_ready} ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
+            f"llm_catalog_ready={llm_catalog_ready} options={llm_options_count}"
+            f" ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
             f"exit={proc.returncode}"
         ),
         details,
     )
+
+
+def _offline_llm_catalog_ready(status: Any) -> tuple[bool, int]:
+    if not isinstance(status, dict) or status.get("runtimeDownloads") is not True:
+        return False, 0
+    catalog = status.get("catalog")
+    options = catalog.get("options") if isinstance(catalog, dict) else []
+    options_count = len(options) if isinstance(options, list) else 0
+    return options_count >= 4, options_count
 
 
 def _candidate_failure_summary(status: dict[str, Any]) -> str:

@@ -148,6 +148,50 @@ def test_hard_task_probe_covers_pdf_and_fresh_image_routes():
     assert '"use_cache": False' in source
 
 
+def test_frozen_offline_llm_catalog_accepts_on_demand_options(monkeypatch, tmp_path):
+    app_exe = tmp_path / "ShellAIApp" / "ShellAI.exe"
+    app_exe.parent.mkdir()
+    app_exe.write_text("", encoding="utf-8")
+    captured = {}
+
+    def fake_run_cmd(argv, *, name, timeout=120, env=None):
+        captured["argv"] = [str(part) for part in argv]
+        return probe.Check(
+            name,
+            True,
+            "PASS",
+            (
+                '{"available": false, "installedModelsCount": 0, "optionsCount": 6, '
+                '"reason": "No offline GGUF model is installed yet.", "runtimeDownloads": true, "success": true}'
+            ),
+            {"returncode": 0, "command": captured["argv"]},
+        )
+
+    monkeypatch.setattr(probe, "APP_EXE", app_exe)
+    monkeypatch.setattr(probe, "run_cmd", fake_run_cmd)
+
+    result = probe.check_frozen_offline_llm_catalog(tmp_path / "python.exe")
+
+    assert result.ok is True
+    assert result.status == "PASS"
+    assert "6 model options" in result.message
+    assert "optionsCount" in captured["argv"][2]
+
+
+def test_offline_llm_catalog_ready_accepts_no_installed_model_with_options():
+    ready, count = probe._offline_llm_catalog_ready(
+        {
+            "available": False,
+            "runtimeDownloads": True,
+            "reason": "No offline GGUF model is installed yet.",
+            "catalog": {"options": [{}, {}, {}, {}, {}, {}]},
+        }
+    )
+
+    assert ready is True
+    assert count == 6
+
+
 def test_windows_acceptance_covers_packaged_runtime_probe():
     source = (Path(__file__).resolve().parents[1] / "tools" / "windows_acceptance_probe.py").read_text(encoding="utf-8")
     desktop_entry = (Path(__file__).resolve().parents[1] / "tools" / "windows_app" / "shellai_desktop_entry.py").read_text(
@@ -166,6 +210,7 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     assert "kokoroModelFiles" in desktop_entry
     assert "import_checks" in desktop_entry
     assert "onnxruntime.capi.onnxruntime_pybind11_state" in desktop_entry
+    assert "not llm_status.get(\"available\") and not _offline_llm_catalog_ready(llm_status)" in desktop_entry
 
 
 def test_windows_acceptance_summarizes_offline_tts_candidates():
