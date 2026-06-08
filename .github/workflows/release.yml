@@ -157,7 +157,7 @@ jobs:
           cache-dependency-path: shell_web_ui/package-lock.json
 
       - name: Cache Electron builder binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\AppData\Local\electron
@@ -179,7 +179,7 @@ jobs:
           }
 
       - name: Cache Kokoro offline TTS assets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: models/tts/kokoro
           key: kokoro-82m-v1-int8-assets
@@ -188,7 +188,7 @@ jobs:
         run: python tools/stage_kokoro_tts_assets.py --variant int8
 
       - name: Cache sherpa-onnx offline STT assets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: models/stt/sherpa-onnx
           key: sherpa-onnx-streaming-zipformer-en-20m-assets
@@ -283,7 +283,7 @@ jobs:
           cache-dependency-path: shell_web_ui/package-lock.json
 
       - name: Cache Electron builder binaries
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~\AppData\Local\electron
@@ -305,7 +305,7 @@ jobs:
           }
 
       - name: Cache Kokoro offline TTS assets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: models/tts/kokoro
           key: kokoro-82m-v1-int8-assets
@@ -314,7 +314,7 @@ jobs:
         run: python tools/stage_kokoro_tts_assets.py --variant int8
 
       - name: Cache sherpa-onnx offline STT assets
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: models/stt/sherpa-onnx
           key: sherpa-onnx-streaming-zipformer-en-20m-assets
