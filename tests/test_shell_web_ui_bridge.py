@@ -328,7 +328,7 @@ def test_offline_llm_select_installed_model_updates_selected_catalog(monkeypatch
     import shell_offline_model_catalog
     import shell_web_ui.host as host
 
-    option = shell_offline_model_catalog.get_model_option("smollm2-135m-q4")
+    option = shell_offline_model_catalog.get_model_option("qwen2.5-1.5b-q4")
     assert option is not None
     model_path = shell_offline_model_catalog.model_install_dir(option.id) / option.filename
     model_path.parent.mkdir(parents=True)
@@ -352,7 +352,7 @@ def test_offline_llm_select_requires_installed_model(monkeypatch, tmp_path):
 
     bridge = host.ShellBackendBridge()
 
-    result = bridge._dispatch("offline-llm-select", [{"modelId": "qwen2.5-0.5b-q4"}])
+    result = bridge._dispatch("offline-llm-select", [{"modelId": "qwen2.5-3b-q4"}])
 
     assert result["success"] is False
     assert result["status"] == "missing"
@@ -365,7 +365,7 @@ def test_offline_coding_llm_select_uses_separate_coding_catalog(monkeypatch, tmp
     import shell_offline_model_catalog
     import shell_web_ui.host as host
 
-    option = shell_offline_model_catalog.get_model_option("qwen2.5-coder-0.5b-q4", "coding")
+    option = shell_offline_model_catalog.get_model_option("qwen2.5-coder-3b-q4", "coding")
     assert option is not None
     model_path = shell_offline_model_catalog.model_install_dir(option.id) / option.filename
     model_path.parent.mkdir(parents=True)

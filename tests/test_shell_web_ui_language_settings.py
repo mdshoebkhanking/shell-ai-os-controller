@@ -103,6 +103,8 @@ def test_settings_hides_kokoro_tts_card_and_separates_voice_from_models():
     assert "applyOfflineLlmStatus" in settings
     assert "downloadOfflineModel" in settings
     assert "selectOfflineModel" in settings
+    assert "formatOfflineModelRam" in settings
+    assert "RAM ${minRam}-${recommendedRam} GB" in settings
     assert "isSelected ? 'ACTIVE'" in settings
     assert "refreshOfflineTtsStatus" in settings
     assert "refreshOfflineLlmStatus" in settings
@@ -124,6 +126,10 @@ def test_settings_hides_kokoro_tts_card_and_separates_voice_from_models():
     assert "Shell will use local OS voice fallback" not in settings
     assert "will not use local OS TTS fallback" in settings
     assert "Browser speech fallback is disabled" in bridge
+    assert "qwen2.5-3b-q4" in bridge
+    assert "qwen2.5-coder-3b-q4" in bridge
+    assert "qwen2.5-0.5b-q4" not in bridge
+    assert "smollm2-135m-q4" not in bridge
     assert "case 'offline-tts-status'" in bridge
     assert "case 'offline-llm-status'" in bridge
     assert "case 'offline-llm-catalog'" in bridge

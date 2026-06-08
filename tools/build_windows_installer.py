@@ -417,7 +417,7 @@ def offline_llm_stage_report() -> dict[str, object]:
     model_files = [path for path in LLM_MODEL_STAGE.rglob("*.gguf") if path.is_file()] if LLM_MODEL_STAGE.exists() else []
     return {
         "status": "on-demand",
-        "reason": "Offline LLM GGUF assets are intentionally not bundled. Users install a small model from Settings.",
+        "reason": "Offline LLM GGUF assets are intentionally not bundled. Users install a higher-quality model from Settings.",
         "model_dir": str(LLM_MODEL_STAGE),
         "model_file_count": 0,
         "ignored_staged_model_file_count": len(model_files),
@@ -425,8 +425,8 @@ def offline_llm_stage_report() -> dict[str, object]:
         "recommended_engine": "llama-cpp-python",
         "model_family": "Installable GGUF catalog",
         "model_repo": "Hugging Face model catalog",
-        "primary_model_family": "Qwen2.5-0.5B-Instruct-GGUF",
-        "primary_model_repo": "Qwen/Qwen2.5-0.5B-Instruct-GGUF",
+        "primary_model_family": "Qwen2.5-3B-Instruct-GGUF",
+        "primary_model_repo": "Qwen/Qwen2.5-3B-Instruct-GGUF",
         "primary_model_license": "Apache-2.0",
         "primary_model_license_url": "https://www.apache.org/licenses/LICENSE-2.0",
         "language_support": ["english", "hinglish", "hindi"],
