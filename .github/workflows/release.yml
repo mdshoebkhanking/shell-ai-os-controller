@@ -171,7 +171,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
           python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx onnxruntime soundfile sherpa-onnx sounddevice SpeechRecognition pynput keyboard pillow
-          python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            python -m pip install --retries 10 --timeout 120 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 5) { exit $LASTEXITCODE }
+            Start-Sleep -Seconds (15 * $attempt)
+          }
 
       - name: Cache Kokoro offline TTS assets
         uses: actions/cache@v4
@@ -292,7 +297,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-ci.txt
           python -m pip install pyinstaller PyQt6-WebEngine PyOpenGL GPUtil pyttsx3 edge-tts kokoro-onnx onnxruntime soundfile sherpa-onnx sounddevice SpeechRecognition pynput keyboard pillow
-          python -m pip install --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            python -m pip install --retries 10 --timeout 120 --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu llama-cpp-python
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempt -eq 5) { exit $LASTEXITCODE }
+            Start-Sleep -Seconds (15 * $attempt)
+          }
 
       - name: Cache Kokoro offline TTS assets
         uses: actions/cache@v4
