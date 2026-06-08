@@ -16,6 +16,57 @@ def _clear_chat_provider_env(monkeypatch, host):
     monkeypatch.delenv("SHELL_CHAT_ONLINE_CHECK", raising=False)
 
 
+def test_chat_response_depth_policy_matches_intent():
+    import shell_web_ui.host as host
+
+    assert host.ShellBackendBridge._chat_response_depth("What is the shortcut to open Shell?") == "short"
+    assert host.ShellBackendBridge._chat_response_depth("Explain how Shell decides between local and online modes?") == "medium"
+    assert host.ShellBackendBridge._chat_response_depth("Write a full movie script from start to end") == "artifact"
+    assert host.ShellBackendBridge._chat_reply_limit("Write a full movie script from start to end") >= 8000
+
+
+def test_brain_fallback_passes_depth_instruction_and_limit(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+    seen = {}
+
+    monkeypatch.setattr(bridge, "_should_try_provider_chat", lambda: False)
+
+    def fake_offline(prompt, system_prompt, previous_messages=None, *, limit=700):
+        seen["system"] = system_prompt
+        seen["limit"] = limit
+        return "Structured explanation."
+
+    monkeypatch.setattr(bridge, "_offline_chat_reply", fake_offline)
+
+    reply = bridge._brain_chat_fallback("Explain how Shell decides between local and online modes?")
+
+    assert reply == "Structured explanation."
+    assert "medium-length structured answer" in seen["system"]
+    assert seen["limit"] >= 1600
+
+
+def test_full_movie_script_local_artifact_explains_split_limit():
+    import shell_web_ui.host as host
+
+    body = host.ShellBackendBridge._local_artifact_content(
+        "Write a full movie script from start to end",
+        file_type="pdf",
+    )
+
+    assert "ACT STRUCTURE" in body
+    assert "FADE IN:" in body
+    assert "END OF PART 1 - NATURAL BREAK" in body
+    assert "I've written until" in body
+    assert "I can continue with the next part if you ask." in body
+    assert "Act 1" in body
+    assert body.count("CUT TO:") >= 4
+    assert "Ending note:" not in body
+    assert "Logline:" not in body
+
+
 def test_chart_and_voice_chat_recall_previous_task(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
@@ -165,7 +216,8 @@ def test_unknown_actionable_chat_command_routes_to_agent_orchestrator(monkeypatc
     assert executed_routes
     assert result["success"] is True
     assert result["route"]["source"] == "web-ui-command-orchestrator"
-    assert "Planner Agent" in result["reply"]
+    assert "direct safe local tool" in result["reply"]
+    assert "Shell agent planner complete" not in result["reply"]
 
 
 def test_direct_tool_id_with_recall_word_does_not_trigger_conversation_recall(monkeypatch, tmp_path):
@@ -728,6 +780,9 @@ def test_deep_research_chat_emits_activity_events(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
     monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setenv("SHELL_ALLOW_INTERNET_RESEARCH", "1")
+    monkeypatch.delenv("GOOGLE_SEARCH_API_KEY", raising=False)
+    monkeypatch.delenv("SEARCH_ENGINE_ID", raising=False)
     bridge = host.ShellBackendBridge()
     emitted = []
     executed_routes = []
@@ -755,6 +810,55 @@ def test_deep_research_chat_emits_activity_events(monkeypatch, tmp_path):
     assert activity_events[0]["status"] == "running"
     assert activity_events[-1]["status"] == "done"
     assert activity_events[-1]["progress"] == 100
+
+
+def test_research_chat_stays_offline_when_internet_research_disabled(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setenv("SHELL_ALLOW_INTERNET_RESEARCH", "0")
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", lambda _route: pytest.fail("research route should not execute"))
+
+    result = bridge._chat_message(["research 2026 web design trends", {"source": "text"}])
+
+    assert result["success"] is True
+    assert result["result"]["status"] == "offline_research_disabled"
+    assert result["reply"] == host.ShellBackendBridge._internet_research_disabled_reply()
+
+
+def test_allowed_research_injects_fetched_web_context(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setenv("SHELL_ALLOW_INTERNET_RESEARCH", "1")
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    monkeypatch.setattr(
+        bridge,
+        "_web_research_summary",
+        lambda _query: "Title: Example trend report\nURL: https://example.com/trends\nPage excerpt: Current design systems use dense bento layouts.",
+    )
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_agents:research_agent_tool"
+        assert "Use this fetched web research context" in route["args"]["task"]
+        assert "https://example.com/trends" in route["args"]["task"]
+        return {"status": "success", "result": "[ResearchAgent] Current design systems use dense bento layouts."}
+
+    monkeypatch.setattr(bridge, "emit_event", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+
+    result = bridge._chat_message(["compare current AI APIs", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert result["route"]["mode"] == "online-research"
+    assert result["route"]["modeLabel"] == "Online research"
+    assert result["reply"].startswith("Deep research complete:")
 
 
 def test_gallery_save_and_list_roundtrip(monkeypatch, tmp_path):
@@ -934,7 +1038,17 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
         assert route["args"]["file_type"] == "pdf"
         assert route["args"]["content"] == "Generated PDF body about AI tools."
         assert "content_request" not in route["args"]
-        return {"status": "success", "result": "Created file: Documents/ai_tools.pdf"}
+        return {
+            "status": "success",
+            "result": {
+                "ok": True,
+                "action": "created",
+                "destination": "documents",
+                "path": r"C:\Users\Administrator\Documents\ai_tools.pdf",
+                "filename": "ai_tools.pdf",
+                "ui_hint": "open_file_location",
+            },
+        }
 
     def fallback_should_not_run(*_args, **_kwargs):
         raise AssertionError("tool-capable PDF request should not fall through to brain fallback")
@@ -953,9 +1067,14 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
     assert executed_routes
     assert result["success"] is True
     assert result["route"]["tool"] == "shell_workspace_tools:create_user_file_tool"
-    assert "Created file" in result["reply"]
+    assert result["reply"] == "I created ai_tools.pdf on your documents."
+    assert result["ui_actions"][0]["type"] == "OPEN_FILE_LOCATION"
     assert "cannot" not in result["reply"].lower()
-    assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["success"] is True
+    chat_event = [payload for channel, payload in emitted if channel == "chat-updated"][-1]
+    assert chat_event["success"] is True
+    assert chat_event["ui_actions"] == result["ui_actions"]
+    history = bridge._read_history_file()
+    assert history[-1]["uiActions"] == result["ui_actions"]
 
 
 def test_login_html_chat_saves_working_html_when_offline_brain_is_generic(monkeypatch, tmp_path):
@@ -997,7 +1116,7 @@ def test_login_html_chat_saves_working_html_when_offline_brain_is_generic(monkey
     assert executed_routes
     assert result["success"] is True
     assert result["route"]["tool"] == "shell_workspace_tools:create_user_file_tool"
-    assert "Created login_page.html" in result["reply"]
+    assert result["reply"] == "I created login_page.html on your desktop."
 
 
 def test_hard_full_app_requires_online_key_before_code_tool(monkeypatch, tmp_path):
@@ -1193,7 +1312,312 @@ def test_movie_script_pdf_chat_generates_script_content_before_file_tool(monkeyp
 
     assert executed_routes
     assert result["success"] is True
-    assert "Created file" in result["reply"]
+    assert result["reply"].startswith("I created ")
+    assert " on your documents." in result["reply"]
+
+
+def test_file_tool_result_uses_user_message_and_open_folder_action():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    formatted = bridge._format_chat_result_payload(
+        {"tool": "shell_workspace_tools:create_user_file_tool", "args": {"destination": "desktop"}},
+        {
+            "status": "success",
+            "result": {
+                "ok": True,
+                "action": "created",
+                "message": "Created notes.txt on desktop",
+                "destination": "desktop",
+                "path": r"C:\Users\Administrator\Desktop\notes.txt",
+                "filename": "notes.txt",
+                "bytes": 448,
+                "ui_hint": "open_file_location",
+            },
+        },
+    )
+
+    assert formatted["user_message"] == "I created notes.txt on your desktop."
+    assert formatted["ui_actions"] == [
+        {
+            "type": "OPEN_FILE_LOCATION",
+            "label": "Open folder",
+            "path": r"C:\Users\Administrator\Desktop\notes.txt",
+        }
+    ]
+    assert "shell_workspace_tools" not in formatted["user_message"]
+    assert "{" not in formatted["user_message"]
+
+
+def test_tool_result_error_is_human_readable():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    reply = bridge._format_chat_result(
+        {"tool": "shell_workspace_tools:create_user_file_tool", "args": {"filename": "notes.txt", "destination": "desktop"}},
+        {"status": "success", "result": {"ok": False, "error": "Permission denied while writing Desktop\\notes.txt"}},
+    )
+
+    assert reply == "I couldn’t complete this action. Reason: Permission denied while writing Desktop\\notes.txt"
+    assert "shell_workspace_tools" not in reply
+    assert '"ok": false' not in reply.lower()
+
+
+def test_known_workflow_tool_results_are_human_readable():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    slideshow = bridge._format_chat_result(
+        {"tool": "shell_windows_workflows:open_recent_screenshots_slideshow_tool"},
+        {"status": "success", "result": {"ok": True}},
+    )
+    downloads = bridge._format_chat_result(
+        {
+            "tool": "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
+            "args": {"zip_folder": "Setups", "pdf_folder": "PDFs"},
+        },
+        {"status": "success", "result": {"ok": True}},
+    )
+
+    assert slideshow == "I opened your Screenshots folder and Photos."
+    assert downloads == "I organized your Downloads into Setups and PDFs."
+    assert "shell_windows_workflows" not in slideshow
+    assert "{" not in downloads
+
+
+def test_gmail_request_misrouted_to_downloads_tool_explains_limitation():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    reply = bridge._format_chat_result(
+        {
+            "tool": "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
+            "request": "search Gmail for invoices and download PDFs",
+            "args": {"zip_folder": "Setups", "pdf_folder": "PDFs"},
+        },
+        {"status": "success", "result": {"ok": True}},
+    )
+
+    assert "Local tools only support organizing local Downloads" in reply
+    assert "Gmail search and download is not implemented yet" in reply
+    assert "shell_windows_workflows" not in reply
+
+
+def test_downloads_audit_cleanup_asks_permission_then_executes_on_approval(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_windows_workflows:organize_downloads_setups_pdfs_tool"
+        if route["args"]["dry_run"]:
+            return {
+                "status": "success",
+                "result": {
+                    "ok": True,
+                    "action": "organized_downloads",
+                    "dry_run": True,
+                    "downloads": r"C:\Users\Administrator\Downloads",
+                    "setups_folder": r"C:\Users\Administrator\Downloads\Setups",
+                    "pdfs_folder": r"C:\Users\Administrator\Downloads\PDFs",
+                    "moved_count": 3,
+                    "moved": [],
+                },
+            }
+        return {
+            "status": "success",
+            "result": {
+                "ok": True,
+                "action": "organized_downloads",
+                "dry_run": False,
+                "moved_count": 3,
+                "setups_folder": r"C:\Users\Administrator\Downloads\Setups",
+                "pdfs_folder": r"C:\Users\Administrator\Downloads\PDFs",
+            },
+        }
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "emit_event", lambda *_args, **_kwargs: None)
+
+    preview = bridge._chat_message(["Shell, audit my Downloads folder and clean it safely.", {"source": "text"}])
+
+    assert preview["success"] is True
+    assert executed_routes[0]["args"]["dry_run"] is True
+    assert "I audited your Downloads" in preview["reply"]
+    assert "I have not moved anything yet" in preview["reply"]
+    assert preview["ui_actions"][0]["type"] == "APPROVE_ACTION"
+    assert bridge._read_history_file()[-1]["pendingPermission"]["action"] == "downloads_cleanup"
+
+    approved = bridge._chat_message(["yes", {"source": "text"}])
+
+    assert approved["success"] is True
+    assert executed_routes[-1]["args"]["dry_run"] is False
+    assert executed_routes[-1]["source"] == "real-os-agent-downloads-cleanup-approved"
+    assert approved["reply"] == "I organized your Downloads into Setups and PDFs."
+
+
+def test_npm_test_command_asks_permission_then_runs(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_terminal:run_command_tool"
+        return {"status": "success", "result": "Output:\nPASS tests/example.test.js"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "emit_event", lambda *_args, **_kwargs: None)
+
+    preview = bridge._chat_message(["Shell, run npm test and show me the result", {"source": "text"}])
+
+    assert preview["success"] is True
+    assert not executed_routes
+    assert "I want to run `npm test`" in preview["reply"]
+    assert preview["ui_actions"][0]["type"] == "APPROVE_ACTION"
+    assert bridge._read_history_file()[-1]["pendingPermission"]["action"] == "run_command"
+
+    approved = bridge._chat_message(["yes", {"source": "text"}])
+
+    assert approved["success"] is True
+    assert executed_routes
+    assert executed_routes[-1]["args"]["command"] == "npm test"
+    assert "I ran `npm test` successfully" in approved["reply"]
+    assert "PASS tests/example.test.js" in approved["reply"]
+
+
+def test_gmail_status_request_explains_missing_inbox_integration(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+
+    def fake_execute(route):
+        assert route["tool"] == "shell_email_tool:email_setup_status_tool"
+        return {
+            "status": "success",
+            "result": "Email sending is not configured, so Shell must not claim that an email was sent. SMTP credentials missing.",
+        }
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "emit_event", lambda *_args, **_kwargs: None)
+
+    result = bridge._chat_message(["Shell, what new emails did I get in Gmail?", {"source": "text"}])
+
+    assert result["success"] is True
+    assert "Gmail/email integration is not configured yet" in result["reply"]
+    assert "inbox reading" in result["reply"]
+    assert result["ui_actions"][0]["type"] == "OPEN_URL"
+    assert result["ui_actions"][0]["url"] == "https://mail.google.com/"
+
+
+def test_capture_app_context_channel_stores_browser_youtube_context(monkeypatch, tmp_path):
+    import shell_app_context
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    monkeypatch.setattr(
+        shell_app_context,
+        "capture_app_context",
+        lambda: {
+            "app_type": "browser",
+            "adapter": "browser",
+            "app_name": "Google Chrome",
+            "title": "Shell AI tutorial - YouTube",
+            "url": "https://www.youtube.com/watch?v=abc123",
+            "metadata": {"is_youtube": True, "video_title": "Shell AI tutorial - YouTube"},
+            "captured_at": 1780930000.0,
+        },
+    )
+    bridge = host.ShellBackendBridge()
+
+    result = bridge._dispatch("capture-app-context", [])
+
+    assert result["success"] is True
+    assert result["context"]["app_type"] == "browser"
+    assert result["context"]["metadata"]["is_youtube"] is True
+    assert bridge._last_app_context["url"].startswith("https://www.youtube.com/")
+
+
+def test_chat_message_injects_latest_overlay_context(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+    bridge._last_app_context = {
+        "app_type": "browser",
+        "adapter": "browser",
+        "app_name": "Google Chrome",
+        "title": "Shell AI tutorial - YouTube",
+        "url": "https://www.youtube.com/watch?v=abc123",
+        "metadata": {"is_youtube": True},
+        "captured_at": host.time.time(),
+    }
+
+    def fake_fallback(prompt, **_kwargs):
+        assert "Active app context for this Shell overlay request" in prompt
+        assert "Shell AI tutorial - YouTube" in prompt
+        assert "youtube.com/watch" in prompt
+        return "I can use the active YouTube context."
+
+    monkeypatch.setattr(bridge, "_brain_chat_fallback", fake_fallback)
+
+    result = bridge._chat_message(["what am I looking at?", {"source": "text"}])
+
+    assert result["success"] is True
+    assert result["reply"] == "I can use the active YouTube context."
+
+
+def test_browser_adapter_marks_youtube_context():
+    from shell_app_context import ActiveWindowInfo, BrowserAdapter
+
+    context = BrowserAdapter().get_context(
+        ActiveWindowInfo(
+            app_name="Google Chrome",
+            title="Build apps with Shell AI - YouTube",
+            process_name="chrome",
+            url="https://www.youtube.com/watch?v=xyz",
+            clipboard_text="",
+        )
+    )
+
+    assert context["app_type"] == "browser"
+    assert context["metadata"]["is_youtube"] is True
+    assert context["metadata"]["video_title"] == "Build apps with Shell AI - YouTube"
+
+
+def test_blocked_planner_result_gets_friendly_policy_explanation():
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    reply = bridge._format_chat_result(
+        {"tool": "shell_agent_orchestrator:orchestrate_shell_goal_tool"},
+        {
+            "status": "success",
+            "result": {
+                "execution_allowed": False,
+                "execution_reason": "agent policy did not allow capability execution",
+                "execution_status": "blocked",
+                "goal": "run npm test",
+            },
+        },
+    )
+
+    assert "I didn’t run `npm test`" in reply
+    assert "safety policy" in reply
+    assert "policy/settings" in reply
+    assert "execution_allowed" not in reply
+    assert "Shell agent planner complete" not in reply
 
 
 def test_code_write_blocked_reply_names_relevant_safety_settings():

@@ -832,6 +832,13 @@ def _desktop_folder_name(raw: str) -> str:
 
 
 def _windows_workflow_route(raw: str, lower: str) -> dict[str, Any] | None:
+    if re.search(r"\bdownloads?\b", lower) and re.search(r"\b(audit|clean|cleanup|clean\s+up|safe|safely|review)\b", lower):
+        return _route(
+            "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
+            {"zip_folder": "Setups", "pdf_folder": "PDFs", "dry_run": True},
+            confidence=0.94,
+        )
+
     if re.search(r"\bdownloads?\b", lower) and re.search(r"\b(zip|zips|pdf|pdfs|organize|sort|move)\b", lower):
         return _route(
             "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
@@ -947,6 +954,13 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     telegram = _telegram_route(raw, lower)
     if telegram:
         return telegram
+
+    if re.search(r"\bgmail\b", lower) and re.search(
+        r"\b(status|setup|configured|connect|read|new|emails?|inbox|invoice|payment|attachments?|download|summary|summarize|summarise)\b",
+        lower,
+        flags=re.I,
+    ):
+        return _route("shell_email_tool:email_setup_status_tool", {"gmail_request": raw}, confidence=0.9)
 
     email = _email_route(raw, lower)
     if email:
@@ -1122,6 +1136,32 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     ps_match = re.match(r"^(?:run\s+)?(?:powershell|terminal|shell\s+command|command)\s+(.+)$", raw, flags=re.I | re.S)
     if ps_match:
         return _route("shell_terminal:run_command_tool", {"command": _strip_quotes(ps_match.group(1))}, confidence=0.86)
+
+    npm_test_match = re.match(r"^(?:shell,\s*)?(?:run\s+)?npm\s+test\b.*$", raw, flags=re.I | re.S)
+    if npm_test_match:
+        return _route(
+            "shell_terminal:run_command_tool",
+            {"command": "npm test", "requires_approval": True, "permission_scope": "project"},
+            confidence=0.91,
+        )
+
+    if re.match(r"^(?:shell,\s*)?(?:show\s+me\s+)?(?:git\s+status|what\s+changed(?:\s+today)?)\b.*$", raw, flags=re.I | re.S):
+        return _route(
+            "shell_terminal:run_command_tool",
+            {"command": "git status --short", "requires_approval": True, "permission_scope": "project"},
+            confidence=0.9,
+        )
+
+    if re.search(r"\b(open|show|tail|read)\b.*\b(latest\s+)?logs?\b|\b(latest\s+logs?)\b", lower, flags=re.I):
+        return _route(
+            "shell_terminal:run_command_tool",
+            {
+                "command": "find . -type f \\( -name '*.log' -o -name '*log*.txt' \\) -maxdepth 4 -print | head -20",
+                "requires_approval": True,
+                "permission_scope": "project",
+            },
+            confidence=0.86,
+        )
 
     convert_match = re.match(
         r"^(?:convert\s+)?(-?\d+(?:\.\d+)?)\s*([a-zA-Z_]+)\s+(?:to|in)\s+([a-zA-Z_]+)$",

@@ -259,6 +259,7 @@ class ShellBackendBridge:
         self._chat_provider_network_cache: tuple[float, str, bool] = (0.0, "", False)
         self._offline_llm_download_lock = threading.Lock()
         self._offline_llm_downloads: dict[str, dict[str, Any]] = {}
+        self._last_app_context: dict[str, Any] = {}
         self._offline_tts_critical_prime_ready = threading.Event()
         self._maybe_prewarm_offline_tts()
 
@@ -369,6 +370,7 @@ class ShellBackendBridge:
             "stop-voice": self._stop_voice,
             "set-voice-muted": self._set_voice_muted,
             "get-screen-source": lambda _args: None,
+            "capture-app-context": self._capture_app_context,
             "adb-get-history": lambda _args: [],
             "adb-get-notifications": lambda _args: [],
             "adb-connect": lambda _args: {"success": False, "message": "ADB bridge is not connected."},
@@ -895,6 +897,32 @@ class ShellBackendBridge:
         except Exception as exc:
             return {"success": False, "error": str(exc)}
 
+    def _capture_app_context(self, _args: list[Any] | None = None) -> dict[str, Any]:
+        try:
+            from shell_app_context import capture_app_context
+
+            context = capture_app_context()
+        except Exception as exc:
+            context = {
+                "app_type": "generic",
+                "adapter": "generic",
+                "app_name": "Unknown app",
+                "title": "",
+                "metadata": {"error": str(exc)[:240]},
+                "captured_at": time.time(),
+            }
+        self._last_app_context = context if isinstance(context, dict) else {}
+        return {"success": True, "context": self._last_app_context}
+
+    @staticmethod
+    def _fresh_app_context(context: Any) -> dict[str, Any]:
+        if not isinstance(context, dict):
+            return {}
+        captured_at = float(context.get("captured_at") or 0)
+        if captured_at and time.time() - captured_at > 180:
+            return {}
+        return context
+
     def _chat_message(self, args: list[Any]) -> dict[str, Any]:
         text = str(args[0] if args else "").strip()
         meta = args[1] if len(args) > 1 and isinstance(args[1], dict) else {}
@@ -910,7 +938,17 @@ class ShellBackendBridge:
         previous_messages = self._read_history_file()
         attachments = self._prepare_chat_attachments(meta.get("attachments"))
         attachment_context = self._attachment_context(attachments)
+        app_context = self._fresh_app_context(meta.get("app_context") or meta.get("appContext") or self._last_app_context)
+        app_context_block = ""
+        if app_context:
+            try:
+                from shell_app_context import context_prompt_block
+
+                app_context_block = context_prompt_block(app_context)
+            except Exception:
+                app_context_block = ""
         processing_text = f"{text}\n\n{attachment_context}".strip() if attachment_context else text
+        processing_text = f"{processing_text}\n\n{app_context_block}".strip() if app_context_block else processing_text
         display_text = text or "Attached file"
         if attachments:
             display_text = (
@@ -926,6 +964,8 @@ class ShellBackendBridge:
         activity_descriptor: dict[str, Any] | None = None
         result: Any = None
         success = True
+        ui_actions: list[dict[str, Any]] = []
+        pending_permission: dict[str, Any] | None = None
         async_pending = False
         pending_chat_id = ""
         deferred_prompt = ""
@@ -950,17 +990,38 @@ class ShellBackendBridge:
                             reply = str(direct_route.get("errorReply") or "").strip()
                         else:
                             route = direct_route if direct_route and direct_route.get("tool") else None
+                            approval_route = self._approval_route_from_history(text, previous_messages)
+                            route = approval_route or route
                             if not route:
                                 from shell_nl_router import route_natural_command
 
                                 route = route_natural_command(text)
-                            if not (route and route.get("tool")):
+                            research_disabled_reply = ""
+                            if self._is_research_route(route):
+                                if not self._internet_research_allowed():
+                                    research_disabled_reply = self._internet_research_disabled_reply()
+                                else:
+                                    route = self._prepare_internet_research_route(route, text)
+                            elif not (route and route.get("tool")) and self._internet_research_needed(text):
+                                if not self._internet_research_allowed():
+                                    research_disabled_reply = self._internet_research_disabled_reply()
+                                else:
+                                    route = self._prepare_internet_research_route(self._web_research_route(text), text)
+                            if research_disabled_reply:
+                                reply = research_disabled_reply
+                                result = {
+                                    "status": "offline_research_disabled",
+                                    "message": reply,
+                                }
+                                success = True
+                                activity_descriptor = None
+                            elif not (route and route.get("tool")):
                                 image_prompt = self._extract_image_generation_prompt(text)
                                 if image_prompt:
                                     route = self._image_generation_route(image_prompt)
-                            if not (route and route.get("tool")) and self._has_command_intent(text):
+                            if not research_disabled_reply and not (route and route.get("tool")) and self._has_command_intent(text):
                                 route = self._orchestration_route(text)
-                            if route and route.get("tool"):
+                            if not research_disabled_reply and route and route.get("tool"):
                                 if str(route.get("tool")) == "shell_image_ai:generate_image_tool":
                                     image_prompt = (
                                         self._clean_image_prompt(self._route_image_prompt(route))
@@ -986,63 +1047,79 @@ class ShellBackendBridge:
                                 else:
                                     route = self._prepare_artifact_route(route, previous_messages=previous_messages)
                                     route = self._prepare_code_build_route(route)
-                                mode_decision = self._mode_decision_for_route(processing_text, route)
-                                if mode_decision and mode_decision.get("mode") == "local-basic-offered":
-                                    route = {
-                                        **route,
-                                        "mode": "local-basic-offered",
-                                        "modeLabel": "Local basic available",
-                                        "modeDecision": mode_decision,
-                                    }
-                                    reply = str(mode_decision.get("message") or "").strip()
-                                    result = {
-                                        "status": "basic_offline_offered",
-                                        "message": reply,
-                                        "reason": mode_decision.get("reason", ""),
-                                    }
+                                if self._route_needs_user_permission(route):
+                                    permission_prompt = self._permission_prompt_for_route(route)
+                                    reply = str(permission_prompt.get("user_message") or "").strip()
+                                    ui_actions = list(permission_prompt.get("ui_actions") or [])
+                                    pending_permission = permission_prompt.get("pending_permission") if isinstance(permission_prompt.get("pending_permission"), dict) else None
+                                    result = {"status": "permission_required", "message": reply}
                                     success = True
                                     activity_descriptor = None
                                     image_generation_started = False
+                                    route = {**route, "mode": "permission-required", "modeLabel": "Permission required"}
                                 else:
-                                    if mode_decision:
+                                    mode_decision = None if self._is_research_route(route) else self._mode_decision_for_route(processing_text, route)
+                                    if mode_decision and mode_decision.get("mode") == "local-basic-offered":
                                         route = {
                                             **route,
-                                            "mode": str(mode_decision.get("mode") or "local"),
-                                            "modeLabel": str(mode_decision.get("modeLabel") or "Local"),
+                                            "mode": "local-basic-offered",
+                                            "modeLabel": "Local basic available",
                                             "modeDecision": mode_decision,
                                         }
-                                    activity_descriptor = self._activity_descriptor(
-                                        text,
-                                        route,
-                                        image_prompt=image_prompt,
-                                    )
-                                    self._emit_activity(
-                                        activity_descriptor,
-                                        status="running",
-                                        progress=34 if image_generation_started else 22,
-                                        source=source,
-                                        entry=entry,
-                                    )
-                                    result = self._execute_routed_tool(route)
-                                    self._emit_activity(
-                                        activity_descriptor,
-                                        status="running",
-                                        message="FORMATTING RESULT",
-                                        progress=82,
-                                        source=source,
-                                        entry=entry,
-                                    )
-                                    reply = self._format_chat_result(route, result)
-                                    tool_success = self._activity_result_success(route, result, reply)
-                                    self._emit_activity(
-                                        activity_descriptor,
-                                        status="done" if tool_success else "error",
-                                        message="TASK COMPLETE" if tool_success else "TASK FAILED",
-                                        progress=100,
-                                        source=source,
-                                        entry=entry,
-                                    )
-                            else:
+                                        reply = str(mode_decision.get("message") or "").strip()
+                                        result = {
+                                            "status": "basic_offline_offered",
+                                            "message": reply,
+                                            "reason": mode_decision.get("reason", ""),
+                                        }
+                                        success = True
+                                        activity_descriptor = None
+                                        image_generation_started = False
+                                    else:
+                                        if mode_decision:
+                                            route = {
+                                                **route,
+                                                "mode": str(mode_decision.get("mode") or "local"),
+                                                "modeLabel": str(mode_decision.get("modeLabel") or "Local"),
+                                                "modeDecision": mode_decision,
+                                            }
+                                        activity_descriptor = self._activity_descriptor(
+                                            text,
+                                            route,
+                                            image_prompt=image_prompt,
+                                        )
+                                        self._emit_activity(
+                                            activity_descriptor,
+                                            status="running",
+                                            progress=34 if image_generation_started else 22,
+                                            source=source,
+                                            entry=entry,
+                                        )
+                                        if isinstance(route, dict):
+                                            route = {**route, "request": text}
+                                        result = self._execute_routed_tool(route)
+                                        self._emit_activity(
+                                            activity_descriptor,
+                                            status="running",
+                                            message="FORMATTING RESULT",
+                                            progress=82,
+                                            source=source,
+                                            entry=entry,
+                                        )
+                                        formatted_result = self._format_chat_result_payload(route, result)
+                                        reply = str(formatted_result.get("user_message") or "").strip()
+                                        ui_actions = list(formatted_result.get("ui_actions") or [])
+                                        pending_permission = formatted_result.get("pending_permission") if isinstance(formatted_result.get("pending_permission"), dict) else None
+                                        tool_success = self._activity_result_success(route, result, reply)
+                                        self._emit_activity(
+                                            activity_descriptor,
+                                            status="done" if tool_success else "error",
+                                            message="TASK COMPLETE" if tool_success else "TASK FAILED",
+                                            progress=100,
+                                            source=source,
+                                            entry=entry,
+                                        )
+                            elif not research_disabled_reply:
                                 if self._should_defer_offline_brain_reply():
                                     pending_chat_id = self._next_chat_job_id()
                                     async_pending = True
@@ -1090,6 +1167,10 @@ class ShellBackendBridge:
                 model_message["mode"] = mode_value
         if async_pending and pending_chat_id:
             model_message["pendingOfflineChatId"] = pending_chat_id
+        if ui_actions:
+            model_message["uiActions"] = ui_actions
+        if pending_permission:
+            model_message["pendingPermission"] = pending_permission
         messages.append(model_message)
         self._write_history_file(messages)
         self.emit_event(
@@ -1101,6 +1182,7 @@ class ShellBackendBridge:
                 "source": source,
                 "voice": source == "voice" and not async_pending,
                 "pending": async_pending,
+                "ui_actions": ui_actions,
             },
         )
         if async_pending and pending_chat_id:
@@ -1123,6 +1205,7 @@ class ShellBackendBridge:
             "result": result,
             "source": source,
             "pending": async_pending,
+            "ui_actions": ui_actions,
         }
 
     def _should_defer_offline_brain_reply(self) -> bool:
@@ -1336,9 +1419,251 @@ class ShellBackendBridge:
     @staticmethod
     def _compact_chat_reply(reply: str, *, limit: int = 360) -> str:
         text = " ".join(str(reply or "").split()).strip()
+        if limit <= 0:
+            return text
         if len(text) <= limit:
             return text
         return f"{text[:limit].rsplit(' ', 1)[0]}..."
+
+    @staticmethod
+    def _chat_response_depth(text: str) -> str:
+        lower = " ".join(str(text or "").lower().split())
+        if re.search(r"\b(full|complete|start\s+to\s+end|end\s+to\s+end|multi[- ]?page|all\s+code|entire)\b", lower) and re.search(
+            r"\b(script|screenplay|movie|document|report|website|app|code|story)\b", lower
+        ):
+            return "artifact"
+        if re.search(r"\b(write|build|generate|create|make|draft|produce)\b", lower) and re.search(
+            r"\b(script|screenplay|movie|document|pdf|report|website|app|code|html|story)\b", lower
+        ):
+            return "artifact"
+        if re.search(r"\b(explain|design|plan|architecture|how|why|compare|tradeoff|decide|decides|strategy)\b", lower):
+            return "medium"
+        return "short"
+
+    @classmethod
+    def _chat_reply_limit(cls, text: str, *, entry: str = "") -> int:
+        if entry == "chart":
+            return 360
+        depth = cls._chat_response_depth(text)
+        if depth == "artifact":
+            return 8000
+        if depth == "medium":
+            return 1600
+        return 520
+
+    @classmethod
+    def _chat_depth_instruction(cls, text: str) -> str:
+        depth = cls._chat_response_depth(text)
+        if depth == "artifact":
+            return (
+                "The user is asking for an artifact or large generated output. Provide the requested artifact fully when practical. "
+                "If the full artifact is too long, say that clearly and offer an outline plus the first useful part, or split it into parts."
+            )
+        if depth == "medium":
+            return "The user is asking for design, planning, or explanation. Use a medium-length structured answer with headings or bullets when helpful."
+        return "The user is asking a simple or factual question. Answer directly in 1-3 concise sentences."
+
+    @staticmethod
+    def _internet_research_allowed() -> bool:
+        return os.environ.get("SHELL_ALLOW_INTERNET_RESEARCH", "0").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+            "allow",
+            "enabled",
+        }
+
+    @staticmethod
+    def _internet_research_disabled_reply() -> str:
+        return "I’m in offline mode and can’t access the internet. I can still give a generic/offline answer or you can enable online research."
+
+    @staticmethod
+    def _internet_research_needed(text: str) -> bool:
+        lower = " ".join(str(text or "").lower().split())
+        if not lower:
+            return False
+        explicit_research = bool(
+            re.search(r"\b(research|recerch|deep\s+research|fact\s*check|web\s+search|internet|online)\b", lower)
+        )
+        current_info = bool(
+            re.search(
+                r"\b(latest|current|up[- ]?to[- ]?date|today|news|2026|trends?|compare|comparison|apis?|prices?|release|versions?)\b",
+                lower,
+            )
+        )
+        external_subject = bool(
+            re.search(r"\b(ai\s+apis?|web\s+design|market|competitors?|companies|models?|laws?|weather|stock|crypto)\b", lower)
+        )
+        return explicit_research or (current_info and external_subject)
+
+    @staticmethod
+    def _web_research_route(text: str) -> dict[str, Any]:
+        return {
+            "tool": "shell_agents:research_agent_tool",
+            "args": {"task": str(text or "").strip()},
+            "kind": "agent",
+            "confidence": 0.78,
+            "source": "web-ui-internet-research-policy",
+        }
+
+    @staticmethod
+    def _approval_intent(text: str) -> bool:
+        lower = " ".join(str(text or "").lower().split())
+        return bool(re.search(r"\b(yes|allow|approve|go ahead|execute|run it|do it|karo|haan|han|yes once)\b", lower))
+
+    @staticmethod
+    def _downloads_cleanup_route(*, dry_run: bool, source: str = "real-os-agent-downloads-cleanup") -> dict[str, Any]:
+        return {
+            "tool": "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
+            "args": {"zip_folder": "Setups", "pdf_folder": "PDFs", "dry_run": bool(dry_run)},
+            "kind": "tool",
+            "confidence": 0.94,
+            "source": source,
+            "mode": "local",
+            "modeLabel": "Local",
+        }
+
+    @classmethod
+    def _approval_route_from_history(cls, text: str, previous_messages: list[Any]) -> dict[str, Any] | None:
+        if not cls._approval_intent(text):
+            return None
+        for message in reversed(previous_messages[-8:]):
+            if not isinstance(message, dict) or str(message.get("role") or "").lower() == "user":
+                continue
+            pending = message.get("pendingPermission")
+            if not isinstance(pending, dict):
+                continue
+            if pending.get("action") == "downloads_cleanup":
+                return cls._downloads_cleanup_route(dry_run=False, source="real-os-agent-downloads-cleanup-approved")
+            route = pending.get("route")
+            if isinstance(route, dict) and route.get("tool"):
+                return {
+                    **route,
+                    "source": str(route.get("source") or "approved-pending-action"),
+                    "approved": True,
+                }
+        return None
+
+    @staticmethod
+    def _route_needs_user_permission(route: dict[str, Any] | None) -> bool:
+        if not isinstance(route, dict):
+            return False
+        if route.get("approved") is True:
+            return False
+        args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        if args.get("requires_approval") is True or route.get("requiresApproval") is True:
+            return True
+        return str(route.get("tool") or "") == "shell_terminal:run_command_tool" and str(route.get("source") or "").startswith("dev-workflow")
+
+    @classmethod
+    def _permission_prompt_for_route(cls, route: dict[str, Any]) -> dict[str, Any]:
+        tool = str(route.get("tool") or "")
+        args = dict(route.get("args") or {})
+        if tool == "shell_terminal:run_command_tool":
+            command = str(args.get("command") or "").strip()
+            scope = str(args.get("permission_scope") or "this project").strip()
+            approved_args = dict(args)
+            approved_args.pop("requires_approval", None)
+            approved_args.pop("permission_scope", None)
+            approved_route = {**route, "args": approved_args, "approved": True, "source": "approved-dev-command"}
+            return {
+                "user_message": (
+                    f"I want to run `{command}` in {scope}. Allow this action? "
+                    "Say “yes” to run it once, or cancel to leave it untouched."
+                ),
+                "ui_actions": [
+                    {"type": "APPROVE_ACTION", "label": "Yes, run once", "message": "yes"},
+                    {"type": "CANCEL_ACTION", "label": "Cancel"},
+                ],
+                "pending_permission": {
+                    "action": "run_command",
+                    "summary": f"Run `{command}` in {scope}.",
+                    "route": approved_route,
+                },
+            }
+        return {
+            "user_message": "This action needs permission before I run it. Say “yes” to allow it once, or cancel.",
+            "ui_actions": [{"type": "APPROVE_ACTION", "label": "Yes, allow", "message": "yes"}],
+            "pending_permission": {"action": "generic", "route": {**route, "approved": True}},
+        }
+
+    @staticmethod
+    def _is_research_route(route: dict[str, Any] | None) -> bool:
+        return bool(route and "research_agent" in str(route.get("tool") or "").lower())
+
+    def _web_research_summary(self, query: str) -> str:
+        if not self._internet_research_allowed():
+            return ""
+        api_key = os.environ.get("GOOGLE_SEARCH_API_KEY", "").strip()
+        search_engine_id = os.environ.get("SEARCH_ENGINE_ID", "").strip()
+        if not api_key or not search_engine_id:
+            return ""
+        try:
+            params = urllib.parse.urlencode(
+                {
+                    "key": api_key,
+                    "cx": search_engine_id,
+                    "q": str(query or "").strip(),
+                    "num": 3,
+                }
+            )
+            request = urllib.request.Request(
+                f"https://www.googleapis.com/customsearch/v1?{params}",
+                headers={"User-Agent": "ShellAIResearch/1.0"},
+            )
+            with urllib.request.urlopen(request, timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8", errors="ignore"))
+            rows: list[str] = []
+            for item in payload.get("items", [])[:3]:
+                if not isinstance(item, dict):
+                    continue
+                title = str(item.get("title") or "Untitled").strip()
+                link = str(item.get("link") or "").strip()
+                snippet = str(item.get("snippet") or "").strip()
+                excerpt = self._fetch_web_page_excerpt(link) if link else ""
+                parts = [f"Title: {title}"]
+                if link:
+                    parts.append(f"URL: {link}")
+                if snippet:
+                    parts.append(f"Search snippet: {snippet}")
+                if excerpt:
+                    parts.append(f"Page excerpt: {excerpt}")
+                rows.append("\n".join(parts))
+            return "\n\n".join(rows)
+        except Exception:
+            return ""
+
+    @staticmethod
+    def _fetch_web_page_excerpt(url: str) -> str:
+        if not re.match(r"^https?://", str(url or ""), flags=re.I):
+            return ""
+        try:
+            request = urllib.request.Request(str(url), headers={"User-Agent": "ShellAIResearch/1.0"})
+            with urllib.request.urlopen(request, timeout=5) as response:
+                content_type = str(response.headers.get("content-type") or "").lower()
+                if "text/html" not in content_type and "text/plain" not in content_type:
+                    return ""
+                raw = response.read(200_000).decode("utf-8", errors="ignore")
+            raw = re.sub(r"(?is)<(script|style|noscript).*?</\1>", " ", raw)
+            raw = re.sub(r"(?s)<[^>]+>", " ", raw)
+            raw = re.sub(r"\s+", " ", raw).strip()
+            return raw[:900]
+        except Exception:
+            return ""
+
+    def _prepare_internet_research_route(self, route: dict[str, Any], text: str) -> dict[str, Any]:
+        route_args = dict(route.get("args") or {})
+        original_task = str(route_args.get("task") or text or "").strip()
+        research_context = self._web_research_summary(original_task)
+        if research_context:
+            route_args["task"] = (
+                f"{original_task}\n\n"
+                "Use this fetched web research context. Clearly base the answer on it and include source URLs when useful.\n"
+                f"{research_context}"
+            )
+            return {**route, "args": route_args, "mode": "online-research", "modeLabel": "Online research"}
+        return {**route, "args": route_args, "mode": "online-research", "modeLabel": "Online research"}
 
     @staticmethod
     def _has_command_intent(text: str) -> bool:
@@ -1720,6 +2045,115 @@ class ShellBackendBridge:
             return cls._local_html_artifact_content(normalized)
         if re.search(r"\b(movie|film|short film|script|screenplay|scene|dialogue|dialog)\b", lower):
             title = topic.title()
+            if re.search(r"\b(full|complete|start\s+to\s+end|end\s+to\s+end|entire|acts?\s*1\s*[-to]+\s*3)\b", lower):
+                return (
+                    f"{title}\n\n"
+                    "Format: Feature screenplay draft\n"
+                    "Genre: Mystery thriller\n\n"
+                    "ACT STRUCTURE\n"
+                    "Act 1: Ayaan discovers a file from tomorrow, follows the first clue, and learns the warning is real.\n"
+                    "Act 2: Ayaan, Meera, and Rafiq trace the signal to an abandoned cinema where projected scenes alter real events.\n"
+                    "Act 3: Ayaan must decide whether to destroy the projector or use it once, risking his own future to stop a city-wide disaster.\n\n"
+                    "CAST\n"
+                    "AYAAN MALIK - 29, systems technician, careful under pressure but haunted by one past mistake.\n"
+                    "MEERA SINGH - 31, investigative reporter, direct, skeptical, and hard to intimidate.\n"
+                    "RAFIQ ANSARI - 28, Ayaan's oldest friend, street-smart and loyal even when terrified.\n"
+                    "THE PROJECTIONIST - unseen at first, leaving warnings through film reels and corrupted files.\n\n"
+                    "FADE IN:\n\n"
+                    "INT. AYAAN'S APARTMENT - NIGHT\n\n"
+                    "Rain needles the windows of a cramped Mumbai apartment. Ayaan sits before three monitors, repairing a municipal server dump. "
+                    "The room is quiet except for a ceiling fan and the soft click of keys.\n\n"
+                    "On the center monitor, a folder appears by itself: TOMORROW_00_17.\n\n"
+                    "Ayaan stops typing.\n\n"
+                    "AYAAN\n"
+                    "I did not mount that drive.\n\n"
+                    "He checks the logs. Nothing. The folder opens. Inside is a video file named: DO_NOT_GO_TO_SLEEP.mp4.\n\n"
+                    "Ayaan hesitates, then clicks.\n\n"
+                    "ON SCREEN: A shaky phone video of Ayaan's own apartment. Same rain. Same fan. A digital clock reads 12:17 AM. "
+                    "In the video, Ayaan is asleep on the couch. The front door unlocks from outside.\n\n"
+                    "Ayaan looks toward his real front door.\n\n"
+                    "The video cuts to black. Text appears: FIND THE TICKET BEFORE MIDNIGHT.\n\n"
+                    "CUT TO:\n\n"
+                    "EXT. AYAAN'S BUILDING - NIGHT\n\n"
+                    "Ayaan steps into the rain with his laptop bag under his jacket. He calls Meera. She answers on the third ring.\n\n"
+                    "MEERA (V.O.)\n"
+                    "If this is about your router again, I am hanging up.\n\n"
+                    "AYAAN\n"
+                    "Someone sent me a video from tomorrow.\n\n"
+                    "MEERA (V.O.)\n"
+                    "That is not a sentence serious people say.\n\n"
+                    "AYAAN\n"
+                    "I need you to be unserious for ten minutes.\n\n"
+                    "Across the street, a small object waits beneath the flickering bus-stop light: an old cinema ticket sealed in plastic.\n\n"
+                    "CUT TO:\n\n"
+                    "INT. MEERA'S NEWSROOM - NIGHT\n\n"
+                    "Half the office is dark. Meera watches the video on Ayaan's laptop. Her skepticism fades when she sees tomorrow's timestamp embedded in raw metadata.\n\n"
+                    "MEERA\n"
+                    "Metadata can be forged.\n\n"
+                    "AYAAN\n"
+                    "Yes.\n\n"
+                    "MEERA\n"
+                    "This was not forged by anyone normal.\n\n"
+                    "She turns the cinema ticket over. On the back, a handwritten address has bled in the rain: REGAL ECHO, SCREEN 3.\n\n"
+                    "MEERA\n"
+                    "This theatre burned down twelve years ago.\n\n"
+                    "AYAAN\n"
+                    "Then why is there a showtime for tonight?\n\n"
+                    "A desk phone rings though no line is connected. Meera and Ayaan stare at it.\n\n"
+                    "Meera answers.\n\n"
+                    "THE PROJECTIONIST (V.O.)\n"
+                    "Bring the ticket. Leave the reporter.\n\n"
+                    "The line dies.\n\n"
+                    "CUT TO:\n\n"
+                    "EXT. OLD CITY MARKET - NIGHT\n\n"
+                    "Rafiq hurries through closing stalls, clutching a second ticket. Ayaan and Meera meet him beneath a blue tarp snapping in the wind.\n\n"
+                    "RAFIQ\n"
+                    "Tell me both of you got one too.\n\n"
+                    "MEERA\n"
+                    "How did you get this?\n\n"
+                    "RAFIQ\n"
+                    "It was in my taxi. On the seat. Passenger never existed on the dashcam.\n\n"
+                    "Ayaan compares the tickets. Three seats. Same show. Same time: 11:47 PM.\n\n"
+                    "The market lights go out one row at a time, moving toward them.\n\n"
+                    "AYAAN\n"
+                    "Walk. Do not run.\n\n"
+                    "They walk. Behind them, a projector beam slices through the rain from somewhere above the market. Wherever the beam touches, people freeze for one second, then continue as if nothing happened.\n\n"
+                    "Meera sees it and finally stops pretending not to be afraid.\n\n"
+                    "MEERA\n"
+                    "Ayaan.\n\n"
+                    "AYAAN\n"
+                    "I saw it.\n\n"
+                    "CUT TO:\n\n"
+                    "INT. ABANDONED REGAL ECHO THEATRE - LOBBY - NIGHT\n\n"
+                    "The theatre is blackened from an old fire, but the ticket booth glows with warm light. No one sits inside. Three tickets slide out beneath the glass.\n\n"
+                    "Ayaan does not take them.\n\n"
+                    "RAFIQ\n"
+                    "Good. We leave. Excellent investigation.\n\n"
+                    "The lobby speakers crackle.\n\n"
+                    "THE PROJECTIONIST (V.O.)\n"
+                    "The film starts whether you watch or not.\n\n"
+                    "A low mechanical rumble begins beyond the auditorium doors.\n\n"
+                    "MEERA\n"
+                    "If it can show tomorrow, it can show who is doing this.\n\n"
+                    "AYAAN\n"
+                    "Or it shows us exactly what it wants us to do.\n\n"
+                    "He takes the tickets.\n\n"
+                    "INT. REGAL ECHO - SCREEN 3 - CONTINUOUS\n\n"
+                    "The auditorium is empty except for three clean seats in the center row. The screen flickers alive. The image is the market outside, live, from above.\n\n"
+                    "On screen, a bus loses control at the corner they crossed minutes ago.\n\n"
+                    "Ayaan checks his phone. The time is 11:46 PM.\n\n"
+                    "The screen cuts to a title card: ONE MINUTE.\n\n"
+                    "MEERA\n"
+                    "That corner is full of people.\n\n"
+                    "RAFIQ\n"
+                    "We cannot get there in one minute.\n\n"
+                    "Ayaan looks up at the projection booth. A second reel spins beside the first, labeled: CHANGE.\n\n"
+                    "AYAAN\n"
+                    "Maybe we do not have to get there.\n\n"
+                    "He runs toward the booth stairs.\n\n"
+                    "END OF PART 1 - NATURAL BREAK\n\n"
+                    "I've written until Ayaan reaches the projection booth stairs at the end of Act 1's first major turn; I can continue with the next part if you ask."
+                )
             return (
                 f"{title}\n\n"
                 "Genre: Drama / Thriller\n"
@@ -1781,7 +2215,7 @@ class ShellBackendBridge:
             )
             candidates: list[str] = []
             if self._should_try_provider_chat():
-                candidates.append(self._provider_chat_reply(task, system_prompt))
+                candidates.append(self._provider_chat_reply(task, system_prompt, limit=8000))
             try:
                 result = generate_offline_coding_reply(task, system_prompt=system_prompt, previous_messages=previous_messages)
                 if getattr(result, "success", False) and getattr(result, "reply", ""):
@@ -1821,10 +2255,10 @@ class ShellBackendBridge:
         except Exception:
             online_mode_enabled = lambda: False  # type: ignore[assignment]
         if online_mode_enabled() and self._should_try_provider_chat():
-            provider_reply = self._provider_chat_reply(task, system_prompt)
+            provider_reply = self._provider_chat_reply(task, system_prompt, limit=self._chat_reply_limit(task))
             if provider_reply and not self._is_stale_provider_fallback_reply(provider_reply):
                 return provider_reply
-        offline_reply = self._offline_chat_reply(task, system_prompt, previous_messages)
+        offline_reply = self._offline_chat_reply(task, system_prompt, previous_messages, limit=self._chat_reply_limit(task))
         if offline_reply:
             return offline_reply
         return self._local_artifact_content(task, file_type=file_type)
@@ -2070,6 +2504,10 @@ class ShellBackendBridge:
         if tool == "shell_image_ai:generate_image_tool":
             return "gallery mein save ho gayi" in lower_reply or "saved to gallery" in lower_reply
         if isinstance(result, dict):
+            payload = result.get("result")
+            payload_dict = ShellBackendBridge._coerce_tool_payload(payload)
+            if payload_dict.get("ok") is False or payload_dict.get("error"):
+                return False
             if result.get("status") == "success":
                 return True
             if result.get("success") is True:
@@ -2370,7 +2808,7 @@ class ShellBackendBridge:
             return self._chat_provider_network_ready(configured_keys)
         return self._chat_provider_network_ready(configured_keys)
 
-    def _provider_chat_reply(self, prompt: str, system_prompt: str) -> str:
+    def _provider_chat_reply(self, prompt: str, system_prompt: str, *, limit: int = 360) -> str:
         try:
             import concurrent.futures
 
@@ -2391,7 +2829,7 @@ class ShellBackendBridge:
             with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
                 reply = pool.submit(_ask_brain).result(timeout=timeout)
             if reply and not self._is_stale_provider_fallback_reply(reply):
-                return self._compact_chat_reply(reply)
+                return self._compact_chat_reply(reply, limit=limit)
         except Exception:
             pass
         return ""
@@ -2401,6 +2839,8 @@ class ShellBackendBridge:
         prompt: str,
         system_prompt: str,
         previous_messages: list[Any] | None = None,
+        *,
+        limit: int = 700,
     ) -> str:
         clean_previous_messages = self._offline_llm_history(previous_messages)
         try:
@@ -2410,7 +2850,7 @@ class ShellBackendBridge:
                 previous_messages=clean_previous_messages,
             )
             if getattr(result, "success", False) and getattr(result, "reply", ""):
-                reply = self._compact_chat_reply(str(result.reply), limit=700)
+                reply = self._compact_chat_reply(str(result.reply), limit=limit)
                 if not self._is_stale_provider_fallback_reply(reply):
                     return reply
                 if clean_previous_messages:
@@ -2420,14 +2860,28 @@ class ShellBackendBridge:
                         previous_messages=[],
                     )
                     if getattr(retry, "success", False) and getattr(retry, "reply", ""):
-                        retry_reply = self._compact_chat_reply(str(retry.reply), limit=700)
+                        retry_reply = self._compact_chat_reply(str(retry.reply), limit=limit)
                         if not self._is_stale_provider_fallback_reply(retry_reply):
                             return retry_reply
         except Exception:
             pass
         return ""
 
+    def _offline_chat_reply_with_limit(
+        self,
+        prompt: str,
+        system_prompt: str,
+        previous_messages: list[Any] | None,
+        *,
+        limit: int,
+    ) -> str:
+        try:
+            return self._offline_chat_reply(prompt, system_prompt, previous_messages, limit=limit)
+        except TypeError:
+            return self._offline_chat_reply(prompt, system_prompt, previous_messages)
+
     def _brain_chat_fallback(self, text: str, *, previous_messages: list[Any] | None = None) -> str:
+        reply_limit = self._chat_reply_limit(text)
         history_context = self._history_context_snippet(previous_messages or [])
         memory_context = self._memory_context_snippet(text)
         rag_context = self._project_rag_context_snippet(text)
@@ -2443,7 +2897,7 @@ class ShellBackendBridge:
             f"{_shell_language_instruction()} "
             "If the user asks who made, created, built, developed, owns, or created Shell AI, "
             "answer exactly: Mujhe mdshoebking ne banaya hai. Never say Meta, Google, OpenAI, Gemini, Qwen, llama.cpp, or any provider/model made you. "
-            "Answer the user's normal text question directly in 1-3 short lines. "
+            f"{self._chat_depth_instruction(text)} "
             "Do not claim you executed tools in this text-only fallback. "
             "Do not give generic capability refusals like 'I cannot make PDFs/images/open apps'; Shell has tools for files, PDFs, images, apps, and OS actions, so explain only the exact unavailable route or dependency if tool routing is unavailable. "
             "Use recent conversation, memory, and Project RAG context when relevant. Do not invent missing context."
@@ -2451,15 +2905,15 @@ class ShellBackendBridge:
         context_block = "\n\n".join(context_sections)
         prompt = text if not context_block else f"{context_block}\n\nUser: {text}"
         if self._should_try_provider_chat():
-            provider_reply = self._provider_chat_reply(prompt, system_prompt)
+            provider_reply = self._provider_chat_reply(prompt, system_prompt, limit=reply_limit)
             if provider_reply and not self._is_unrequested_creator_identity_reply(text, provider_reply):
                 return provider_reply
 
-        offline_reply = self._offline_chat_reply(prompt, system_prompt, previous_messages)
+        offline_reply = self._offline_chat_reply_with_limit(prompt, system_prompt, previous_messages, limit=reply_limit)
         if offline_reply and not self._is_unrequested_creator_identity_reply(text, offline_reply):
             return offline_reply
         if context_block:
-            offline_reply = self._offline_chat_reply(text, system_prompt, [])
+            offline_reply = self._offline_chat_reply_with_limit(text, system_prompt, [], limit=reply_limit)
             if offline_reply and not self._is_unrequested_creator_identity_reply(text, offline_reply):
                 return offline_reply
 
@@ -2494,6 +2948,18 @@ class ShellBackendBridge:
             return "Main Shell AI hoon, tumhara desktop OS controller aur assistant."
         if query in {"hi", "hello", "hey", "salam", "assalamualaikum"}:
             return "Haan bhai, bolo. Main sun rahi hoon."
+        if "youtube" in query and re.search(r"\b(summarize|summary|main ideas|what.*about|watch this|video)\b", query):
+            return (
+                "I can see this is a YouTube/browser context, but I do not have a transcript in offline mode. "
+                "I can summarize the page title/selected text I captured, or you can enable online research/transcript access for a fuller video summary."
+            )
+        if "active app context" in query and re.search(r"\b(what.*looking at|where am i|which app|context)\b", query):
+            title_match = re.search(r'"title":\s*"([^"]+)"', str(text or ""))
+            app_match = re.search(r'"app_name":\s*"([^"]+)"', str(text or ""))
+            app = app_match.group(1) if app_match else "the active app"
+            title = title_match.group(1) if title_match else ""
+            suffix = f": {title}" if title else ""
+            return f"You are currently in {app}{suffix}."
         if self._has_command_intent(query):
             return (
                 "Shell action intent samajh aa gaya, lekin is request ka exact safe tool route nahi mila. "
@@ -2514,36 +2980,224 @@ class ShellBackendBridge:
             cleaned = re.sub(r"\s*\[Tool Execution:\s*[^\]]+\]\s*$", "", cleaned, flags=re.I | re.S).strip()
             cleaned = re.sub(r"^\*\*(summary[^*]*):\*\*\s*", r"\1: ", cleaned, flags=re.I).strip()
             return f"Deep research complete: {cls._compact_chat_reply(cleaned or rendered_text, limit=900)}"
-        return f"{tool} complete: {rendered_text[:700]}"
+        text = str(rendered_text or "").strip()
+        if not text or (text.startswith("{") and text.endswith("}")) or re.search(r"\bshell_[a-z0-9_:-]+\b", text, flags=re.I):
+            return "Done. I completed that action."
+        return cls._compact_chat_reply(text, limit=900)
+
+    @staticmethod
+    def _coerce_tool_payload(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, str):
+            text = value.strip()
+            if text.startswith("{") and text.endswith("}"):
+                try:
+                    parsed = json.loads(text)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    return {}
+        return {}
+
+    @classmethod
+    def _tool_result_user_layer(cls, route: dict[str, Any], result: Any) -> dict[str, Any]:
+        tool = str(route.get("tool") or "")
+        route_args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        request_values = [
+            route.get("request"),
+            route.get("raw_request"),
+            route.get("prompt"),
+            route.get("goal"),
+            route_args.get("raw_request"),
+            route_args.get("task"),
+            route_args.get("goal"),
+        ]
+        request_text = " ".join(str(value or "").lower() for value in request_values)
+        outer = dict(result) if isinstance(result, dict) else {}
+        raw_payload = outer.get("result") if "result" in outer else result
+        payload = cls._coerce_tool_payload(raw_payload)
+        if not payload and isinstance(raw_payload, dict):
+            payload = dict(raw_payload)
+
+        error_text = ""
+        if isinstance(result, dict) and result.get("status") not in {None, "success"}:
+            error_text = str(result.get("message") or result.get("error") or "").strip()
+        if isinstance(result, dict) and result.get("error"):
+            error_text = str(result.get("error") or result.get("message") or "").strip()
+        if payload.get("ok") is False or payload.get("error"):
+            error_text = str(payload.get("error") or payload.get("message") or "").strip()
+        if error_text:
+            return {
+                "user_message": f"I couldn’t complete this action. Reason: {cls._compact_chat_reply(error_text, limit=220)}",
+                "ui_actions": [],
+            }
+
+        is_file_create = tool == "shell_workspace_tools:create_user_file_tool"
+        if is_file_create:
+            filename = str(payload.get("filename") or route_args.get("filename") or "").strip()
+            destination = str(payload.get("destination") or route_args.get("destination") or "").strip().lower()
+            path = str(payload.get("path") or "").strip()
+            if not filename and path:
+                filename = Path(path).name
+            if not destination:
+                destination = "computer"
+            user_message = f"I created {filename or 'the file'} on your {destination}."
+            ui_actions: list[dict[str, Any]] = []
+            if str(payload.get("ui_hint") or "").strip().lower() == "open_file_location" and path:
+                ui_actions.append(
+                    {
+                        "type": "OPEN_FILE_LOCATION",
+                        "label": "Open folder",
+                        "path": path,
+                    }
+                )
+            return {"user_message": user_message, "ui_actions": ui_actions}
+
+        if tool == "shell_windows_workflows:open_recent_screenshots_slideshow_tool":
+            return {"user_message": "I opened your Screenshots folder and Photos.", "ui_actions": []}
+
+        if tool == "shell_windows_workflows:organize_downloads_setups_pdfs_tool":
+            if "gmail" in request_text or "mail" in request_text or "email" in request_text:
+                return {
+                    "user_message": (
+                        "Local tools only support organizing local Downloads into Setups and PDFs right now. "
+                        "Gmail search and download is not implemented yet."
+                    ),
+                    "ui_actions": [],
+                }
+            zip_folder = str(payload.get("zip_folder") or route_args.get("zip_folder") or "Setups").strip()
+            pdf_folder = str(payload.get("pdf_folder") or route_args.get("pdf_folder") or "PDFs").strip()
+            moved_count = int(payload.get("moved_count") or 0)
+            downloads_path = str(payload.get("downloads") or "").strip()
+            dry_run = bool(payload.get("dry_run") or route_args.get("dry_run"))
+            if dry_run:
+                path_note = f" in `{downloads_path}`" if downloads_path else ""
+                return {
+                    "user_message": (
+                        f"I audited your Downloads{path_note}. I found {moved_count} file(s) that can be safely organized: "
+                        f"ZIP/MSI/EXE files into {zip_folder}, and PDFs into {pdf_folder}. "
+                        "I have not moved anything yet. Say “yes” or “allow” if you want me to move them."
+                    ),
+                    "ui_actions": [
+                        {
+                            "type": "APPROVE_ACTION",
+                            "label": "Yes, organize",
+                            "message": "yes, organize my Downloads",
+                        },
+                        {"type": "CANCEL_ACTION", "label": "Cancel"},
+                    ],
+                    "pending_permission": {
+                        "action": "downloads_cleanup",
+                        "summary": f"Move {moved_count} Downloads file(s) into {zip_folder} and {pdf_folder}.",
+                        "route": cls._downloads_cleanup_route(dry_run=False, source="real-os-agent-downloads-cleanup-approved"),
+                    },
+                }
+            return {"user_message": f"I organized your Downloads into {zip_folder} and {pdf_folder}.", "ui_actions": []}
+
+        if tool == "shell_workspace_tools:list_workspace_files_tool":
+            count = payload.get("count") or payload.get("total") or payload.get("files_count")
+            if count not in {None, ""}:
+                return {"user_message": f"I found {count} files in your workspace.", "ui_actions": []}
+            return {"user_message": "I listed the files in your workspace.", "ui_actions": []}
+
+        if tool == "shell_terminal:run_command_tool":
+            command = str(route_args.get("command") or "").strip()
+            rendered = str(raw_payload or "").strip()
+            lower_rendered = rendered.lower()
+            if lower_rendered.startswith("blocked:"):
+                reason = cls._compact_chat_reply(rendered.replace("BLOCKED:", "", 1).strip(), limit=260)
+                return {"user_message": f"I didn’t run `{command}` because {reason}", "ui_actions": []}
+            if lower_rendered.startswith("error") or "exit code:" in lower_rendered:
+                short = cls._compact_chat_reply(rendered, limit=520)
+                return {"user_message": f"I ran `{command}`, but it did not finish cleanly. {short}", "ui_actions": []}
+            short = cls._compact_chat_reply(rendered.replace("Output:", "").strip(), limit=700)
+            suffix = f" Result: {short}" if short else ""
+            return {"user_message": f"I ran `{command}` successfully.{suffix}", "ui_actions": []}
+
+        if tool == "shell_email_tool:email_setup_status_tool":
+            rendered = str(raw_payload or "").strip()
+            if "not configured" in rendered.lower() or "credentials missing" in rendered.lower():
+                return {
+                    "user_message": (
+                        "Gmail/email integration is not configured yet. I can open Gmail in the browser, "
+                        "but inbox reading, summaries, monitoring, and attachment downloads need a Gmail/API or SMTP setup first."
+                    ),
+                    "ui_actions": [
+                        {
+                            "type": "OPEN_URL",
+                            "label": "Open Gmail",
+                            "url": "https://mail.google.com/",
+                        }
+                    ],
+                }
+            return {"user_message": "Email sending credentials are configured. Gmail inbox reading/monitoring still needs a Gmail API integration.", "ui_actions": []}
+
+        return {"user_message": "", "ui_actions": []}
 
     @classmethod
     def _format_orchestration_reply(cls, rendered_text: str) -> str:
         try:
             plan = json.loads(str(rendered_text or "{}"))
         except Exception:
-            return f"Shell agent planner complete: {cls._compact_chat_reply(rendered_text, limit=700)}"
+            return "I checked the request, but I couldn’t turn the planner output into a safe action."
         if not isinstance(plan, dict):
-            return f"Shell agent planner complete: {cls._compact_chat_reply(rendered_text, limit=700)}"
+            return "I checked the request, but I couldn’t turn the planner output into a safe action."
 
         agent = str(plan.get("selected_agent_name") or plan.get("selected_agent_id") or "Planner Agent")
         status = str(plan.get("status") or "").strip() or "planned"
         execution_status = str(plan.get("execution_status") or "").strip()
+        execution_allowed = plan.get("execution_allowed")
+        execution_reason = str(plan.get("execution_reason") or "").strip()
+        goal = str(plan.get("goal") or plan.get("task") or "").strip()
         low_level_tool = str(plan.get("low_level_tool_id") or "").strip()
         reasons = [str(reason) for reason in plan.get("reasons") or [] if str(reason).strip()]
         reason_text = cls._compact_chat_reply("; ".join(reasons), limit=260) if reasons else ""
 
+        if execution_allowed is False or execution_status == "blocked" or status == "blocked":
+            action = cls._planner_goal_action(goal)
+            reason = cls._planner_block_reason(execution_reason or reason_text)
+            return (
+                f"I didn’t {action} because {reason}. "
+                "Advanced users can change Shell’s policy/settings if they want to allow this."
+            )
         if execution_status == "success":
             tool_text = f" via {low_level_tool}" if low_level_tool else ""
             return f"Shell agent executed: {agent}{tool_text}."
-        if execution_status == "blocked" or status == "blocked" or plan.get("requires_approval"):
+        if plan.get("requires_approval"):
             suffix = f" Reason: {reason_text}" if reason_text else ""
-            return f"Shell agent route blocked: {agent} selected hua, lekin approval/safety required hai.{suffix}"
+            return f"I can do this only after approval/safety settings allow it.{suffix}"
         if status == "needs_planning":
             suffix = f" Reason: {reason_text}" if reason_text else ""
-            return f"Shell agent planner ready: {agent} ne task analyze kiya. Direct safe tool route nahi mila, isliye detailed planning needed hai.{suffix}"
+            return f"I analyzed the task, but I don’t have a direct safe local tool for it yet.{suffix}"
         tool_text = f" Tool: {low_level_tool}." if low_level_tool else ""
         suffix = f" Reason: {reason_text}" if reason_text else ""
         return f"Shell agent route ready: {agent} selected hua.{tool_text}{suffix}"
+
+    @staticmethod
+    def _planner_goal_action(goal: str) -> str:
+        lower = str(goal or "").lower()
+        if re.search(r"\b(npm\s+test|pytest|test|command|run)\b", lower):
+            command = re.sub(r"^\s*run\s+", "", str(goal or ""), flags=re.I).strip()
+            return f"run `{command}`" if command else "run that command"
+        if re.search(r"\b(screenshot|screen\s*capture|capture)\b", lower):
+            return "capture a screenshot"
+        if re.search(r"\b(open|launch)\b", lower):
+            return f"open {goal}" if goal else "open that"
+        if re.search(r"\b(organize|move|copy|delete|create|make|build|write)\b", lower):
+            return goal or "complete that action"
+        return goal or "complete that action"
+
+    @staticmethod
+    def _planner_block_reason(reason: str) -> str:
+        lower = str(reason or "").lower()
+        if "screen" in lower and ("capture" in lower or "screenshot" in lower):
+            return "screen capture is disabled by policy"
+        if "command" in lower or "execute" in lower or "capability execution" in lower:
+            return "the current safety policy doesn’t allow Shell to execute this capability"
+        if "policy" in lower:
+            return str(reason).strip()
+        return str(reason or "the current Shell safety policy does not allow it").strip()
 
     @staticmethod
     def _friendly_image_failure(rendered_text: str) -> str:
@@ -2556,10 +3210,14 @@ class ShellBackendBridge:
             "Free Pollinations fallback bhi try hota hai; agar network/public API empty response de to Shell local preview fallback save karega."
         )
 
-    def _format_chat_result(self, route: dict[str, Any], result: Any) -> str:
+    def _format_chat_result_payload(self, route: dict[str, Any], result: Any) -> dict[str, Any]:
         tool = route.get("tool", "backend")
         is_image_tool = str(tool) == "shell_image_ai:generate_image_tool"
         image_prompt = self._route_image_prompt(route) if is_image_tool else ""
+        user_layer = self._tool_result_user_layer(route, result)
+        user_message = str(user_layer.get("user_message") or "").strip()
+        ui_actions = list(user_layer.get("ui_actions") or [])
+        pending_permission = user_layer.get("pending_permission") if isinstance(user_layer.get("pending_permission"), dict) else None
         if isinstance(result, dict):
             if result.get("status") == "success":
                 payload = result.get("result")
@@ -2581,7 +3239,7 @@ class ShellBackendBridge:
                                 "image": item,
                             },
                         )
-                        return f"Image generated aur Gallery mein save ho gayi: {image_path.name}"
+                        return {"user_message": f"Image generated aur Gallery mein save ho gayi: {image_path.name}", "ui_actions": []}
                     lowered_image_result = rendered_text.lower()
                     if "image generation failed" in lowered_image_result or "critical error" in lowered_image_result:
                         error_text = self._friendly_image_failure(rendered_text)
@@ -2595,7 +3253,7 @@ class ShellBackendBridge:
                                 "errorMessage": error_text,
                             },
                         )
-                        return error_text
+                        return {"user_message": error_text, "ui_actions": []}
                     self.emit_event(
                         "image-gen",
                         {
@@ -2606,24 +3264,30 @@ class ShellBackendBridge:
                             "errorMessage": "Image generation completed but no saved image path was returned.",
                         },
                     )
-                    return self._compact_chat_reply(rendered_text, limit=520)
+                    return {"user_message": self._compact_chat_reply(rendered_text, limit=520), "ui_actions": []}
+                if user_message:
+                    payload_result = {"user_message": user_message, "ui_actions": ui_actions}
+                    if pending_permission:
+                        payload_result["pending_permission"] = pending_permission
+                    return payload_result
                 if (
                     rendered_text.startswith("[BLOCKED]")
                     or "CODE WRITE BLOCKED" in rendered_text
                     or "Writing LLM-generated Python to disk is disabled" in rendered_text
                 ):
                     reason = rendered_text.replace("[BLOCKED]", "", 1).strip()
-                    return (
+                    message = (
                         "Code creation safety settings se blocked hai. "
                         "Website/app scaffold default allowed hai; agar SHELL_BLOCK_PROJECT_SCAFFOLD=1 set hai to remove karo. "
                         "Core code writes ke liye trusted session mein SHELL_ALLOW_CODE_WRITE=1 use karo. "
                         f"{reason[:620]}"
                     ).strip()
+                    return {"user_message": message, "ui_actions": []}
                 if "calculator" in str(tool).lower():
                     for line in rendered_text.splitlines():
                         if line.strip().lower().startswith("result:"):
-                            return line.strip()
-                return self._format_agent_success_reply(str(tool), rendered_text)
+                            return {"user_message": line.strip(), "ui_actions": []}
+                return {"user_message": self._format_agent_success_reply(str(tool), rendered_text), "ui_actions": []}
             message = result.get("message") or result.get("error") or json.dumps(result, ensure_ascii=False)
             if is_image_tool:
                 self.emit_event(
@@ -2636,7 +3300,13 @@ class ShellBackendBridge:
                         "errorMessage": str(message).strip()[:700],
                     },
                 )
-            return f"{tool} returned: {str(message).strip()[:700]}"
+            if user_message:
+                payload_result = {"user_message": user_message, "ui_actions": ui_actions}
+                if pending_permission:
+                    payload_result["pending_permission"] = pending_permission
+                return payload_result
+            short_message = self._compact_chat_reply(str(message).strip(), limit=220)
+            return {"user_message": f"I couldn’t complete this action. Reason: {short_message}", "ui_actions": []}
         if is_image_tool:
             self.emit_event(
                 "image-gen",
@@ -2648,7 +3318,16 @@ class ShellBackendBridge:
                     "errorMessage": str(result).strip()[:700],
                 },
             )
-        return f"{tool} complete: {str(result).strip()[:700]}"
+        if user_message:
+            payload_result = {"user_message": user_message, "ui_actions": ui_actions}
+            if pending_permission:
+                payload_result["pending_permission"] = pending_permission
+            return payload_result
+        return {"user_message": "Done. I completed that action.", "ui_actions": []}
+
+    def _format_chat_result(self, route: dict[str, Any], result: Any) -> str:
+        formatted = self._format_chat_result_payload(route, result)
+        return str(formatted.get("user_message") or "").strip()
 
     @staticmethod
     def _extract_generated_image_path(text: str) -> Path | None:

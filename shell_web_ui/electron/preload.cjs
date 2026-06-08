@@ -23,6 +23,14 @@ ipcRenderer.on('shell-bridge-ready', (_event, payload) => {
   emit('shell-bridge-ready', payload)
 })
 
+ipcRenderer.on('overlay-mode', (_event, payload) => {
+  emit('overlay-mode', payload)
+})
+
+ipcRenderer.on('overlay-context-captured', (_event, payload) => {
+  emit('overlay-context-captured', payload)
+})
+
 const ipcApi = {
   invoke: (channel, ...args) => ipcRenderer.invoke('shell-bridge-call', channel, args),
   send: (channel, ...args) => {

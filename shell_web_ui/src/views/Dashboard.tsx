@@ -18,7 +18,8 @@ import {
   RiAttachment2,
   RiCloseLine,
   RiFileTextLine,
-  RiFileCopyLine
+  RiFileCopyLine,
+  RiFolderOpenLine
 } from 'react-icons/ri'
 import { VisionMode } from '@renderer/IndexRoot'
 import { normalizeGeminiApiKey } from '@renderer/services/api-key-utils'
@@ -67,6 +68,14 @@ type AttachedFile = {
   text?: string
   dataUrl?: string
   error?: string
+}
+
+type ToolUiAction = {
+  type?: string
+  label?: string
+  path?: string
+  message?: string
+  url?: string
 }
 
 const GEMINI_STARTUP_VOICE_MESSAGE =
@@ -170,6 +179,9 @@ const transcriptModeLabel = (message: any) => {
   if (String(message?.role || '').toLowerCase() === 'user') return ''
   return String(message?.modeLabel || '').trim()
 }
+
+const transcriptUiActions = (message: any): ToolUiAction[] =>
+  Array.isArray(message?.uiActions) ? message.uiActions : Array.isArray(message?.ui_actions) ? message.ui_actions : []
 
 const coerceActivityStatus = (value: unknown): ActivityStatus => {
   const status = String(value || '').toLowerCase()
@@ -839,8 +851,8 @@ function DashboardView({
     setAttachedFiles((current) => current.filter((item) => item.id !== id))
   }
 
-  const sendTranscriptPrompt = async () => {
-    const text = readTranscriptPrompt()
+  const sendTranscriptPrompt = async (overrideText = '') => {
+    const text = overrideText.trim() || readTranscriptPrompt()
     if ((!text && attachedFiles.length === 0) || isSendingPrompt) return
     setIsSendingPrompt(true)
     setTranscriptPrompt('')
@@ -857,6 +869,23 @@ function DashboardView({
       setIsSendingPrompt(false)
     }
   }
+
+  const runTranscriptAction = useCallback(async (action: ToolUiAction) => {
+    const actionType = String(action?.type || '').toUpperCase()
+    const path = String(action?.path || '').trim()
+    if (actionType === 'OPEN_FILE_LOCATION' && path) {
+      await window.electron?.ipcRenderer.invoke('open-image-location', path)
+      return
+    }
+    if (actionType === 'OPEN_URL') {
+      const url = String(action?.url || '').trim()
+      if (url) await window.shellAPI?.call('open-url', url)
+      return
+    }
+    if (actionType === 'APPROVE_ACTION') {
+      await sendTranscriptPrompt(String(action?.message || 'yes').trim())
+    }
+  }, [sendTranscriptPrompt])
 
   const clearTranscript = async () => {
     try {
@@ -1247,28 +1276,46 @@ function DashboardView({
                 </span>
               </div>
             ) : (
-              chatHistory.map((msg, idx) => (
-                <div
-                  key={idx}
-                  className={`flex flex-col select-text ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  <span
-                    className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-blue-300/70' : 'text-zinc-500'}`}
-                  >
-                    {transcriptRoleLabel(msg)}
-                  </span>
-                  {transcriptModeLabel(msg) && (
-                    <span className="mb-1 inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-100">
-                      {transcriptModeLabel(msg)}
-                    </span>
-                  )}
+              chatHistory.map((msg, idx) => {
+                const actions = transcriptUiActions(msg)
+                return (
                   <div
-                    className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] select-text ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
+                    key={idx}
+                    className={`flex flex-col select-text ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
-                    {transcriptMessageText(msg)}
+                    <span
+                      className={`mb-1 px-1 text-[8px] font-black tracking-widest ${msg.role === 'user' ? 'text-blue-300/70' : 'text-zinc-500'}`}
+                    >
+                      {transcriptRoleLabel(msg)}
+                    </span>
+                    {transcriptModeLabel(msg) && (
+                      <span className="mb-1 inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-100">
+                        {transcriptModeLabel(msg)}
+                      </span>
+                    )}
+                    <div
+                      className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] select-text ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
+                    >
+                      {transcriptMessageText(msg)}
+                    </div>
+                    {msg.role !== 'user' && actions.length > 0 && (
+                      <div className="mt-2 flex max-w-[96%] flex-wrap gap-2">
+                        {actions.map((action, actionIdx) => (
+                          <button
+                            key={`${idx}-${actionIdx}-${action.type || 'action'}`}
+                            type="button"
+                            onClick={() => runTranscriptAction(action)}
+                            className="inline-flex h-7 items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.06] px-3 text-[9px] font-black uppercase tracking-widest text-zinc-200 hover:border-sky-300/40 hover:bg-sky-300/10 focus:outline-none focus:ring-2 focus:ring-sky-300/35"
+                          >
+                            <RiFolderOpenLine size={13} />
+                            {String(action.label || 'Open folder')}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
           <div className="shrink-0 border-t border-blue-500/10 pt-3">

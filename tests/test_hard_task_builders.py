@@ -79,6 +79,43 @@ async def test_fullstack_app_builder_writes_project_when_safety_enabled(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_basic_website_builder_uses_offline_pattern_library(monkeypatch, tmp_path):
+    import shell_code_engine
+
+    class NoopThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    class NoopProcess:
+        pass
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("SHELL_ALLOW_CODE_WRITE", raising=False)
+    monkeypatch.delenv("SHELL_BLOCK_PROJECT_SCAFFOLD", raising=False)
+    monkeypatch.setattr(shell_code_engine, "NEURAL_ENGINE_ACTIVE", False)
+    monkeypatch.setattr(subprocess, "Popen", lambda *_args, **_kwargs: NoopProcess())
+    monkeypatch.setattr(threading, "Thread", NoopThread)
+    monkeypatch.setattr(webbrowser, "open", lambda _url: True)
+
+    result = await shell_code_engine.create_fullstack_app_tool(
+        "shell_ai_site",
+        "Make a website for Shell AI OS controller",
+    )
+
+    project = tmp_path / "shell_projects" / "shell_ai_site"
+    html = (project / "templates" / "index.html").read_text(encoding="utf-8")
+    js = (project / "static" / "js" / "script.js").read_text(encoding="utf-8")
+
+    assert "[SUCCESS]" in result
+    assert "make a website for shell ai os controller" not in html.lower()
+    assert "Control Shell Ai Os Controller" in html
+    assert "offline-basic" in js
+
+
+@pytest.mark.asyncio
 async def test_fullstack_app_builder_uses_cloud_blueprint_for_hard_task_with_key(monkeypatch, tmp_path):
     import shell_code_engine
 
