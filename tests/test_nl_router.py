@@ -383,6 +383,15 @@ def test_natural_pdf_save_without_destination_defaults_to_documents():
     assert route["args"]["content_request"] == "Write a polished PDF document about AI tools."
 
 
+def test_pdf_summary_about_full_app_stays_document_route():
+    route = route_natural_command("Make a PDF summary of this full app architecture")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["destination"] == "documents"
+    assert route["args"]["file_type"] == "pdf"
+
+
 def test_natural_movie_script_pdf_route_keeps_topic_and_requests_script_content():
     route = route_natural_command("movie script ka pdf banao")
 

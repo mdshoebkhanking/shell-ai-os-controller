@@ -440,6 +440,27 @@ except ImportError:
     NEURAL_ENGINE_ACTIVE = False
     hyper_cortex = None  # type: ignore[assignment]
 
+
+def _cloud_blueprint_allowed(app_type: str) -> bool:
+    """Allow cloud blueprints for hard managed scaffolds without unlocking core writes."""
+    try:
+        from shell_safety_gate import code_write_allowed
+        from shell_task_mode import online_full_version_ready, requires_online_full_version
+
+        return code_write_allowed() or (online_full_version_ready() and requires_online_full_version(app_type))
+    except Exception:
+        return False
+
+
+def _refresh_hyper_cortex_providers() -> None:
+    try:
+        refresh = getattr(hyper_cortex, "refresh_providers", None)
+        if callable(refresh):
+            refresh()
+    except Exception:
+        pass
+
+
 @function_tool
 async def create_fullstack_app_tool(project_name: str, app_type: str = "modern_webapp") -> str:
     """
@@ -451,7 +472,7 @@ async def create_fullstack_app_tool(project_name: str, app_type: str = "modern_w
     """
     try:
         try:
-            from shell_safety_gate import check_project_scaffold, code_write_allowed, audit_write
+            from shell_safety_gate import check_project_scaffold, audit_write
         except Exception:
             return "[ERROR] shell_safety_gate module unavailable; refusing to scaffold."
         ok, reason = check_project_scaffold(origin="create_fullstack_app_tool")
@@ -491,9 +512,10 @@ async def create_fullstack_app_tool(project_name: str, app_type: str = "modern_w
 
         # 🧠 HYPER-CORTEX ACTIVATION
         blueprint: Dict[str, Any] = {}
-        if NEURAL_ENGINE_ACTIVE and hyper_cortex is not None and code_write_allowed():
+        if NEURAL_ENGINE_ACTIVE and hyper_cortex is not None and _cloud_blueprint_allowed(app_type):
             logger.info("Shell Neuro-Link: Consulting HyperCortex for '%s'...", app_type)
             try:
+                _refresh_hyper_cortex_providers()
                 # Run blocking provider calls in a worker thread.
                 blueprint = await asyncio.to_thread(hyper_cortex.synergize_project, project_name, app_type)  # type: ignore[attr-defined]
             except Exception as neural_error:

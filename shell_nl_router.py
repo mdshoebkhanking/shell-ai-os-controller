@@ -1002,6 +1002,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     if standalone_html:
         return standalone_html
 
+    user_file_save = _user_file_save_route(raw, lower)
+    if user_file_save:
+        return user_file_save
+
     if re.search(_CREATION_VERB_RE, lower) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
         return _route(
             "shell_code_engine:create_fullstack_app_tool",
@@ -1031,10 +1035,6 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
             },
             confidence=0.9,
         )
-
-    user_file_save = _user_file_save_route(raw, lower)
-    if user_file_save:
-        return user_file_save
 
     workspace_read = _workspace_file_read_route(raw, lower)
     if workspace_read:

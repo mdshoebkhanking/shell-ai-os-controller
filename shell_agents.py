@@ -123,11 +123,16 @@ class ShellAgent:
 
     async def _ai_think(self, prompt: str, system_prompt: str = None,
                         mode: str = None) -> str:
+        online_required_reply = self._online_required_reply(prompt)
         brain = self._get_brain()
         if not brain:
+            if online_required_reply:
+                return online_required_reply
             offline_reply = self._offline_coding_brain_reply(prompt, system_prompt=system_prompt, mode=mode)
             return offline_reply or self._provider_unavailable_message()
         if time.time() < self.__class__._brain_unavailable_until:
+            if online_required_reply:
+                return online_required_reply
             offline_reply = self._offline_coding_brain_reply(prompt, system_prompt=system_prompt, mode=mode)
             return offline_reply or self._provider_unavailable_message()
         mode = mode or self.think_mode
@@ -139,16 +144,22 @@ class ShellAgent:
             if self._is_provider_failure(response):
                 self.__class__._brain_unavailable_until = time.time() + 60.0
                 logger.warning("%s provider chain unavailable: %s", self.name, str(response)[:300])
+                if online_required_reply:
+                    return online_required_reply
                 offline_reply = self._offline_coding_brain_reply(prompt, system_prompt=system_prompt, mode=mode)
                 return offline_reply or self._provider_unavailable_message()
             return response
         except asyncio.TimeoutError:
             self.__class__._brain_unavailable_until = time.time() + 20.0
+            if online_required_reply:
+                return online_required_reply
             offline_reply = self._offline_coding_brain_reply(prompt, system_prompt=system_prompt, mode=mode)
             return offline_reply or self._provider_unavailable_message("AI provider timed out")
         except Exception as e:
             self.__class__._brain_unavailable_until = time.time() + 20.0
             logger.warning("%s provider call failed: %s", self.name, str(e)[:300])
+            if online_required_reply:
+                return online_required_reply
             offline_reply = self._offline_coding_brain_reply(prompt, system_prompt=system_prompt, mode=mode)
             return offline_reply or self._provider_unavailable_message()
 
@@ -193,6 +204,17 @@ class ShellAgent:
             f"{reason}. {self.name} is loaded, but model reasoning is in degraded mode. "
             "Check API keys/quota or retry after the provider cooldown."
         )
+
+    def _online_required_reply(self, prompt: str) -> str:
+        try:
+            from shell_task_mode import classify_task_mode, online_full_version_message
+
+            decision = classify_task_mode(prompt)
+            if decision.requires_online:
+                return online_full_version_message(decision.reason)
+        except Exception:
+            pass
+        return ""
 
     def _local_ui_smoke_reply(self, task: str) -> Optional[str]:
         if "ui smoke test only" not in str(task or "").lower():

@@ -1000,6 +1000,173 @@ def test_login_html_chat_saves_working_html_when_offline_brain_is_generic(monkey
     assert "Created login_page.html" in result["reply"]
 
 
+def test_hard_full_app_requires_online_key_before_code_tool(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    bridge = host.ShellBackendBridge()
+
+    def execute_should_not_run(_route):
+        raise AssertionError("hard full-app task should ask for online key before executing")
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", execute_should_not_run)
+
+    result = bridge._chat_message(["Build a full app with authentication, backend API, and database", {"source": "text"}])
+
+    assert result["success"] is True
+    assert result["route"]["tool"] == "shell_code_engine:create_fullstack_app_tool"
+    assert result["route"]["mode"] == "local-basic-offered"
+    assert result["route"]["modeLabel"] == "Local basic available"
+    assert "basic version offline" in result["reply"]
+    assert "API Keys" in result["reply"]
+
+
+def test_hard_full_app_requires_online_mode_even_with_key(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-placeholder-000000")
+    bridge = host.ShellBackendBridge()
+
+    def execute_should_not_run(_route):
+        raise AssertionError("hard task should require online mode before executing")
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+    monkeypatch.setattr(bridge, "_execute_routed_tool", execute_should_not_run)
+
+    result = bridge._chat_message(["Build a full app with authentication, backend API, and database", {"source": "text"}])
+
+    assert result["success"] is True
+    assert result["route"]["mode"] == "local-basic-offered"
+    assert "online mode enabled nahi hai" in result["reply"]
+
+
+def test_pdf_summary_of_complex_topic_stays_level_1_local(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+        assert route.get("mode") == "local"
+        assert route.get("modeLabel") == "Local"
+        return {"status": "success", "result": "Created file: Documents/full_app_summary.pdf"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "_generated_artifact_content", lambda request, **_kwargs: "Local summary content.")
+
+    result = bridge._chat_message(["Make a PDF summary of this full app architecture", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert "online full version" not in result["reply"]
+
+
+def test_pdf_summary_generation_uses_local_make_mode_without_key(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    bridge = host.ShellBackendBridge()
+    monkeypatch.setattr(
+        bridge,
+        "_provider_chat_reply",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("local PDF summary should not use cloud")),
+    )
+
+    body = bridge._generated_artifact_content(
+        "Make a PDF summary of this text: First point. Second point.",
+        file_type="pdf",
+    )
+
+    assert "Summary" in body
+    assert "- Make a PDF summary" in body or "- First point." in body
+
+
+def test_pdf_summary_generation_uses_cloud_when_online_ready(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-placeholder-000000")
+    monkeypatch.setenv("SHELL_CHAT_PROVIDER_MODE", "online")
+    bridge = host.ShellBackendBridge()
+    monkeypatch.setattr(bridge, "_should_try_provider_chat", lambda: True)
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "Pro PDF\n\nExecutive Summary\n- Improved")
+
+    body = bridge._generated_artifact_content(
+        "Make a PDF summary of this text: rough notes",
+        file_type="pdf",
+    )
+
+    assert "Executive Summary" in body
+    assert "Improved" in body
+
+
+def test_basic_portfolio_website_runs_level_1_local_without_key(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+    import json
+
+    history_path = tmp_path / "web_ui_history.json"
+    monkeypatch.setattr(host, "HISTORY_PATH", history_path)
+    _clear_chat_provider_env(monkeypatch, host)
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
+        assert route.get("mode") == "local"
+        assert route.get("modeLabel") == "Local"
+        assert "portfolio" in route["args"]["app_type"].lower()
+        return {"status": "success", "result": "[SUCCESS] PROJECT BUILT AND LAUNCHED SUCCESSFULLY!"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+
+    result = bridge._chat_message(["Make a portfolio website for me", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert "online full version" not in result["reply"]
+    history = json.loads(history_path.read_text(encoding="utf-8"))
+    assert history[-1]["mode"] == "local"
+    assert history[-1]["modeLabel"] == "Local"
+
+
+def test_hard_full_app_runs_when_online_key_is_ready(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    _clear_chat_provider_env(monkeypatch, host)
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test-placeholder-000000")
+    monkeypatch.setenv("SHELL_CHAT_PROVIDER_MODE", "online")
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        assert route["tool"] == "shell_code_engine:create_fullstack_app_tool"
+        assert route.get("mode") == "online-api"
+        assert route.get("modeLabel") == "Online (API)"
+        return {"status": "success", "result": "[SUCCESS] PROJECT BUILT AND LAUNCHED SUCCESSFULLY!"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+
+    result = bridge._chat_message(["Build a full app with authentication, backend API, and database", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert "online full version" not in result["reply"]
+
+
 def test_movie_script_pdf_chat_generates_script_content_before_file_tool(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 

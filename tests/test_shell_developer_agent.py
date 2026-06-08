@@ -69,3 +69,24 @@ def test_developer_agent_uses_offline_coding_brain_when_provider_missing(monkeyp
 
     assert "parse_csv_upload" in reply
     assert "AI providers are temporarily unavailable" not in reply
+
+
+def test_developer_agent_requires_online_for_hard_full_app_when_provider_missing(monkeypatch):
+    import shell_agents
+    import shell_offline_llm
+    from shell_task_mode import CLOUD_PROVIDER_KEY_GROUPS
+
+    for group in CLOUD_PROVIDER_KEY_GROUPS:
+        for key in group:
+            monkeypatch.delenv(key, raising=False)
+    monkeypatch.setattr(shell_agents.ShellAgent, "_get_brain", classmethod(lambda cls: None))
+    monkeypatch.setattr(
+        shell_offline_llm,
+        "generate_offline_coding_reply",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("hard app task should not use offline coding brain")),
+    )
+
+    reply = asyncio.run(DeveloperAgent().execute("Build a full app with authentication, backend API, and database"))
+
+    assert "basic version offline" in reply
+    assert "API Keys" in reply

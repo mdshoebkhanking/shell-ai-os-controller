@@ -986,37 +986,62 @@ class ShellBackendBridge:
                                 else:
                                     route = self._prepare_artifact_route(route, previous_messages=previous_messages)
                                     route = self._prepare_code_build_route(route)
-                                activity_descriptor = self._activity_descriptor(
-                                    text,
-                                    route,
-                                    image_prompt=image_prompt,
-                                )
-                                self._emit_activity(
-                                    activity_descriptor,
-                                    status="running",
-                                    progress=34 if image_generation_started else 22,
-                                    source=source,
-                                    entry=entry,
-                                )
-                                result = self._execute_routed_tool(route)
-                                self._emit_activity(
-                                    activity_descriptor,
-                                    status="running",
-                                    message="FORMATTING RESULT",
-                                    progress=82,
-                                    source=source,
-                                    entry=entry,
-                                )
-                                reply = self._format_chat_result(route, result)
-                                tool_success = self._activity_result_success(route, result, reply)
-                                self._emit_activity(
-                                    activity_descriptor,
-                                    status="done" if tool_success else "error",
-                                    message="TASK COMPLETE" if tool_success else "TASK FAILED",
-                                    progress=100,
-                                    source=source,
-                                    entry=entry,
-                                )
+                                mode_decision = self._mode_decision_for_route(processing_text, route)
+                                if mode_decision and mode_decision.get("mode") == "local-basic-offered":
+                                    route = {
+                                        **route,
+                                        "mode": "local-basic-offered",
+                                        "modeLabel": "Local basic available",
+                                        "modeDecision": mode_decision,
+                                    }
+                                    reply = str(mode_decision.get("message") or "").strip()
+                                    result = {
+                                        "status": "basic_offline_offered",
+                                        "message": reply,
+                                        "reason": mode_decision.get("reason", ""),
+                                    }
+                                    success = True
+                                    activity_descriptor = None
+                                    image_generation_started = False
+                                else:
+                                    if mode_decision:
+                                        route = {
+                                            **route,
+                                            "mode": str(mode_decision.get("mode") or "local"),
+                                            "modeLabel": str(mode_decision.get("modeLabel") or "Local"),
+                                            "modeDecision": mode_decision,
+                                        }
+                                    activity_descriptor = self._activity_descriptor(
+                                        text,
+                                        route,
+                                        image_prompt=image_prompt,
+                                    )
+                                    self._emit_activity(
+                                        activity_descriptor,
+                                        status="running",
+                                        progress=34 if image_generation_started else 22,
+                                        source=source,
+                                        entry=entry,
+                                    )
+                                    result = self._execute_routed_tool(route)
+                                    self._emit_activity(
+                                        activity_descriptor,
+                                        status="running",
+                                        message="FORMATTING RESULT",
+                                        progress=82,
+                                        source=source,
+                                        entry=entry,
+                                    )
+                                    reply = self._format_chat_result(route, result)
+                                    tool_success = self._activity_result_success(route, result, reply)
+                                    self._emit_activity(
+                                        activity_descriptor,
+                                        status="done" if tool_success else "error",
+                                        message="TASK COMPLETE" if tool_success else "TASK FAILED",
+                                        progress=100,
+                                        source=source,
+                                        entry=entry,
+                                    )
                             else:
                                 if self._should_defer_offline_brain_reply():
                                     pending_chat_id = self._next_chat_job_id()
@@ -1056,6 +1081,13 @@ class ShellBackendBridge:
             reply = self._local_chat_answer(processing_text or text)
 
         model_message = {"role": "model", "parts": [{"text": reply}]}
+        if route and isinstance(route, dict):
+            mode_label = str(route.get("modeLabel") or "").strip()
+            mode_value = str(route.get("mode") or "").strip()
+            if mode_label:
+                model_message["modeLabel"] = mode_label
+            if mode_value:
+                model_message["mode"] = mode_value
         if async_pending and pending_chat_id:
             model_message["pendingOfflineChatId"] = pending_chat_id
         messages.append(model_message)
@@ -1767,13 +1799,28 @@ class ShellBackendBridge:
                 if self._looks_like_standalone_html(html_doc, require_form=require_form):
                     return html_doc
             return self._local_artifact_content(task, file_type=normalized_file_type)
+        if normalized_file_type == "pdf" and re.search(r"\b(summary|summarize|summarise|saransh|recap)\b", task, re.I):
+            try:
+                from shell_make_modes import cloud_make_pdf, local_make_pdf
+                from shell_task_mode import online_full_version_ready
+
+                title = self._artifact_topic_from_request(task).title() or "Shell Summary"
+                if online_full_version_ready() and self._should_try_provider_chat():
+                    return cloud_make_pdf(title, task, self._provider_chat_reply, summary=True)
+                return local_make_pdf(title, task, summary=True)
+            except Exception:
+                return self._local_artifact_content(task, file_type=file_type)
         system_prompt = (
             "You are Shell AI writing finished artifact content for a file/PDF. "
             f"{_shell_language_instruction()} "
             "Return only the actual content that should be saved. Do not describe that you are creating it. "
             "Never echo the user's request as the whole answer. Include useful sections and concrete details."
         )
-        if self._should_try_provider_chat():
+        try:
+            from shell_task_mode import online_mode_enabled
+        except Exception:
+            online_mode_enabled = lambda: False  # type: ignore[assignment]
+        if online_mode_enabled() and self._should_try_provider_chat():
             provider_reply = self._provider_chat_reply(task, system_prompt)
             if provider_reply and not self._is_stale_provider_fallback_reply(provider_reply):
                 return provider_reply
@@ -1841,6 +1888,47 @@ class ShellBackendBridge:
             next_args["app_type"] = self._local_build_brief(app_type)
             return {**route, "args": next_args}
         return route
+
+    def _mode_decision_for_route(self, text: str, route: dict[str, Any]) -> dict[str, Any] | None:
+        tool = str(route.get("tool") or "")
+        args = route.get("args") if isinstance(route.get("args"), dict) else {}
+        prompt = " ".join(
+            item
+            for item in (
+                str(text or ""),
+                str(args.get("app_type") or ""),
+                str(args.get("task") or ""),
+                str(args.get("query") or ""),
+            )
+            if item
+        )
+        try:
+            from shell_task_mode import classify_task_mode, online_full_version_message, online_mode_enabled
+
+            decision = classify_task_mode(prompt, route_tool=tool)
+        except Exception:
+            return None
+        if not decision.requires_online:
+            return {
+                **decision.to_dict(),
+                "mode": "local",
+                "modeLabel": "Local",
+                "message": "Using Level 1 Local mode.",
+            }
+        if online_mode_enabled() and self._should_try_provider_chat():
+            return {
+                **decision.to_dict(),
+                "mode": "online-api",
+                "modeLabel": "Online (API)",
+                "message": "Using Level 2 Online (API) mode. File writes and execution remain local.",
+            }
+        return {
+            **decision.to_dict(),
+            "mode": "local-basic-offered",
+            "modeLabel": "Local basic available",
+            "reason": decision.reason,
+            "message": online_full_version_message(decision.reason),
+        }
 
     @staticmethod
     def _safe_upload_filename(name: str) -> str:

@@ -166,6 +166,11 @@ const transcriptMessageText = (message: any) => {
 const transcriptRoleLabel = (message: any) =>
   String(message?.role || '').toLowerCase() === 'user' ? 'YOU' : 'SHELL'
 
+const transcriptModeLabel = (message: any) => {
+  if (String(message?.role || '').toLowerCase() === 'user') return ''
+  return String(message?.modeLabel || '').trim()
+}
+
 const coerceActivityStatus = (value: unknown): ActivityStatus => {
   const status = String(value || '').toLowerCase()
   if (status === 'done' || status === 'complete' || status === 'completed' || status === 'saved') return 'done'
@@ -1252,6 +1257,11 @@ function DashboardView({
                   >
                     {transcriptRoleLabel(msg)}
                   </span>
+                  {transcriptModeLabel(msg) && (
+                    <span className="mb-1 inline-flex items-center rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-100">
+                      {transcriptModeLabel(msg)}
+                    </span>
+                  )}
                   <div
                     className={`max-w-[96%] py-3 px-3.5 rounded-2xl text-[12px] leading-relaxed border font-mono font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.22)] select-text ${msg.role === 'user' ? 'bg-blue-500/10 border-blue-400/25 text-blue-50 rounded-br-md' : 'bg-black/45 border-white/10 text-zinc-300 rounded-bl-md'}`}
                   >
