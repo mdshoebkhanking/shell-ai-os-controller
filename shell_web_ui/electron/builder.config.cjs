@@ -1,6 +1,9 @@
 const path = require('node:path')
 
 const root = path.resolve(__dirname, '..', '..')
+const windowsTargets = process.env.SHELL_ELECTRON_BUILDER_DIR_ONLY === '1'
+  ? ['dir']
+  : ['dir', 'nsis']
 
 module.exports = {
   appId: 'com.shellai.oscontroller',
@@ -20,7 +23,7 @@ module.exports = {
   asar: true,
   win: {
     executableName: 'ShellAI',
-    target: ['dir', 'nsis'],
+    target: windowsTargets,
     icon: path.join(root, '.shell_runtime', 'windows_installer_staging', 'build_assets', 'shell-ai.ico')
   },
   nsis: {

@@ -583,6 +583,8 @@ def build_electron_desktop_app(app_icon: Path | None = None) -> dict[str, object
     if APP_BUNDLE_DIR.exists():
         shutil.rmtree(APP_BUNDLE_DIR)
     npm = _npm_command()
+    env = os.environ.copy()
+    env["SHELL_ELECTRON_BUILDER_DIR_ONLY"] = "1"
     subprocess.run(
         [
             npm,
@@ -597,6 +599,7 @@ def build_electron_desktop_app(app_icon: Path | None = None) -> dict[str, object
             str(ELECTRON_BUILDER_CONFIG.relative_to(WEB_UI_ROOT)),
         ],
         cwd=str(WEB_UI_ROOT),
+        env=env,
         check=True,
     )
     if not ELECTRON_WIN_UNPACKED_DIR.exists():
