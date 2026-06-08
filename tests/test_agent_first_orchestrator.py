@@ -29,6 +29,32 @@ def test_agent_first_orchestrator_routes_desktop_action_to_desktop_agent():
     assert data["risk_level"] == "caution"
 
 
+def test_agent_first_orchestrator_routes_desktop_folder_workflow_without_planner_block():
+    from core.agent_orchestrator import AgentFirstOrchestrator
+
+    data = AgentFirstOrchestrator().orchestrate("Shell, create a folder called 'Reels Export' on Desktop and open it.").to_dict()
+
+    assert data["status"] == "planned"
+    assert data["selected_agent_id"] == "desktop_automation_agent"
+    assert data["capability"] == "capability.desktop"
+    assert data["low_level_tool_id"] == "shell_windows_workflows:create_desktop_folder_tool"
+    assert data["args"] == {"folder_name": "Reels Export", "open_folder": True}
+    assert data["execution_allowed"] is True
+
+
+def test_agent_first_orchestrator_routes_focus_assist_workflow_without_planner_block():
+    from core.agent_orchestrator import AgentFirstOrchestrator
+
+    data = AgentFirstOrchestrator().orchestrate("Shell, turn on Focus Assist for 30 minutes").to_dict()
+
+    assert data["status"] == "planned"
+    assert data["selected_agent_id"] == "system_monitoring_agent"
+    assert data["capability"] == "capability.system"
+    assert data["low_level_tool_id"] == "shell_windows_workflows:open_focus_assist_tool"
+    assert data["args"] == {"minutes": 30}
+    assert data["execution_allowed"] is True
+
+
 def test_agent_first_orchestrator_blocks_risky_terminal_without_approval():
     from core.agent_orchestrator import AgentFirstOrchestrator
 

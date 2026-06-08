@@ -273,6 +273,73 @@ def test_natural_close_app_route_is_cross_platform_tool():
     assert route["args"] == {"window_title": "calculator"}
 
 
+def test_shell_desktop_folder_create_open_route():
+    route = route_natural_command("Shell, create a folder called ‘Reels Export’ on Desktop and open it.")
+
+    assert route["tool"] == "shell_windows_workflows:create_desktop_folder_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"folder_name": "Reels Export", "open_folder": True}
+
+
+def test_shell_downloads_setups_pdfs_route():
+    route = route_natural_command("Shell, organize my Downloads: move ZIP files to a ‘Setups’ folder and PDFs to PDFs.")
+
+    assert route["tool"] == "shell_windows_workflows:organize_downloads_setups_pdfs_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["zip_folder"] == "Setups"
+    assert route["args"]["pdf_folder"] == "PDFs"
+    assert route["args"]["dry_run"] is False
+
+
+def test_shell_work_session_route_opens_apps_without_developer_agent():
+    route = route_natural_command("Shell, I’m starting work. Open VS Code, Chrome with my three dev tabs, and Spotify")
+
+    assert route["tool"] == "shell_windows_workflows:open_work_session_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["include_vscode"] is True
+    assert route["args"]["include_chrome"] is True
+    assert route["args"]["include_spotify"] is True
+    assert len(route["args"]["chrome_urls"]) == 3
+
+
+def test_shell_high_cpu_route_reviews_instead_of_killing_processes():
+    route = route_natural_command("Shell, open Task Manager and close all high-CPU background apps")
+
+    assert route["tool"] == "shell_windows_workflows:open_task_manager_high_cpu_review_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"open_task_manager": True}
+
+
+def test_shell_focus_assist_route_opens_settings_with_duration():
+    route = route_natural_command("Shell, turn on Focus Assist for 30 minutes")
+
+    assert route["tool"] == "shell_windows_workflows:open_focus_assist_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"minutes": 30}
+
+
+def test_shell_whatsapp_spotify_route_is_combined_workflow():
+    route = route_natural_command("Shell, open WhatsApp Desktop and Spotify side by side")
+
+    assert route["tool"] == "shell_windows_workflows:open_whatsapp_spotify_side_by_side_tool"
+    assert route["kind"] == "tool"
+
+
+def test_shell_photos_screenshots_slideshow_route():
+    route = route_natural_command("Shell, open Photos and start a slideshow of my last screenshots")
+
+    assert route["tool"] == "shell_windows_workflows:open_recent_screenshots_slideshow_tool"
+    assert route["kind"] == "tool"
+
+
+def test_shell_screen_comfort_route():
+    route = route_natural_command("Shell, reduce brightness and enable Night Light")
+
+    assert route["tool"] == "shell_windows_workflows:screen_comfort_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"brightness_level": 40, "enable_night_light": True}
+
+
 def test_natural_workspace_create_file_route():
     route = route_natural_command("create file notes.md with content hello shell")
 

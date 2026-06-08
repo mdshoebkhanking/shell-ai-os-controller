@@ -816,12 +816,83 @@ def _autonomous_route(raw: str, lower: str) -> dict[str, Any] | None:
     return None
 
 
+def _desktop_folder_name(raw: str) -> str:
+    patterns = (
+        r"\bfolder\s+(?:called|named|naam\s+ka|naam\s+se)?\s*[\"'‘’“”]?([^\"'‘’“”]+?)[\"'‘’“”]?\s+(?:on|par|pe|mein|main)\s+(?:desktop|dextop)\b",
+        r"\b(?:create|make|banao|bana|banado|banaao)\s+(?:a\s+)?folder\s+(?:called|named|naam\s+ka|naam\s+se)?\s*[\"'‘’“”]?(.+?)[\"'‘’“”]?\s*$",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, raw, flags=re.I | re.S)
+        if not match:
+            continue
+        name = match.group(1)
+        name = re.sub(r"\b(?:and|or|aur|open|kholo|khol\s+do|osse|use|it|folder|desktop|dextop)\b.*$", "", name, flags=re.I).strip()
+        return _strip_quotes(name)
+    return ""
+
+
+def _windows_workflow_route(raw: str, lower: str) -> dict[str, Any] | None:
+    if re.search(r"\bdownloads?\b", lower) and re.search(r"\b(zip|zips|pdf|pdfs|organize|sort|move)\b", lower):
+        return _route(
+            "shell_windows_workflows:organize_downloads_setups_pdfs_tool",
+            {"zip_folder": "Setups", "pdf_folder": "PDFs", "dry_run": False},
+            confidence=0.91,
+        )
+
+    if re.search(r"\b(?:create|make|banao|bana|banado|banaao)\b", lower) and re.search(r"\bfolder\b", lower) and re.search(r"\b(desktop|dextop)\b", lower):
+        folder_name = _desktop_folder_name(raw) or "Shell Folder"
+        return _route(
+            "shell_windows_workflows:create_desktop_folder_tool",
+            {"folder_name": folder_name, "open_folder": bool(re.search(r"\b(open|kholo|khol|launch)\b", lower))},
+            confidence=0.93,
+        )
+
+    if re.search(r"\bstarting\s+work\b|\bwork\s+session\b|\bkaam\s+start\b", lower) and re.search(r"\b(vs\s*code|vscode|chrome|spotify)\b", lower):
+        return _route(
+            "shell_windows_workflows:open_work_session_tool",
+            {
+                "chrome_urls": ["https://github.com/", "http://localhost:5173/", "http://localhost:3000/"],
+                "include_vscode": bool(re.search(r"\b(vs\s*code|vscode)\b", lower)),
+                "include_chrome": "chrome" in lower,
+                "include_spotify": "spotify" in lower,
+            },
+            confidence=0.89,
+        )
+
+    if re.search(r"\btask\s*manager\b", lower) and re.search(r"\b(high\s*cpu|cpu|background|close|kill|band)\b", lower):
+        return _route("shell_windows_workflows:open_task_manager_high_cpu_review_tool", {"open_task_manager": True}, confidence=0.91)
+
+    if re.search(r"\b(focus\s+assist|do\s+not\s+disturb|dnd|focus)\b", lower) and re.search(r"\b(turn\s+on|enable|start|on|chalu|chalu\s+karo)\b", lower):
+        minutes_match = re.search(r"\b(\d{1,3})\s*(?:minutes?|mins?|minute|m)\b", lower)
+        minutes = int(minutes_match.group(1)) if minutes_match else 30
+        return _route("shell_windows_workflows:open_focus_assist_tool", {"minutes": minutes}, confidence=0.89)
+
+    if re.search(r"\b(?:whats\s*app|whatsapp)\b", lower) and "spotify" in lower and re.search(r"\b(side\s+by\s+side|together|saath|open|launch)\b", lower):
+        return _route("shell_windows_workflows:open_whatsapp_spotify_side_by_side_tool", confidence=0.91)
+
+    if re.search(r"\bphotos?\b", lower) and re.search(r"\b(slideshow|slide\s*show|screenshots?|last\s+screenshots?)\b", lower):
+        return _route("shell_windows_workflows:open_recent_screenshots_slideshow_tool", confidence=0.9)
+
+    if re.search(r"\b(brightness|night\s+light|nightlight)\b", lower) and re.search(r"\b(reduce|lower|kam|enable|turn\s+on|on|chalu)\b", lower):
+        level = 40
+        percent_match = re.search(r"\b(\d{1,3})\s*%", lower)
+        if percent_match:
+            level = max(0, min(100, int(percent_match.group(1))))
+        return _route("shell_windows_workflows:screen_comfort_tool", {"brightness_level": level, "enable_night_light": True}, confidence=0.9)
+
+    return None
+
+
 def route_natural_command(text: str) -> dict[str, Any] | None:
     """Return a backend route for a common natural chat/voice command."""
     raw = _strip_shell_address(text)
     if not raw:
         return None
     lower = raw.lower()
+
+    windows_workflow = _windows_workflow_route(raw, lower)
+    if windows_workflow:
+        return windows_workflow
 
     if re.search(
         r"\b(computer|desktop|screen)\s+(control|automation|readiness|status|health|diagnostics?|capabilit(?:y|ies))\b",

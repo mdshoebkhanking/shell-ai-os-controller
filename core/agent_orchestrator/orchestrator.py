@@ -139,6 +139,14 @@ def _capability_for_route(route: dict[str, Any]) -> str:
     blob = _tool_blob(tool_id)
     kind = str(route.get("kind") or "")
 
+    if blob.startswith("shell_windows_workflows."):
+        if "organize_downloads" in blob:
+            return "file"
+        if any(word in blob for word in ("task_manager", "focus", "screen_comfort")):
+            return "system"
+        if "whatsapp" in blob:
+            return "communication"
+        return "desktop"
     if kind == "agent" or ".agent" in blob:
         if any(word in blob for word in ("developer", "code", "coding")):
             return "coding"
