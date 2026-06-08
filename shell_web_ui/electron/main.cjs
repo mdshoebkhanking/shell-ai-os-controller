@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, nativeImage } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeImage, globalShortcut, screen } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -21,6 +21,8 @@ let bridgeProcess = null
 let bridgeUrl = ''
 let mainWindow = null
 let eventAbortController = null
+let overlayMode = false
+let normalWindowBounds = null
 
 function e2eReportPath() {
   if (process.env.SHELL_ELECTRON_TOOL_MATRIX_E2E === '1') {
@@ -126,6 +128,84 @@ async function startBridge() {
   return bridgeUrl
 }
 
+async function callBridge(channel, args = []) {
+  const url = await startBridge()
+  const response = await fetch(`${url}/call`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ channel, args: Array.isArray(args) ? args : [] })
+  })
+  const payload = await response.json()
+  if (payload && Object.prototype.hasOwnProperty.call(payload, 'data')) return payload.data
+  return payload
+}
+
+function overlayBounds() {
+  const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
+  const area = display.workArea
+  const width = 430
+  const height = 92
+  return {
+    width,
+    height,
+    x: Math.max(area.x, area.x + area.width - width - 24),
+    y: Math.max(area.y, area.y + area.height - height - 28)
+  }
+}
+
+async function captureOverlayContext() {
+  try {
+    const payload = await callBridge('capture-app-context', [])
+    mainWindow?.webContents.send('overlay-context-captured', payload)
+    return payload
+  } catch (error) {
+    appendLog('electron-main.log', `[overlay-context-error] ${error?.stack || error}\n`)
+    return null
+  }
+}
+
+async function setOverlayMode(enabled) {
+  if (!mainWindow) return { success: false, error: 'Shell window is not ready.' }
+  overlayMode = Boolean(enabled)
+  if (overlayMode) {
+    normalWindowBounds = normalWindowBounds || mainWindow.getBounds()
+    await captureOverlayContext()
+    mainWindow.setAlwaysOnTop(true, 'floating')
+    mainWindow.setSkipTaskbar(true)
+    mainWindow.setResizable(false)
+    mainWindow.setBounds(overlayBounds(), true)
+    mainWindow.webContents.send('overlay-mode', true)
+    mainWindow.show()
+    mainWindow.focus()
+    return { success: true, overlay: true }
+  }
+  mainWindow.webContents.send('overlay-mode', false)
+  mainWindow.setAlwaysOnTop(false)
+  mainWindow.setSkipTaskbar(false)
+  mainWindow.setResizable(true)
+  if (normalWindowBounds) mainWindow.setBounds(normalWindowBounds, true)
+  mainWindow.show()
+  mainWindow.focus()
+  return { success: true, overlay: false }
+}
+
+async function toggleOverlay() {
+  if (overlayMode && mainWindow && !mainWindow.isVisible()) return setOverlayMode(true)
+  return setOverlayMode(!overlayMode)
+}
+
+function registerOverlayShortcut() {
+  const hotkey = process.env.SHELL_OVERLAY_HOTKEY || 'CommandOrControl+Alt+S'
+  try {
+    const ok = globalShortcut.register(hotkey, () => {
+      toggleOverlay().catch((error) => appendLog('electron-main.log', `[overlay-toggle-error] ${error?.stack || error}\n`))
+    })
+    appendLog('electron-main.log', `[overlay-hotkey] ${hotkey} registered=${ok}\n`)
+  } catch (error) {
+    appendLog('electron-main.log', `[overlay-hotkey-error] ${error?.stack || error}\n`)
+  }
+}
+
 async function subscribeBridgeEvents() {
   if (!bridgeUrl || !mainWindow) return
   eventAbortController?.abort()
@@ -184,6 +264,19 @@ async function createWindow() {
   })
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     appendLog('electron-renderer.log', `[render-process-gone] ${JSON.stringify(details)}\n`)
+  })
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (overlayMode && input.key === 'Escape') {
+      event.preventDefault()
+      setOverlayMode(false).catch((error) => appendLog('electron-main.log', `[overlay-escape-error] ${error?.stack || error}\n`))
+    }
+  })
+  mainWindow.on('blur', () => {
+    if (overlayMode) {
+      setTimeout(() => {
+        if (overlayMode && mainWindow && !mainWindow.isFocused()) mainWindow.hide()
+      }, 160)
+    }
   })
   mainWindow.once('ready-to-show', () => mainWindow.show())
   mainWindow.webContents.once('did-finish-load', async () => {
@@ -556,18 +649,15 @@ async function createWindow() {
 }
 
 ipcMain.handle('shell-bridge-call', async (_event, channel, args) => {
-  const url = await startBridge()
-  const response = await fetch(`${url}/call`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ channel, args: Array.isArray(args) ? args : [] })
-  })
-  const payload = await response.json()
-  if (payload && Object.prototype.hasOwnProperty.call(payload, 'data')) return payload.data
-  return payload
+  if (channel === 'toggle-overlay') return toggleOverlay()
+  if (channel === 'capture-app-context') return captureOverlayContext()
+  return callBridge(channel, args)
 })
 
-app.whenReady().then(createWindow)
+app.whenReady().then(async () => {
+  await createWindow()
+  registerOverlayShortcut()
+})
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow().catch((error) => appendLog('electron-main.log', `${error.stack || error}\n`))
 })
@@ -575,6 +665,7 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 app.on('before-quit', () => {
+  globalShortcut.unregisterAll()
   eventAbortController?.abort()
   if (bridgeProcess && !bridgeProcess.killed) bridgeProcess.kill()
 })

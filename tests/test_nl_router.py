@@ -291,6 +291,32 @@ def test_shell_downloads_setups_pdfs_route():
     assert route["args"]["dry_run"] is False
 
 
+def test_shell_downloads_audit_cleanup_starts_with_dry_run():
+    route = route_natural_command("Shell, audit my Downloads folder and clean it safely.")
+
+    assert route["tool"] == "shell_windows_workflows:organize_downloads_setups_pdfs_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["zip_folder"] == "Setups"
+    assert route["args"]["pdf_folder"] == "PDFs"
+    assert route["args"]["dry_run"] is True
+
+
+def test_dev_npm_test_routes_to_permissioned_terminal():
+    route = route_natural_command("Shell, run npm test and show me the result")
+
+    assert route["tool"] == "shell_terminal:run_command_tool"
+    assert route["args"]["command"] == "npm test"
+    assert route["args"]["requires_approval"] is True
+    assert route["args"]["permission_scope"] == "project"
+
+
+def test_gmail_inbox_request_routes_to_email_status():
+    route = route_natural_command("Shell, what new emails did I get in Gmail?")
+
+    assert route["tool"] == "shell_email_tool:email_setup_status_tool"
+    assert "Gmail" in route["args"]["gmail_request"]
+
+
 def test_shell_work_session_route_opens_apps_without_developer_agent():
     route = route_natural_command("Shell, I’m starting work. Open VS Code, Chrome with my three dev tabs, and Spotify")
 
