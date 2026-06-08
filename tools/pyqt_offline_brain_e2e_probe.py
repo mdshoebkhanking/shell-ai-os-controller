@@ -16,8 +16,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 
-MODEL_ID = os.environ.get("SHELL_PROBE_OFFLINE_MODEL_ID", "qwen2.5-0.5b-q4")
-MODEL_NAME = os.environ.get("SHELL_PROBE_OFFLINE_MODEL_NAME", "Qwen2.5 0.5B Q4")
+MODEL_ID = os.environ.get("SHELL_PROBE_OFFLINE_MODEL_ID", "qwen2.5-3b-q4")
+MODEL_NAME = os.environ.get("SHELL_PROBE_OFFLINE_MODEL_NAME", "Qwen2.5 3B Q4")
 
 
 def wait_ms(ms: int) -> None:

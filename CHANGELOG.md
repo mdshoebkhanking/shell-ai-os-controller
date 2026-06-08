@@ -24,6 +24,9 @@
 - Added a guard against offline-brain/history contamination where normal
   follow-up messages like `hello`, `hua`, or `kya karre yaar` could repeat the
   Shell creator identity answer.
+- Replaced weak tiny offline chat/coding catalog entries with stronger Qwen2.5
+  1.5B/3B chat and Qwen2.5-Coder 3B/7B options, with visible RAM requirements
+  on each Settings model card.
 - Published the current Shell OS code line on main with the Windows installer
   branch-artifact runtime timeout fix included.
 - Revalidated CI, security, and release workflows on the latest main commit

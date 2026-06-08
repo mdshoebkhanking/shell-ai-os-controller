@@ -106,79 +106,61 @@ const writeFallbackGallery = (images: unknown[]) => {
 
 const fallbackOfflineModelOptions = [
   {
-    id: 'smollm2-135m-q4',
-    name: 'SmolLM2 135M Q4',
-    family: 'SmolLM2-135M-Instruct-GGUF',
+    id: 'qwen2.5-1.5b-q4',
+    name: 'Qwen2.5 1.5B Q4',
+    family: 'Qwen2.5-1.5B-Instruct-GGUF',
     quantization: 'Q4_K_M',
-    sizeMb: 100.6,
-    pc_tier: 'Ultra low PC',
-    description: 'Smallest chat brain for very low memory machines.',
-    strengths: ['basic chat', 'short answers', 'voice replies']
+    sizeMb: 1065.6,
+    min_ram_gb: 6,
+    recommended_ram_gb: 8,
+    pc_tier: 'Balanced chat',
+    description: 'Reliable local chat and voice brain for normal PCs, with better Hinglish replies than tiny models.',
+    strengths: ['chat', 'Hinglish voice replies', 'reasoning', 'drafting'],
+    languages: ['english', 'hindi', 'hinglish']
   },
   {
-    id: 'smollm2-360m-q4',
-    name: 'SmolLM2 360M Q4',
-    family: 'SmolLM2-360M-Instruct-GGUF',
+    id: 'qwen2.5-3b-q4',
+    name: 'Qwen2.5 3B Q4',
+    family: 'Qwen2.5-3B-Instruct-GGUF',
     quantization: 'Q4_K_M',
-    sizeMb: 258.1,
-    pc_tier: 'Low PC',
-    description: 'Balanced tiny model for 2-4 GB RAM systems.',
-    strengths: ['chat', 'summaries', 'voice replies']
-  },
-  {
-    id: 'qwen2.5-0.5b-q3',
-    name: 'Qwen2.5 0.5B Q3',
-    family: 'Qwen2.5-0.5B-Instruct-GGUF',
-    quantization: 'Q3_K_M',
-    sizeMb: 412.0,
-    pc_tier: '4 GB RAM',
-    description: 'Good general offline assistant with a small footprint.',
-    strengths: ['chat', 'Hinglish-style replies', 'simple writing']
-  },
-  {
-    id: 'qwen2.5-0.5b-q4',
-    name: 'Qwen2.5 0.5B Q4',
-    family: 'Qwen2.5-0.5B-Instruct-GGUF',
-    quantization: 'Q4_K_M',
-    sizeMb: 468.6,
-    pc_tier: 'Recommended',
-    description: 'Recommended local brain for normal chat and voice use.',
-    strengths: ['chat', 'Hinglish-style replies', 'reasoning', 'short drafting'],
+    sizeMb: 2007.4,
+    min_ram_gb: 8,
+    recommended_ram_gb: 12,
+    pc_tier: 'Best chat/voice',
+    description: 'Default higher-quality local brain for Shell chat, spoken replies, planning, and longer drafts.',
+    strengths: ['chat', 'Hinglish voice replies', 'reasoning', 'longer drafting'],
+    languages: ['english', 'hindi', 'hinglish'],
     recommended: true
   }
 ]
 
 const fallbackOfflineCodingModelOptions = [
   {
-    id: 'qwen2.5-coder-0.5b-q4',
-    name: 'Qwen2.5 Coder 0.5B Q4',
-    family: 'Qwen2.5-Coder-0.5B-Instruct-GGUF',
+    id: 'qwen2.5-coder-3b-q4',
+    name: 'Qwen2.5 Coder 3B Q4',
+    family: 'Qwen2.5-Coder-3B-Instruct-GGUF',
     quantization: 'Q4_K_M',
-    sizeMb: 468.6,
-    pc_tier: 'Coding ultra-light',
-    description: 'Tiny dedicated coding brain for low-memory PCs and short scripts.',
-    strengths: ['coding', 'small scripts', 'HTML/CSS drafts', 'agent planning']
-  },
-  {
-    id: 'qwen2.5-coder-1.5b-q2',
-    name: 'Qwen2.5 Coder 1.5B Q2',
-    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
-    quantization: 'Q2_K',
-    sizeMb: 718.0,
-    pc_tier: 'Coding lite',
-    description: 'Smaller coding model for websites, scripts, and structured drafts.',
-    strengths: ['coding', 'website drafts', 'PDF/script outlines', 'tool planning']
-  },
-  {
-    id: 'qwen2.5-coder-1.5b-q4',
-    name: 'Qwen2.5 Coder 1.5B Q4',
-    family: 'Qwen2.5-Coder-1.5B-Instruct-GGUF',
-    quantization: 'Q4_K_M',
-    sizeMb: 1065.6,
+    sizeMb: 2007.4,
+    min_ram_gb: 8,
+    recommended_ram_gb: 12,
     pc_tier: 'Best local coding',
-    description: 'Best quality local option in this lightweight catalog.',
-    strengths: ['coding', 'website generation', 'longer drafts', 'agent planning'],
+    description: 'Default local coding brain for working HTML pages, CSS/JS, Python scripts, and Shell tool plans.',
+    strengths: ['website generation', 'HTML/CSS/JS', 'Python scripts', 'agent planning'],
+    languages: ['english', 'hindi', 'hinglish'],
     recommended: true
+  },
+  {
+    id: 'qwen2.5-coder-7b-q3',
+    name: 'Qwen2.5 Coder 7B Q3',
+    family: 'Qwen2.5-Coder-7B-Instruct-GGUF',
+    quantization: 'Q3_K_M',
+    sizeMb: 3632.9,
+    min_ram_gb: 16,
+    recommended_ram_gb: 24,
+    pc_tier: 'Pro coding',
+    description: 'Stronger high-RAM coding brain for larger websites, multi-file code, and debugging.',
+    strengths: ['larger websites', 'multi-file code', 'debugging', 'longer planning'],
+    languages: ['english', 'hindi', 'hinglish']
   }
 ]
 
@@ -197,7 +179,7 @@ const fallbackOfflineModelCatalog = (category = 'chat') => ({
     engine: 'browser',
     category,
     label: category === 'coding' ? 'Installable offline coding brain' : 'Installable offline chat brain',
-    modelFamily: category === 'coding' ? 'Qwen2.5-Coder-1.5B-Instruct-GGUF' : 'Qwen2.5-0.5B-Instruct-GGUF',
+    modelFamily: category === 'coding' ? 'Qwen2.5-Coder-3B-Instruct-GGUF' : 'Qwen2.5-3B-Instruct-GGUF',
     language: readShellLanguage(),
     reason: 'Backend bridge is offline; download and local inference are available in the Shell desktop host.',
     runtimeDownloads: true,

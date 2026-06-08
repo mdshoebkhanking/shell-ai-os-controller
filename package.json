@@ -5,11 +5,11 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "test": "python -m pytest -q",
-    "audit:repo": "python tools/repo_audit.py",
-    "package": "python tools/package_public_release.py",
-    "profile:memory": "python tools/memory_probe.py --ui --tts",
-    "validate:release": "python tools/full_validation.py",
-    "validate:prepush": "python tools/full_validation.py --require-clean-git"
+    "test": "node tools/run_python_tool.cjs -m pytest -q",
+    "audit:repo": "node tools/run_python_tool.cjs tools/repo_audit.py",
+    "package": "node tools/run_python_tool.cjs tools/package_public_release.py",
+    "profile:memory": "node tools/run_python_tool.cjs tools/memory_probe.py --ui --tts",
+    "validate:release": "node tools/run_python_tool.cjs tools/full_validation.py",
+    "validate:prepush": "node tools/run_python_tool.cjs tools/full_validation.py --require-clean-git"
   }
 }

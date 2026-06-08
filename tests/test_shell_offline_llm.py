@@ -41,7 +41,7 @@ def test_offline_llm_status_reports_disabled(monkeypatch, tmp_path):
     assert status["status"] == "fallback"
     assert "disabled" in status["reason"].lower()
     assert status["runtimeDownloads"] is True
-    assert len(status["catalog"]["options"]) >= 4
+    assert len(status["catalog"]["options"]) >= 2
 
 
 def test_offline_llm_status_falls_back_without_model(monkeypatch, tmp_path):
@@ -55,10 +55,10 @@ def test_offline_llm_status_falls_back_without_model(monkeypatch, tmp_path):
     status = shell_offline_llm.offline_llm_status()
 
     assert status["available"] is False
-    assert status["modelFamily"] == "Qwen2.5-0.5B-Instruct-GGUF"
+    assert status["modelFamily"] == "Qwen2.5-3B-Instruct-GGUF"
     assert "download a model" in status["reason"]
     assert status["runtimeDownloads"] is True
-    assert len(status["catalog"]["options"]) >= 4
+    assert len(status["catalog"]["options"]) >= 2
 
 
 def test_offline_llm_status_requires_runtime(monkeypatch, tmp_path):
@@ -84,7 +84,7 @@ def test_offline_llm_status_reports_selected_model_language_support(monkeypatch,
     import shell_offline_model_catalog
 
     shell_offline_llm._reset_cached_model_for_tests()
-    option = shell_offline_model_catalog.get_model_option("smollm2-135m-q4")
+    option = shell_offline_model_catalog.get_model_option("qwen2.5-1.5b-q4")
     assert option is not None
     model = shell_offline_model_catalog.model_install_dir(option.id) / option.filename
     model.parent.mkdir(parents=True)
@@ -99,9 +99,9 @@ def test_offline_llm_status_reports_selected_model_language_support(monkeypatch,
 
     assert status["modelFile"] == option.filename
     assert status["language"] == "hinglish"
-    assert status["languageSupport"] == ["english"]
-    assert status["languageMismatch"] is True
-    assert "hinglish prompts may be lower quality" in status["languageWarning"]
+    assert status["languageSupport"] == ["english", "hindi", "hinglish"]
+    assert status["languageMismatch"] is False
+    assert status["languageWarning"] == ""
 
 
 def test_offline_model_catalog_separates_chat_and_coding_models(monkeypatch, tmp_path):
@@ -115,8 +115,9 @@ def test_offline_model_catalog_separates_chat_and_coding_models(monkeypatch, tmp
     assert chat_catalog["category"] == "chat"
     assert coding_catalog["category"] == "coding"
     assert all("coder" not in option["id"] for option in chat_catalog["options"])
-    assert any(option["id"] == "qwen2.5-coder-0.5b-q4" for option in coding_catalog["options"])
-    assert any(option["id"] == "qwen2.5-coder-1.5b-q4" for option in coding_catalog["options"])
+    assert any(option["id"] == "qwen2.5-coder-3b-q4" for option in coding_catalog["options"])
+    assert any(option["id"] == "qwen2.5-coder-7b-q3" for option in coding_catalog["options"])
+    assert all(option["min_ram_gb"] > 0 for option in chat_catalog["options"] + coding_catalog["options"])
 
 
 def test_offline_coding_llm_status_uses_independent_selected_model(monkeypatch, tmp_path):
@@ -126,8 +127,8 @@ def test_offline_coding_llm_status_uses_independent_selected_model(monkeypatch, 
     import shell_offline_model_catalog
 
     shell_offline_llm._reset_cached_model_for_tests()
-    chat_option = shell_offline_model_catalog.get_model_option("qwen2.5-0.5b-q4", "chat")
-    coding_option = shell_offline_model_catalog.get_model_option("qwen2.5-coder-0.5b-q4", "coding")
+    chat_option = shell_offline_model_catalog.get_model_option("qwen2.5-3b-q4", "chat")
+    coding_option = shell_offline_model_catalog.get_model_option("qwen2.5-coder-3b-q4", "coding")
     assert chat_option is not None
     assert coding_option is not None
     chat_path = shell_offline_model_catalog.model_install_dir(chat_option.id) / chat_option.filename
@@ -174,7 +175,7 @@ def test_generate_offline_reply_uses_packaged_llama_runtime(monkeypatch, tmp_pat
     import shell_offline_model_catalog
 
     shell_offline_llm._reset_cached_model_for_tests()
-    option = shell_offline_model_catalog.get_model_option("qwen2.5-0.5b-q4")
+    option = shell_offline_model_catalog.get_model_option("qwen2.5-3b-q4")
     assert option is not None
     model = shell_offline_model_catalog.model_install_dir(option.id) / option.filename
     model.parent.mkdir(parents=True)
@@ -209,7 +210,7 @@ def test_generate_offline_reply_skips_stale_provider_fallback_history(monkeypatc
     import shell_offline_model_catalog
 
     shell_offline_llm._reset_cached_model_for_tests()
-    option = shell_offline_model_catalog.get_model_option("qwen2.5-0.5b-q4")
+    option = shell_offline_model_catalog.get_model_option("qwen2.5-3b-q4")
     assert option is not None
     model = shell_offline_model_catalog.model_install_dir(option.id) / option.filename
     model.parent.mkdir(parents=True)

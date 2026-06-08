@@ -28,9 +28,9 @@ from shell_offline_model_catalog import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-DEFAULT_MODEL_FAMILY = "Qwen2.5-0.5B-Instruct-GGUF"
-DEFAULT_MODEL_REPO = "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
-DEFAULT_MODEL_FILE = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+DEFAULT_MODEL_FAMILY = "Qwen2.5-3B-Instruct-GGUF"
+DEFAULT_MODEL_REPO = "Qwen/Qwen2.5-3B-Instruct-GGUF"
+DEFAULT_MODEL_FILE = "qwen2.5-3b-instruct-q4_k_m.gguf"
 DEFAULT_MODEL_LICENSE = "Apache-2.0"
 DEFAULT_MODEL_LICENSE_URL = "https://www.apache.org/licenses/LICENSE-2.0"
 LEGACY_FALCON_MODEL_FAMILY = "Falcon-H1-1.5B-Deep-Instruct-GGUF"

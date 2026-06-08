@@ -981,6 +981,14 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     if (sizeBytes > 0) return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
     return 'Size unknown'
   }
+  const formatOfflineModelRam = (option: OfflineModelOption) => {
+    const minRam = Number(option.min_ram_gb || 0)
+    const recommendedRam = Number(option.recommended_ram_gb || 0)
+    if (minRam > 0 && recommendedRam > 0) return `RAM ${minRam}-${recommendedRam} GB`
+    if (recommendedRam > 0) return `RAM ${recommendedRam} GB recommended`
+    if (minRam > 0) return `RAM ${minRam}+ GB`
+    return 'RAM unknown'
+  }
 
   const cardClass =
     'shell-settings-card border p-6 md:p-8 rounded-2xl flex flex-col gap-5 transition-all shadow-lg'
@@ -1400,7 +1408,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                                     )}
                                   </div>
                                   <div className="mt-1 text-[8px] font-mono uppercase tracking-widest text-zinc-500">
-                                    {option.pc_tier || 'LOCAL'} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
+                                    {option.pc_tier || 'LOCAL'} / {formatOfflineModelRam(option)} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
                                     {Array.isArray(option.languages) && option.languages.length > 0
                                       ? ` / ${option.languages.join(', ').toUpperCase()}`
                                       : ''}
@@ -1539,7 +1547,7 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                                     )}
                                   </div>
                                   <div className="mt-1 text-[8px] font-mono uppercase tracking-widest text-zinc-500">
-                                    {option.pc_tier || 'CODING'} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
+                                    {option.pc_tier || 'CODING'} / {formatOfflineModelRam(option)} / {formatOfflineModelSize(option)} / {option.quantization || 'GGUF'}
                                     {Array.isArray(option.languages) && option.languages.length > 0
                                       ? ` / ${option.languages.join(', ').toUpperCase()}`
                                       : ''}
