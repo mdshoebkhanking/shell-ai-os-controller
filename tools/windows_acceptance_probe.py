@@ -25,6 +25,7 @@ BACKEND_EXE = ROOT / "ShellAIBackend" / "ShellAIBackend.exe"
 APP_ICON = ROOT / "shell-ai.ico"
 RAM_WARN_MB = 1400
 RAM_FAIL_MB = 2200
+MIN_OFFLINE_MODEL_OPTIONS_PER_CATEGORY = 2
 
 
 def configure_probe_root(root: Path) -> None:
@@ -359,27 +360,43 @@ def check_frozen_offline_llm_catalog(py: Path) -> Check:
         return Check("frozen offline LLM catalog", False, "WARN", "Skipped because ShellAIApp/ShellAI.exe is not installed.")
     code = rf"""
 import json
+import os
 import sys
 from pathlib import Path
-import shell_offline_llm
+from shell_offline_llm import offline_coding_llm_status, offline_llm_status
 
 sys.frozen = True
 sys.executable = {str(APP_EXE)!r}
 setattr(sys, "_MEIPASS", str(Path({str(APP_EXE)!r}).parent / "_internal"))
-shell_offline_llm.PROJECT_ROOT = Path(getattr(sys, "_MEIPASS"))
-status = shell_offline_llm.offline_llm_status()
-catalog = status.get("catalog") if isinstance(status, dict) else {{}}
-options = catalog.get("options") if isinstance(catalog, dict) else []
-installed = status.get("installedModels") if isinstance(status, dict) else []
+app_root = Path({str(APP_EXE)!r}).resolve().parent.parent
+os.environ.setdefault("SHELL_APP_ROOT", str(app_root))
+os.environ.setdefault("SHELL_INSTALL_ROOT", str(app_root))
+os.environ.setdefault("SHELL_RUNTIME_DIR", str(app_root / ".shell_runtime"))
+os.environ.setdefault("SHELL_OFFLINE_LLM_MODEL_DIR", str(app_root / "models" / "llm"))
+chat_status = offline_llm_status()
+coding_status = offline_coding_llm_status()
+chat_catalog = chat_status.get("catalog") if isinstance(chat_status, dict) else {{}}
+coding_catalog = coding_status.get("catalog") if isinstance(coding_status, dict) else {{}}
+chat_options = chat_catalog.get("options") if isinstance(chat_catalog, dict) else []
+coding_options = coding_catalog.get("options") if isinstance(coding_catalog, dict) else []
+chat_installed = chat_status.get("installedModels") if isinstance(chat_status, dict) else []
+coding_installed = coding_status.get("installedModels") if isinstance(coding_status, dict) else []
 summary = {{
-    "success": bool(status.get("success")) if isinstance(status, dict) else False,
-    "available": bool(status.get("available")) if isinstance(status, dict) else False,
-    "runtimeDownloads": status.get("runtimeDownloads") if isinstance(status, dict) else None,
-    "reason": status.get("reason") if isinstance(status, dict) else "",
-    "optionsCount": len(options) if isinstance(options, list) else 0,
-    "installedModelsCount": len(installed) if isinstance(installed, list) else 0,
-    "selectedModelId": status.get("selectedModelId") if isinstance(status, dict) else "",
-    "installDir": status.get("installDir") if isinstance(status, dict) else "",
+    "success": bool(chat_status.get("success")) if isinstance(chat_status, dict) else False,
+    "codingSuccess": bool(coding_status.get("success")) if isinstance(coding_status, dict) else False,
+    "available": bool(chat_status.get("available")) if isinstance(chat_status, dict) else False,
+    "codingAvailable": bool(coding_status.get("available")) if isinstance(coding_status, dict) else False,
+    "runtimeDownloads": chat_status.get("runtimeDownloads") if isinstance(chat_status, dict) else None,
+    "codingRuntimeDownloads": coding_status.get("runtimeDownloads") if isinstance(coding_status, dict) else None,
+    "reason": chat_status.get("reason") if isinstance(chat_status, dict) else "",
+    "codingReason": coding_status.get("reason") if isinstance(coding_status, dict) else "",
+    "optionsCount": len(chat_options) if isinstance(chat_options, list) else 0,
+    "codingOptionsCount": len(coding_options) if isinstance(coding_options, list) else 0,
+    "installedModelsCount": len(chat_installed) if isinstance(chat_installed, list) else 0,
+    "codingInstalledModelsCount": len(coding_installed) if isinstance(coding_installed, list) else 0,
+    "selectedModelId": chat_status.get("selectedModelId") if isinstance(chat_status, dict) else "",
+    "codingSelectedModelId": coding_status.get("selectedModelId") if isinstance(coding_status, dict) else "",
+    "installDir": chat_status.get("installDir") if isinstance(chat_status, dict) else "",
 }}
 print(json.dumps(summary, sort_keys=True))
 """
@@ -391,19 +408,32 @@ print(json.dumps(summary, sort_keys=True))
     except Exception:
         return Check("frozen offline LLM catalog", False, "FAIL", result.message, result.details)
     options_count = int(payload.get("optionsCount") or 0)
-    if payload.get("runtimeDownloads") is True and options_count >= 4:
+    coding_options_count = int(payload.get("codingOptionsCount") or 0)
+    chat_ready = payload.get("runtimeDownloads") is True and options_count >= MIN_OFFLINE_MODEL_OPTIONS_PER_CATEGORY
+    coding_ready = (
+        payload.get("codingRuntimeDownloads") is True
+        and coding_options_count >= MIN_OFFLINE_MODEL_OPTIONS_PER_CATEGORY
+    )
+    if chat_ready and coding_ready:
         return Check(
             "frozen offline LLM catalog",
             True,
             "PASS",
-            f"Offline LLM uses on-demand catalog with {options_count} model options.",
+            (
+                "Offline LLM uses on-demand catalogs with "
+                f"{options_count} chat and {coding_options_count} coding model options."
+            ),
             {**result.details, "status": payload},
         )
     return Check(
         "frozen offline LLM catalog",
         False,
         "FAIL",
-        f"Frozen EXE does not expose the on-demand offline LLM catalog: {payload.get('reason')}",
+        (
+            "Frozen EXE does not expose the on-demand offline LLM catalogs: "
+            f"chat={options_count} ({payload.get('reason')}), "
+            f"coding={coding_options_count} ({payload.get('codingReason')})"
+        ),
         {**result.details, "status": payload},
     )
 
@@ -460,9 +490,11 @@ def check_frozen_runtime_probe(*, warn_on_timeout: bool = False) -> Check:
     details["payload"] = payload
     tts = payload.get("offline_tts") if isinstance(payload, dict) else {}
     llm = payload.get("offline_llm") if isinstance(payload, dict) else {}
+    coding_llm = payload.get("offline_coding_llm") if isinstance(payload, dict) else {}
     tts_ready = isinstance(tts, dict) and tts.get("available") is True
     llm_catalog_ready, llm_options_count = _offline_llm_catalog_ready(llm)
-    if proc.returncode == 0 and tts_ready and llm_catalog_ready:
+    coding_catalog_ready, coding_options_count = _offline_llm_catalog_ready(coding_llm)
+    if proc.returncode == 0 and tts_ready and llm_catalog_ready and coding_catalog_ready:
         return Check("frozen EXE runtime probe", True, "PASS", "Frozen EXE resolved Kokoro TTS and offline LLM catalog.", details)
     return Check(
         "frozen EXE runtime probe",
@@ -473,6 +505,8 @@ def check_frozen_runtime_probe(*, warn_on_timeout: bool = False) -> Check:
             f" ({_candidate_failure_summary(tts) if isinstance(tts, dict) else 'unknown'}), "
             f"llm_catalog_ready={llm_catalog_ready} options={llm_options_count}"
             f" ({llm.get('reason') if isinstance(llm, dict) else 'unknown'}), "
+            f"coding_llm_catalog_ready={coding_catalog_ready} options={coding_options_count}"
+            f" ({coding_llm.get('reason') if isinstance(coding_llm, dict) else 'unknown'}), "
             f"exit={proc.returncode}"
         ),
         details,
@@ -532,7 +566,7 @@ def _offline_llm_catalog_ready(status: Any) -> tuple[bool, int]:
     catalog = status.get("catalog")
     options = catalog.get("options") if isinstance(catalog, dict) else []
     options_count = len(options) if isinstance(options, list) else 0
-    return options_count >= 4, options_count
+    return options_count >= MIN_OFFLINE_MODEL_OPTIONS_PER_CATEGORY, options_count
 
 
 def _candidate_failure_summary(status: dict[str, Any]) -> str:

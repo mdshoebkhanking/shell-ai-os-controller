@@ -284,14 +284,21 @@ def _run_runtime_probe_mode() -> None:
         exit_code = 2
 
     try:
-        from shell_offline_llm import offline_llm_status
+        from shell_offline_llm import offline_coding_llm_status, offline_llm_status
 
         llm_status = offline_llm_status()
+        coding_llm_status = offline_coding_llm_status()
         payload["offline_llm"] = llm_status
-        if not llm_status.get("available") and not _offline_llm_catalog_ready(llm_status):
+        payload["offline_coding_llm"] = coding_llm_status
+        chat_catalog_ready = _offline_llm_catalog_ready(llm_status)
+        coding_catalog_ready = _offline_llm_catalog_ready(coding_llm_status)
+        chat_missing = not llm_status.get("available") and not chat_catalog_ready
+        coding_missing = not coding_llm_status.get("available") and not coding_catalog_ready
+        if chat_missing or coding_missing:
             exit_code = 2
     except Exception as exc:
         payload["offline_llm"] = {"available": False, "reason": str(exc)}
+        payload["offline_coding_llm"] = {"available": False, "reason": str(exc)}
         exit_code = 2
 
     print("SHELL_RUNTIME_PROBE_JSON=" + json.dumps(payload, sort_keys=True, default=str), flush=True)
@@ -303,7 +310,7 @@ def _offline_llm_catalog_ready(status: object) -> bool:
         return False
     catalog = status.get("catalog")
     options = catalog.get("options") if isinstance(catalog, dict) else []
-    return isinstance(options, list) and len(options) >= 4
+    return isinstance(options, list) and len(options) >= 2
 
 
 def _run_app_mode() -> None:

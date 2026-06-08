@@ -161,8 +161,11 @@ def test_frozen_offline_llm_catalog_accepts_on_demand_options(monkeypatch, tmp_p
             True,
             "PASS",
             (
-                '{"available": false, "installedModelsCount": 0, "optionsCount": 6, '
-                '"reason": "No offline GGUF model is installed yet.", "runtimeDownloads": true, "success": true}'
+                '{"available": false, "codingAvailable": false, "codingInstalledModelsCount": 0, '
+                '"codingOptionsCount": 2, "codingReason": "No offline GGUF model is installed yet.", '
+                '"codingRuntimeDownloads": true, "codingSuccess": true, "installedModelsCount": 0, '
+                '"optionsCount": 2, "reason": "No offline GGUF model is installed yet.", '
+                '"runtimeDownloads": true, "success": true}'
             ),
             {"returncode": 0, "command": captured["argv"]},
         )
@@ -174,8 +177,8 @@ def test_frozen_offline_llm_catalog_accepts_on_demand_options(monkeypatch, tmp_p
 
     assert result.ok is True
     assert result.status == "PASS"
-    assert "6 model options" in result.message
-    assert "optionsCount" in captured["argv"][2]
+    assert "2 chat and 2 coding model options" in result.message
+    assert "codingOptionsCount" in captured["argv"][2]
 
 
 def test_offline_llm_catalog_ready_accepts_no_installed_model_with_options():
@@ -184,12 +187,12 @@ def test_offline_llm_catalog_ready_accepts_no_installed_model_with_options():
             "available": False,
             "runtimeDownloads": True,
             "reason": "No offline GGUF model is installed yet.",
-            "catalog": {"options": [{}, {}, {}, {}, {}, {}]},
+            "catalog": {"options": [{}, {}]},
         }
     )
 
     assert ready is True
-    assert count == 6
+    assert count == 2
 
 
 def test_windows_acceptance_covers_packaged_runtime_probe():
@@ -217,7 +220,8 @@ def test_windows_acceptance_covers_packaged_runtime_probe():
     assert "kokoroModelFiles" in desktop_entry
     assert "import_checks" in desktop_entry
     assert "onnxruntime.capi.onnxruntime_pybind11_state" in desktop_entry
-    assert "not llm_status.get(\"available\") and not _offline_llm_catalog_ready(llm_status)" in desktop_entry
+    assert "offline_coding_llm_status" in desktop_entry
+    assert "coding_catalog_ready = _offline_llm_catalog_ready(coding_llm_status)" in desktop_entry
 
 
 def test_windows_acceptance_summarizes_offline_tts_candidates():
