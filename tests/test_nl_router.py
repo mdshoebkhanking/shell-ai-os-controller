@@ -107,6 +107,44 @@ def test_direct_app_build_route_uses_code_engine_not_agent_chat():
     assert "Do not echo the request text" in route["args"]["app_type"]
 
 
+def test_login_page_html_save_routes_to_working_user_file_not_developer_agent():
+    route = route_natural_command("mere liyye login page banao html main or osse save kardo")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["filename"] == "login_page.html"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "html"
+    assert "standalone HTML login page" in route["args"]["content_request"]
+    assert "client-side validation" in route["args"]["content_request"]
+
+
+def test_login_page_html_working_prompt_routes_without_explicit_create_word():
+    route = route_natural_command("mere liyye login page html ok voh bhi working honna chahiye ok")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["args"]["filename"] == "login_page.html"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "html"
+
+
+def test_website_login_page_save_to_desktop_prefers_standalone_html_file():
+    route = route_natural_command("mere liye website ka login page banao or desktop pe save kar do")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["args"]["filename"] == "login_page.html"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "html"
+
+
+def test_open_instagram_in_chrome_uses_url_tool():
+    route = route_natural_command("mere liye chrome main instagram open karo")
+
+    assert route["tool"] == "shell_desktop_tools:open_url_tool"
+    assert route["kind"] == "tool"
+    assert route["args"] == {"url": "https://www.instagram.com/"}
+
+
 def test_direct_game_build_route_uses_playable_game_builder():
     route = route_natural_command("snake game banao")
 

@@ -10,6 +10,14 @@
   orchestration, full-stack app creation, and YouTube playback routing.
 - Added a packaged backend catalog probe to Windows acceptance so future EXE
   releases fail before upload if these chat-routed tools disappear.
+- Fixed Hinglish chat routing for standalone login-page HTML requests so
+  installed Windows builds save a real working `login_page.html` file instead
+  of falling through to a generic local-mode document draft.
+- Added deterministic offline HTML artifact fallback with inline CSS, form
+  validation, password/email fields, and success state so coding-brain/provider
+  failures still produce a useful working page.
+- Routed common browser open intents such as "chrome main instagram open karo"
+  to the URL opener instead of leaving them as unhandled local chat.
 - Published the current Shell OS code line on main with the Windows installer
   branch-artifact runtime timeout fix included.
 - Revalidated CI, security, and release workflows on the latest main commit

@@ -476,6 +476,13 @@ def _user_file_content_task(raw: str, content: str, file_type: str) -> str:
     lower = str(raw or "").lower()
     if not topic:
         topic = _clean(raw)
+    if str(file_type or "").lower() in {"html", "htm"}:
+        if re.search(r"\b(login|signin|sign\s*in|auth|authentication)\b", lower):
+            return (
+                "Write a complete working standalone HTML login page. Include inline CSS, a real form, "
+                "email/password fields, client-side validation, and a small success state. Return only HTML."
+            )
+        return f"Write a complete working standalone HTML file about {topic}. Include inline CSS and JavaScript if useful. Return only HTML."
     if re.search(r"\b(movie|film|short\s+film|script|screenplay|scene|dialogue|dialog)\b", lower):
         return f"Write an original movie script about {topic}."
     if re.search(r"\b(report|analysis|summary|essay|article)\b", lower):
@@ -497,13 +504,20 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
     if not re.search(r"\b(file|pdf|document|note|notes|text|txt|md|markdown|json|csv|html|report|letter)\b", lower, flags=re.I):
         return None
     destination = _user_file_destination(lower)
-    if not destination:
-        if not re.search(r"\b(pdf|document|report|letter)\b", lower, flags=re.I):
-            return None
-        destination = "documents"
     filename = _user_file_save_filename(raw)
     file_type = _user_file_type(raw, lower, filename)
+    if not destination:
+        if file_type in {"html", "htm"} and re.search(r"\b(save|create|make|new|write|generate|banao|bana|banado|banaao|bana\s+do|kar\s+do|karke\s+do)\b", lower, flags=re.I):
+            destination = "desktop"
+        elif not re.search(r"\b(pdf|document|report|letter)\b", lower, flags=re.I):
+            return None
+        else:
+            destination = "documents"
+    if file_type in {"html", "htm"} and not filename and re.search(r"\b(login|signin|sign\s*in|auth|authentication)\b", lower, flags=re.I):
+        filename = "login_page.html"
     content = _user_file_save_content(raw, filename)
+    if file_type in {"html", "htm"} and re.search(r"\b(login|signin|sign\s*in|auth|authentication)\b", lower, flags=re.I):
+        content = "login page"
     overwrite = bool(re.search(r"\b(overwrite|replace|update|badal|dobara)\b", lower, flags=re.I))
     return _route(
         "shell_workspace_tools:create_user_file_tool",
@@ -518,6 +532,64 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
         },
         confidence=0.93,
     )
+
+
+def _standalone_html_file_route(raw: str, lower: str) -> dict[str, Any] | None:
+    has_html_or_page = bool(re.search(r"\b(html|htm|webpage|web\s+page|website|site|page)\b", lower, flags=re.I))
+    has_save_target = bool(re.search(r"\b(save|desktop|desk\s*top|dextop|documents?|downloads?)\b", lower, flags=re.I))
+    if not has_html_or_page and not has_save_target:
+        return None
+    if not re.search(r"\b(login|signin|sign\s*in|auth|authentication)\b", lower, flags=re.I):
+        return None
+    if not re.search(
+        r"\b(create|make|new|write|generate|design|code|banao|bana|banado|banaao|bana\s+do|kar\s+do|working|work|save)\b",
+        lower,
+        flags=re.I,
+    ):
+        return None
+    filename = _user_file_save_filename(raw) or "login_page.html"
+    destination = _user_file_destination(lower) or "desktop"
+    return _route(
+        "shell_workspace_tools:create_user_file_tool",
+        {
+            "filename": filename,
+            "content": "login page",
+            "content_request": _user_file_content_task(raw, "login page", "html"),
+            "raw_request": _strip_quotes(raw),
+            "destination": destination,
+            "file_type": "html",
+            "overwrite": bool(re.search(r"\b(overwrite|replace|update|badal|dobara)\b", lower, flags=re.I)),
+        },
+        confidence=0.94,
+    )
+
+
+def _known_website_open_route(raw: str, lower: str) -> dict[str, Any] | None:
+    if not re.search(r"\b(open|launch|start|khol|kholo|chalao|chala)\b", lower, flags=re.I):
+        return None
+    known_sites = {
+        "instagram": "https://www.instagram.com/",
+        "insta": "https://www.instagram.com/",
+        "youtube": "https://www.youtube.com/",
+        "you tube": "https://www.youtube.com/",
+        "google": "https://www.google.com/",
+        "facebook": "https://www.facebook.com/",
+        "whatsapp": "https://web.whatsapp.com/",
+        "gmail": "https://mail.google.com/",
+        "twitter": "https://twitter.com/",
+        "x": "https://x.com/",
+        "github": "https://github.com/",
+    }
+    for name, url in known_sites.items():
+        if re.search(rf"\b{re.escape(name)}\b", lower, flags=re.I):
+            return _route("shell_desktop_tools:open_url_tool", {"url": url}, confidence=0.9)
+    url_match = re.search(r"\b((?:https?://)?(?:[a-z0-9-]+\.)+[a-z]{2,})(?:/[^\s]*)?", raw, flags=re.I)
+    if url_match:
+        url = url_match.group(0)
+        if not url.lower().startswith(("http://", "https://")):
+            url = "https://" + url
+        return _route("shell_desktop_tools:open_url_tool", {"url": url}, confidence=0.88)
+    return None
 
 
 def _workspace_file_create_route(raw: str, lower: str) -> dict[str, Any] | None:
@@ -851,6 +923,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     if image_route:
         return image_route
 
+    standalone_html = _standalone_html_file_route(raw, lower)
+    if standalone_html:
+        return standalone_html
+
     if re.search(_CREATION_VERB_RE, lower) and re.search(r"\b(website|webpage|web\s+page|landing\s+page|site)\b", lower):
         return _route(
             "shell_code_engine:create_fullstack_app_tool",
@@ -928,6 +1004,10 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
         query = re.sub(r"^(search\s+youtube|youtube\s+search|youtube)\s*(for)?\s*", "", raw, flags=re.I).strip()
         url = "https://www.youtube.com/results?search_query=" + urllib.parse.quote_plus(query)
         return _route("shell_desktop_tools:open_url_tool", {"url": url}, confidence=0.9)
+
+    known_site = _known_website_open_route(raw, lower)
+    if known_site:
+        return known_site
 
     click_match = re.match(r"^(?:click|tap)\s+(?:at\s+)?(-?\d+)\s*,?\s+(-?\d+)$", raw, flags=re.I)
     if click_match:

@@ -940,6 +940,48 @@ def test_pdf_creation_chat_routes_before_brain_refusal_fallback(monkeypatch, tmp
     assert [payload for channel, payload in emitted if channel == "chat-updated"][-1]["success"] is True
 
 
+def test_login_html_chat_saves_working_html_when_offline_brain_is_generic(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+    executed_routes = []
+
+    class GenericOfflineResult:
+        success = True
+        reply = (
+            "Useful Content Mere Liyye Login Page Html\n"
+            "Yeh document useful content ke liye Shell AI ne local mode mein draft kiya hai."
+        )
+
+    def fake_execute(route):
+        executed_routes.append(route)
+        args = route["args"]
+        html = args["content"]
+        assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+        assert args["filename"] == "login_page.html"
+        assert args["destination"] == "desktop"
+        assert args["file_type"] == "html"
+        assert "<!doctype html>" in html.lower()
+        assert "<form" in html.lower()
+        assert "type=\"password\"" in html.lower()
+        assert "addEventListener('submit'" in html
+        assert "Useful Content" not in html
+        return {"status": "success", "result": "Created login_page.html on desktop"}
+
+    monkeypatch.setattr(bridge, "_execute_routed_tool", fake_execute)
+    monkeypatch.setattr(bridge, "_should_try_provider_chat", lambda: False)
+    monkeypatch.setattr(host, "generate_offline_coding_reply", lambda *_args, **_kwargs: GenericOfflineResult())
+    monkeypatch.setattr(host, "generate_offline_reply", lambda *_args, **_kwargs: GenericOfflineResult())
+
+    result = bridge._chat_message(["mere liyye login page banao html main or osse save kardo", {"source": "text"}])
+
+    assert executed_routes
+    assert result["success"] is True
+    assert result["route"]["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert "Created login_page.html" in result["reply"]
+
+
 def test_movie_script_pdf_chat_generates_script_content_before_file_tool(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 
