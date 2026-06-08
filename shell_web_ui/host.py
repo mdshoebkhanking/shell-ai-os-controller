@@ -2088,6 +2088,13 @@ class ShellBackendBridge:
 
         return "Mujhe mdshoebking ne banaya hai."
 
+    @classmethod
+    def _is_unrequested_creator_identity_reply(cls, user_text: str, reply: str) -> bool:
+        normalized_reply = " ".join(str(reply or "").lower().split())
+        if "mdshoebking" not in normalized_reply:
+            return False
+        return not bool(cls._creator_identity_reply(user_text))
+
     @staticmethod
     def _self_identity_reply(text: str) -> str:
         normalized = " ".join(str(text or "").lower().split())
@@ -2357,15 +2364,15 @@ class ShellBackendBridge:
         prompt = text if not context_block else f"{context_block}\n\nUser: {text}"
         if self._should_try_provider_chat():
             provider_reply = self._provider_chat_reply(prompt, system_prompt)
-            if provider_reply:
+            if provider_reply and not self._is_unrequested_creator_identity_reply(text, provider_reply):
                 return provider_reply
 
         offline_reply = self._offline_chat_reply(prompt, system_prompt, previous_messages)
-        if offline_reply:
+        if offline_reply and not self._is_unrequested_creator_identity_reply(text, offline_reply):
             return offline_reply
         if context_block:
             offline_reply = self._offline_chat_reply(text, system_prompt, [])
-            if offline_reply:
+            if offline_reply and not self._is_unrequested_creator_identity_reply(text, offline_reply):
                 return offline_reply
 
         return self._local_chat_answer(text)

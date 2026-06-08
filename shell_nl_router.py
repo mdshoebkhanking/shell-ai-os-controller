@@ -392,7 +392,7 @@ def _workspace_file_content(raw: str, path_span: tuple[int, int]) -> str:
 
 
 def _user_file_destination(lower: str) -> str:
-    if re.search(r"\b(desktop|desk\s*top|dextop)\b", lower, flags=re.I):
+    if re.search(r"\b(desktop|desk\s*top|dextop|dexdop|dexktop|destop)\b", lower, flags=re.I):
         return "desktop"
     if re.search(r"\b(documents?|document folder)\b", lower, flags=re.I):
         return "documents"
@@ -518,6 +518,10 @@ def _user_file_save_route(raw: str, lower: str) -> dict[str, Any] | None:
     content = _user_file_save_content(raw, filename)
     if file_type in {"html", "htm"} and re.search(r"\b(login|signin|sign\s*in|auth|authentication)\b", lower, flags=re.I):
         content = "login page"
+    if file_type == "pdf" and re.search(r"\b(movie|film|short\s+film|script|screenplay|scene|dialogue|dialog)\b", lower, flags=re.I):
+        content = "movie script"
+        if not filename:
+            filename = "movie_script.pdf"
     overwrite = bool(re.search(r"\b(overwrite|replace|update|badal|dobara)\b", lower, flags=re.I))
     return _route(
         "shell_workspace_tools:create_user_file_tool",

@@ -327,6 +327,18 @@ def test_natural_movie_script_pdf_route_keeps_topic_and_requests_script_content(
     assert route["args"]["content_request"] == "Write an original movie script about movie script."
 
 
+def test_hinglish_movie_script_pdf_typo_desktop_keeps_topic_and_destination():
+    route = route_natural_command("mere liye script likho movie ki or han osse pdf main save karo ok dexdop pe")
+
+    assert route["tool"] == "shell_workspace_tools:create_user_file_tool"
+    assert route["kind"] == "tool"
+    assert route["args"]["filename"] == "movie_script.pdf"
+    assert route["args"]["destination"] == "desktop"
+    assert route["args"]["file_type"] == "pdf"
+    assert route["args"]["content"] == "movie script"
+    assert route["args"]["content_request"] == "Write an original movie script about movie script."
+
+
 def test_natural_workspace_read_file_route():
     route = route_natural_command("read notes.md")
 

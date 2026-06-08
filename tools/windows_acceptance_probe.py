@@ -714,6 +714,9 @@ cases = {
     "todo app banao with login": "shell_code_engine:create_fullstack_app_tool",
     "snake game banao": "shell_game_builder:build_game_tool",
     "AI tools ke bare mein pdf bana do": "shell_workspace_tools:create_user_file_tool",
+    "mere liye script likho movie ki or han osse pdf main save karo ok dexdop pe": "shell_workspace_tools:create_user_file_tool",
+    "mere liyye login page banao html main or osse save kardo": "shell_workspace_tools:create_user_file_tool",
+    "mere liye chrome main instagram open karo": "shell_desktop_tools:open_url_tool",
     "cat ke photo generate karo": "shell_image_ai:generate_image_tool",
     "open calculator": "shell_window_CTRL:open_app",
     "close calculator": "shell_window_CTRL:close_app",
@@ -721,6 +724,19 @@ cases = {
 }
 arg_expectations = {
     "AI tools ke bare mein pdf bana do": {"destination": "documents", "file_type": "pdf"},
+    "mere liye script likho movie ki or han osse pdf main save karo ok dexdop pe": {
+        "filename": "movie_script.pdf",
+        "destination": "desktop",
+        "file_type": "pdf",
+        "content": "movie script",
+    },
+    "mere liyye login page banao html main or osse save kardo": {
+        "filename": "login_page.html",
+        "destination": "desktop",
+        "file_type": "html",
+        "content": "login page",
+    },
+    "mere liye chrome main instagram open karo": {"url": "https://www.instagram.com/"},
     "cat ke photo generate karo": {"force_fresh": True, "use_cache": False},
 }
 

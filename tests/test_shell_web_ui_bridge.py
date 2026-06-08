@@ -706,6 +706,24 @@ def test_who_are_you_identity_does_not_return_creator(monkeypatch, tmp_path):
     assert "mdshoebking" not in result["reply"]
 
 
+def test_unrequested_creator_identity_from_offline_brain_is_rejected(monkeypatch, tmp_path):
+    import shell_web_ui.host as host
+
+    monkeypatch.setattr(host, "HISTORY_PATH", tmp_path / "web_ui_history.json")
+    bridge = host.ShellBackendBridge()
+
+    monkeypatch.setattr(bridge, "_provider_chat_reply", lambda *_args, **_kwargs: "")
+    monkeypatch.setattr(bridge, "_offline_chat_reply", lambda *_args, **_kwargs: "Mujhe mdshoebking ne banaya hai.")
+
+    hello = bridge._chat_message(["hello", {"source": "text"}])
+    followup = bridge._chat_message(["kya karre yaar", {"source": "text"}])
+
+    assert hello["reply"] == "Haan bhai, bolo. Main sun rahi hoon."
+    assert "mdshoebking" not in hello["reply"]
+    assert "mdshoebking" not in followup["reply"]
+    assert "local mode" in followup["reply"]
+
+
 def test_deep_research_chat_emits_activity_events(monkeypatch, tmp_path):
     import shell_web_ui.host as host
 

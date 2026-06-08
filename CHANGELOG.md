@@ -18,6 +18,12 @@
   failures still produce a useful working page.
 - Routed common browser open intents such as "chrome main instagram open karo"
   to the URL opener instead of leaving them as unhandled local chat.
+- Fixed movie-script PDF routing for Hinglish prompts with desktop typos such
+  as `dexdop`, preserving the topic as `movie script` and saving
+  `movie_script.pdf` on Desktop.
+- Added a guard against offline-brain/history contamination where normal
+  follow-up messages like `hello`, `hua`, or `kya karre yaar` could repeat the
+  Shell creator identity answer.
 - Published the current Shell OS code line on main with the Windows installer
   branch-artifact runtime timeout fix included.
 - Revalidated CI, security, and release workflows on the latest main commit
