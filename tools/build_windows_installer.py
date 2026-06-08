@@ -591,6 +591,8 @@ def build_electron_desktop_app(app_icon: Path | None = None) -> dict[str, object
             "--",
             "--dir",
             "--win",
+            "--publish",
+            "never",
             "--config",
             str(ELECTRON_BUILDER_CONFIG.relative_to(WEB_UI_ROOT)),
         ],
