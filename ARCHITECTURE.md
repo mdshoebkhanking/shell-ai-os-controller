@@ -28,8 +28,8 @@ Shell is now five runtime surfaces behind one guarded backend:
           ┌──────────────────────┼─────────────────────────────┐
           ▼                      ▼                             ▼
     Voice Pipeline         Agent/Tool Layer              External + OS I/O
-    Gemini Live,           468 tool entries,             pywinauto, PyAutoGUI,
-    local fallback,        37 agents, memory,            Windows-MCP, browser,
+    Gemini Live,           444 catalog tools,            pywinauto, PyAutoGUI,
+    local fallback,        343 loaded, 40 agents,        Windows-MCP, browser,
     wake/VAD flags         RAG, sandbox, checkpoints     Telegram, image APIs
 ```
 

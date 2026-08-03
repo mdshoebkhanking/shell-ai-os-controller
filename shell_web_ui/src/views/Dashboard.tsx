@@ -1,5 +1,5 @@
-import { memo, useEffect, useCallback, useRef, useState } from 'react'
-import Sphere from '@renderer/components/Sphere'
+import { memo, useEffect, useCallback, useRef, useState, lazy, Suspense } from 'react'
+const Sphere = lazy(() => import('@renderer/components/Sphere'))
 import {
   RiCameraLine,
   RiTerminalBoxLine,
@@ -202,15 +202,15 @@ const createActivityState = (payload: any, fallbackKind: ActivityKind = 'tool'):
     prompt,
     message: String(
       payload?.message ||
-        (status === 'error'
-          ? 'TASK FAILED'
-          : status === 'done'
-            ? 'TASK COMPLETE'
-            : kind === 'research'
-              ? 'SEARCHING AND VERIFYING'
-              : kind === 'image'
-                ? 'GENERATING VISUAL'
-                : 'WORKING')
+      (status === 'error'
+        ? 'TASK FAILED'
+        : status === 'done'
+          ? 'TASK COMPLETE'
+          : kind === 'research'
+            ? 'SEARCHING AND VERIFYING'
+            : kind === 'image'
+              ? 'GENERATING VISUAL'
+              : 'WORKING')
     ),
     progress: clampProgress(payload?.progress, status === 'done' || status === 'error' ? 100 : 18),
     startedAt: Number(payload?.startedAt || Date.now())
@@ -683,7 +683,7 @@ function DashboardView({
           faceApiRef.current = faceapi
           setModelsLoaded(true)
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     loadModels()
     return () => {
@@ -771,7 +771,7 @@ function DashboardView({
             ctx.font = 'bold 14px monospace'
             ctx.fillText('SCANNING OPTICS...', 20, 30)
           }
-        } catch (e) {}
+        } catch (e) { }
       }, FACE_SCAN_INTERVAL_MS)
     } else {
       if (faceScanInterval.current) clearInterval(faceScanInterval.current)
@@ -789,7 +789,7 @@ function DashboardView({
       videoElementRef.current = node
       if (node && activeStream && isVideoOn) {
         node.srcObject = activeStream
-        node.onloadedmetadata = () => node.play().catch(() => {})
+        node.onloadedmetadata = () => node.play().catch(() => { })
       }
     },
     [activeStream, isVideoOn, visionMode]
@@ -799,7 +799,7 @@ function DashboardView({
     (node: HTMLVideoElement | null) => {
       if (node && activeStream && isVideoOn) {
         node.srcObject = activeStream
-        node.onloadedmetadata = () => node.play().catch(() => {})
+        node.onloadedmetadata = () => node.play().catch(() => { })
       }
     },
     [activeStream, isVideoOn, visionMode]
@@ -1161,11 +1161,13 @@ function DashboardView({
         <div
           className={`w-[60vh] h-[60vh] max-w-full transition-opacity duration-300 ${isSystemActive ? 'opacity-100 scale-100' : 'opacity-92 scale-95'}`}
         >
-          <Sphere
-            active={isSystemActive}
-            speaking={orbSpeaking}
-            voiceLevel={voiceAmplitude}
-          />
+          <Suspense fallback={<div className="w-full h-full rounded-full border border-blue-500/20 bg-blue-500/5 animate-pulse flex items-center justify-center text-[10px] text-blue-400 font-mono tracking-widest">LOADING CORE...</div>}>
+            <Sphere
+              active={isSystemActive}
+              speaking={orbSpeaking}
+              voiceLevel={voiceAmplitude}
+            />
+          </Suspense>
         </div>
 
         <div className="shell-orb-dock-anchor absolute">
@@ -1177,9 +1179,8 @@ function DashboardView({
               aria-label="Toggle vision source"
               aria-pressed={isVideoOn}
               onClick={onVisionClick}
-              className={`shell-control-button shell-dock-button cursor-pointer ${
-                isVideoOn ? 'shell-dock-button-active' : ''
-              }`}
+              className={`shell-control-button shell-dock-button cursor-pointer ${isVideoOn ? 'shell-dock-button-active' : ''
+                }`}
               title={isVideoOn ? 'Switch vision source' : 'Start camera or screen vision'}
             >
               {isVideoOn ? <RiSwapBoxLine size={20} /> : <RiCameraLine size={20} />}
@@ -1189,9 +1190,8 @@ function DashboardView({
               aria-label={isSystemActive ? 'Stop Shell voice' : 'Start Shell voice'}
               aria-pressed={isSystemActive}
               onClick={toggleSystem}
-              className={`shell-control-button shell-dock-button shell-dock-button-main cursor-pointer ${
-                isSystemActive ? 'shell-dock-button-live' : ''
-              }`}
+              className={`shell-control-button shell-dock-button shell-dock-button-main cursor-pointer ${isSystemActive ? 'shell-dock-button-live' : ''
+                }`}
               title={isSystemActive ? 'Stop Shell voice' : 'Start Shell voice'}
             >
               <RiPhoneFill size={24} />
@@ -1201,9 +1201,8 @@ function DashboardView({
               aria-label={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
               aria-pressed={!isMicMuted}
               onClick={toggleMic}
-              className={`shell-control-button shell-dock-button cursor-pointer ${
-                isMicMuted ? 'shell-dock-button-danger' : 'shell-dock-button-active'
-              }`}
+              className={`shell-control-button shell-dock-button cursor-pointer ${isMicMuted ? 'shell-dock-button-danger' : 'shell-dock-button-active'
+                }`}
               title={isMicMuted ? 'Unmute microphone' : 'Mute microphone'}
             >
               {isMicMuted ? <RiMicOffLine size={20} /> : <RiMicLine size={20} />}
@@ -1213,13 +1212,12 @@ function DashboardView({
               aria-label="Test Shell voice"
               aria-pressed={speechState === 'SPEAKING'}
               onClick={() => speakShell(testVoiceText)}
-              className={`shell-control-button shell-dock-button cursor-pointer ${
-                speechState === 'SPEAKING'
+              className={`shell-control-button shell-dock-button cursor-pointer ${speechState === 'SPEAKING'
                   ? 'shell-dock-button-speaking'
                   : speechState === 'VOICE ERR'
                     ? 'shell-dock-button-danger'
                     : ''
-              }`}
+                }`}
               title={voiceRuntime === 'gemini' ? 'Gemini Live voice' : 'Local Shell voice'}
             >
               <RiVolumeUpLine size={20} />
@@ -1322,11 +1320,10 @@ function DashboardView({
           <div className="shrink-0 border-t border-blue-500/10 pt-3">
             <div className="mb-1 flex justify-end" aria-live="polite">
               <span
-                className={`inline-flex h-5 items-center gap-1 rounded-full border px-2 text-[8px] font-black tracking-widest ${
-                  activeAgentCount
+                className={`inline-flex h-5 items-center gap-1 rounded-full border px-2 text-[8px] font-black tracking-widest ${activeAgentCount
                     ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
                     : 'border-white/10 bg-white/[0.03] text-zinc-500'
-                }`}
+                  }`}
                 title="Active agents for this task"
               >
                 <span className={`h-1.5 w-1.5 rounded-full ${activeAgentCount ? 'bg-emerald-300 animate-pulse' : 'bg-zinc-600'}`} />
