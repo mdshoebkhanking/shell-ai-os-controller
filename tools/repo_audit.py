@@ -51,6 +51,7 @@ EXCLUDED_DIRS = {
     "shell_ui_LEGACY",
     "shell_workspace",
     "smoke",
+    "scratch",
     "swarm",
     "ui_screenshots",
     "venv",
@@ -103,10 +104,29 @@ def _is_excluded(path: Path) -> bool:
 
 
 def _iter_files() -> list[Path]:
+    import os
     files: list[Path] = []
-    for path in ROOT.rglob("*"):
-        if path.is_file() and not _is_excluded(path):
-            files.append(path)
+    for root, dirs, filenames in os.walk(ROOT):
+        # Prune excluded directories in-place
+        dirs_to_keep = []
+        for d in dirs:
+            p = Path(root) / d
+            try:
+                rel = p.relative_to(ROOT)
+            except ValueError:
+                continue
+            if bool(set(rel.parts) & EXCLUDED_DIRS):
+                continue
+            rel_text = rel.as_posix()
+            if any(rel_text == item or rel_text.startswith(item.rstrip("/") + "/") for item in EXCLUDED_DIRS if "/" in item):
+                continue
+            dirs_to_keep.append(d)
+        dirs[:] = dirs_to_keep
+
+        for f in filenames:
+            p = Path(root) / f
+            if not _is_excluded(p):
+                files.append(p)
     return files
 
 

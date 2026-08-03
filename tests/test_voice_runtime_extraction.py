@@ -34,7 +34,7 @@ def test_voice_runtime_preserves_tts_helpers(monkeypatch):
 def test_ui_reexports_tts_runtime_for_backward_compatibility(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker as UiTTSSpeaker
+    from shell_voice_runtime import TTSSpeaker as UiTTSSpeaker
     from shell_voice_runtime import TTSSpeaker as RuntimeTTSSpeaker
 
     assert UiTTSSpeaker is RuntimeTTSSpeaker

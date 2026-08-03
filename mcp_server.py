@@ -250,7 +250,7 @@ class MCPHandler(BaseHTTPRequestHandler):
         
         logger.info(f"🎨 Generating: {prompt}")
         
-        API_URL = "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0"
+        API_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
         api_key = os.getenv("HUGGINGFACE_API_KEY") or os.getenv("HF_API_KEY")
         
         if not api_key:

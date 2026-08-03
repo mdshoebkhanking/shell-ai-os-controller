@@ -66,6 +66,12 @@ class GmailWebMailer:
         options.add_argument("--disable-gpu")
         options.add_argument("--window-size=1600,1000")
 
+        # Google Chrome stealth settings to prevent "This browser or app may not be secure" blocks
+        options.add_experimental_option("excludeSwitches", ["enable-automation"])
+        options.add_experimental_option("useAutomationExtension", False)
+        options.add_argument("--disable-blink-features=AutomationControlled")
+        options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+
         profile_dir = self._get_profile_dir()
         os.makedirs(profile_dir, exist_ok=True)
         options.add_argument(f"--user-data-dir={profile_dir}")
@@ -98,6 +104,13 @@ class GmailWebMailer:
 
             if self.driver is None:
                 self.driver = webdriver.Chrome(options=self._chrome_options(headless=headless))
+                # Inject CDP script to hide navigator.webdriver
+                try:
+                    self.driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                    })
+                except Exception as cdp_exc:
+                    logger.debug("Failed to set CDP stealth script: %s", cdp_exc)
                 self._session_start_time = time.time()
 
             self.driver.get("https://mail.google.com/")

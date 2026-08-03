@@ -1,0 +1,87 @@
+- generic [ref=e2]:
+  - banner:
+    - navigation [ref=e3]:
+      - link "Shell AI homepage" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Shell AI
+      - button "Open navigation" [ref=e6]:
+        - img [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Open source
+          - generic [ref=e15]: Apache-2.0
+          - generic [ref=e16]: Windows best experience
+          - generic [ref=e17]: macOS/Linux partial
+          - generic [ref=e18]: Local-first
+          - generic [ref=e19]: Safety-gated
+        - heading "Shell AI OS Controller" [level=1] [ref=e20]:
+          - generic [ref=e21]: Shell AI
+          - generic [ref=e22]:
+            - text: OS Controller
+            - img
+        - paragraph [ref=e23]: An open-source AI desktop control layer for chat, voice, tools, automation, memory, agents, diagnostics, and safe local workflows.
+        - generic [ref=e24]:
+          - generic [ref=e25]:
+            - link "Open latest release Fallback via GitHub Releases" [ref=e26] [cursor=pointer]:
+              - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller/releases
+              - img [ref=e28]
+              - generic [ref=e31]:
+                - strong [ref=e32]: Open latest release
+                - generic [ref=e33]: Fallback via GitHub Releases
+              - img [ref=e34]
+            - link "View GitHub" [ref=e36] [cursor=pointer]:
+              - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+              - img [ref=e37]
+              - text: View GitHub
+            - link "Read Docs" [ref=e41] [cursor=pointer]:
+              - /url: /docs
+              - img [ref=e42]
+              - text: Read Docs
+          - generic "Download trust signals" [ref=e44]:
+            - generic [ref=e45]:
+              - img [ref=e46]
+              - generic [ref=e49]: Windows setup
+              - strong [ref=e50]: Release fallback
+            - generic [ref=e51]:
+              - img [ref=e52]
+              - generic [ref=e55]: Integrity
+              - strong [ref=e56]: Release metadata
+            - generic [ref=e57]:
+              - img [ref=e58]
+              - generic [ref=e62]: Source
+              - strong [ref=e63]: GitHub auditable
+      - generic [ref=e65]:
+        - generic [ref=e69]:
+          - img "Shell Dashboard screenshot" [ref=e70]
+          - img "Shell Control screenshot" [ref=e71]
+          - img "Shell Settings screenshot" [ref=e72]
+          - img "Shell Gallery screenshot" [ref=e73]
+          - img "Shell Apps screenshot" [ref=e74]
+          - img "Shell Notes screenshot" [ref=e75]
+          - img "Shell Phone screenshot" [ref=e76]
+          - img "Shell Macros screenshot" [ref=e77]
+        - generic [ref=e83]:
+          - generic [ref=e84]: Dashboard
+          - strong [ref=e85]: Workspace command center
+    - generic [ref=e86]:
+      - generic [ref=e87]:
+        - paragraph [ref=e88]: Scroll Story
+        - 'heading "More than chat: Shell connects prompts to real local workflow state." [level=2] [ref=e89]'
+        - paragraph [ref=e90]: The value is not a demo trick. Shell is a guarded control layer with tools, memory, RAG, diagnostics, voice, and remote surfaces that stay visible before anything runs.
+        - generic "Shell differentiators" [ref=e91]
+      - generic "Future Shell video mockup frame" [ref=e94]
+    - generic [ref=e106]:
+      - paragraph [ref=e107]: Safety Cockpit
+      - heading "Human-controlled automation, not blind autonomy." [level=2] [ref=e108]
+      - paragraph [ref=e109]: "Risky work stays behind visible gates: preview, approval, block, and trace. Shell should explain what ran, what was blocked, and why."
+    - generic "Shell AI legal links" [ref=e113]:
+      - generic [ref=e114]:
+        - strong [ref=e115]: Shell AI OS Controller
+        - generic [ref=e116]: Open-source AI desktop control layer. Review policies before public or team deployment.
+      - navigation [ref=e117]:
+        - link "Privacy Policy" [ref=e118] [cursor=pointer]:
+          - /url: /privacy
+        - link "Terms & Conditions" [ref=e119] [cursor=pointer]:
+          - /url: /terms

@@ -291,54 +291,144 @@ Max 7 steps. Return ONLY the JSON array."""
                 0.0,
             ).format()
 
-        # THINK
-        try:
-            plan = await self.think(task)
-        except Exception:
-            plan = [{"step": 1, "action": task, "tool": "brain", "params": {"prompt": task}}]
+        online_required_reply = self._online_required_reply(task)
+        if online_required_reply and not self._get_brain():
+            return AgentResult(
+                self.name,
+                task,
+                "success",
+                online_required_reply,
+                0,
+                0,
+                0.0,
+            ).format()
 
-        # EXECUTE
+        # Capture active context
+        try:
+            from shell_app_context import capture_app_context, context_prompt_block
+            app_ctx = context_prompt_block(capture_app_context())
+        except Exception:
+            app_ctx = ""
+
+        tool_desc = self._get_tool_descriptions()
+
+        def parse_react_response(resp: str) -> dict:
+            try:
+                cleaned = resp.replace("```json", "").replace("```", "").strip()
+                start = cleaned.find('{')
+                end = cleaned.rfind('}') + 1
+                if start != -1 and end > start:
+                    return json.loads(cleaned[start:end])
+            except Exception:
+                pass
+            return {}
+
         steps_done = 0
-        for step in plan[:7]:
+        max_steps = 7
+        summary = ""
+        completed = False
+
+        for step_idx in range(1, max_steps + 1):
             if time.time() - start_time > 120:
                 results.append("⏰ Timeout: Agent exceeded 120s limit.")
                 break
 
-            tool_name = step.get("tool", "brain")
-            params = step.get("params", {})
-            action = step.get("action", "")
+            history_str = "\n\n".join(results) if results else "No actions executed yet."
+            prompt = f"""You are executing the task: "{task}"
+{app_ctx}
+
+Your execution history so far:
+{history_str}
+
+Decide your next action. You must return a JSON object with one of two formats:
+
+Format A: If the task is NOT yet complete and you need to execute a tool:
+{{
+  "completed": false,
+  "next_step": {{
+    "action": "Description of what this step is trying to achieve",
+    "tool": "exact_tool_name_from_available_tools",
+    "params": {{ "key": "value" }}
+  }}
+}}
+
+Format B: If the task is completed or you cannot proceed further:
+{{
+  "completed": true,
+  "final_summary": "Concise but comprehensive final summary of the achievements or results"
+}}
+
+Available tools:
+{tool_desc}
+
+Note:
+- Use only exact tool names from the Available tools list. If no tool fits, use "tool": "brain" with "params": {{"prompt": "your question/thought"}}.
+- If a previous tool returned an Error, analyze why it failed and adjust your parameters or try an alternative tool.
+- Return ONLY the JSON object. Do not include markdown code block formatting (like ```json)."""
+
+            system_prompt = f"You are {self.name}, a {self.role}.\nExpertise: {self.expertise}"
+            try:
+                response = await self._ai_think(prompt, system_prompt=system_prompt, mode=self.think_mode)
+            except Exception as exc:
+                response = json.dumps({"completed": True, "final_summary": f"Failed to think: {exc}"})
+
+            parsed = parse_react_response(response)
+            if not parsed:
+                summary = response
+                completed = True
+                break
+
+            if parsed.get("completed", False):
+                summary = parsed.get("final_summary") or "Task completed."
+                completed = True
+                break
+
+            next_step = parsed.get("next_step")
+            if not next_step or not isinstance(next_step, dict):
+                summary = "Failed to determine next step from agent thoughts."
+                completed = True
+                break
+
+            tool_name = next_step.get("tool", "brain")
+            params = next_step.get("params", {})
+            action = next_step.get("action", "")
 
             if tool_name == "brain":
-                prompt = params.get("prompt", action)
-                step_result = await self._ai_think(prompt, mode=self.execute_mode)
+                prompt_to_brain = params.get("prompt", action)
+                try:
+                    step_result = await self._ai_think(prompt_to_brain, mode=self.execute_mode)
+                except Exception as exc:
+                    step_result = f"Error: {exc}"
             else:
-                step_result = await self._call_tool(tool_name, **params)
+                try:
+                    step_result = await self._call_tool(tool_name, **params)
+                except Exception as exc:
+                    step_result = f"Error: {exc}"
 
-            results.append(f"Step {step.get('step', '?')}: {action}\n→ {step_result}")
+            results.append(f"Step {step_idx}: {action}\n→ {step_result}")
             steps_done += 1
 
-        # SUMMARIZE
-        elapsed = round(time.time() - start_time, 2)
-        combined = "\n\n".join(results)
-
-        if len(results) > 1:
-            summary = await self._ai_think(
-                f"Summarize these results concisely.\nTask: {task}\nResults:\n{combined[:3000]}",
-                mode="FAST"
-            )
-        else:
-            summary = combined
+        if not completed:
+            combined = "\n\n".join(results)
+            try:
+                summary = await self._ai_think(
+                    f"Summarize these results concisely.\nTask: {task}\nResults:\n{combined[:3000]}",
+                    mode="FAST"
+                )
+            except Exception:
+                summary = combined
 
         hard_failures = [
             result for result in results
             if "\n→ Error:" in result or result.startswith("⏰ Timeout")
         ]
-        status = "success" if steps_done == len(plan[:7]) and not hard_failures else ("partial" if steps_done else "failed")
+        status = "success" if completed and not hard_failures else ("partial" if steps_done else "failed")
 
+        elapsed = round(time.time() - start_time, 2)
         return AgentResult(
             self.name, task,
             status,
-            summary, steps_done, len(plan[:7]), elapsed
+            summary, steps_done, max_steps, elapsed
         ).format()
 
 
@@ -461,6 +551,18 @@ class DeveloperAgent(ShellAgent):
                 round(time.time() - start_time, 2),
             ).format()
 
+        online_required_reply = self._online_required_reply(task)
+        if online_required_reply and not self._get_brain():
+            return AgentResult(
+                self.name,
+                task,
+                "success",
+                online_required_reply,
+                0,
+                0,
+                0.0,
+            ).format()
+
         # Phase 1: ANALYZE
         analysis = await self._ai_think(
             f"Analyze this development task and identify what needs to be done, "
@@ -469,22 +571,109 @@ class DeveloperAgent(ShellAgent):
         )
         results.append(f"📋 ANALYSIS:\n{analysis}")
 
-        # Phase 2: PLAN & CODE
-        plan = await self.think(task)
-        for step in plan[:7]:
+        # Phase 2: PLAN & CODE (Dynamic ReAct Loop)
+        try:
+            from shell_app_context import capture_app_context, context_prompt_block
+            app_ctx = context_prompt_block(capture_app_context())
+        except Exception:
+            app_ctx = ""
+
+        tool_desc = self._get_tool_descriptions()
+
+        def parse_react_response(resp: str) -> dict:
+            try:
+                cleaned = resp.replace("```json", "").replace("```", "").strip()
+                start = cleaned.find('{')
+                end = cleaned.rfind('}') + 1
+                if start != -1 and end > start:
+                    return json.loads(cleaned[start:end])
+            except Exception:
+                pass
+            return {}
+
+        completed = False
+        steps_done = 0
+        max_steps = 7
+        for step_idx in range(1, max_steps + 1):
             if time.time() - start_time > 120:
                 results.append("⏰ Timeout reached.")
                 break
-            tool_name = step.get("tool", "brain")
-            params = step.get("params", {})
-            action = step.get("action", "")
+
+            history_str = "\n\n".join(results) if results else "No actions executed yet."
+            prompt = f"""You are executing Phase 2 (PLAN & CODE) of the development task: "{task}"
+{app_ctx}
+
+Your execution history so far:
+{history_str}
+
+Decide your next action. You must return a JSON object with one of two formats:
+
+Format A: If the task is NOT yet complete and you need to execute a tool:
+{{
+  "completed": false,
+  "next_step": {{
+    "action": "Description of what this step is trying to achieve",
+    "tool": "exact_tool_name_from_available_tools",
+    "params": {{ "key": "value" }}
+  }}
+}}
+
+Format B: If the task is completed or you cannot proceed further:
+{{
+  "completed": true,
+  "final_summary": "Concise but comprehensive final summary of the code and changes implemented"
+}}
+
+Available tools:
+{tool_desc}
+
+Note:
+- Use only exact tool names from the Available tools list. If no tool fits, use "tool": "brain" with "params": {{"prompt": "your question/thought"}}.
+- If a previous tool returned an Error, analyze why it failed and adjust your parameters or try an alternative tool.
+- Return ONLY the JSON object. Do not include markdown code block formatting (like ```json)."""
+
+            system_prompt = f"You are {self.name}, a {self.role}.\nExpertise: {self.expertise}"
+            try:
+                response = await self._ai_think(prompt, system_prompt=system_prompt, mode=self.think_mode)
+            except Exception as exc:
+                response = json.dumps({"completed": True, "final_summary": f"Failed to think: {exc}"})
+
+            parsed = parse_react_response(response)
+            if not parsed:
+                results.append(f"🔨 Thoughts\n→ {response}")
+                steps_done += 1
+                completed = True
+                break
+
+            if parsed.get("completed", False):
+                completed = True
+                break
+
+            next_step = parsed.get("next_step")
+            if not next_step or not isinstance(next_step, dict):
+                results.append(f"🔨 Failed thoughts\n→ {response}")
+                steps_done += 1
+                completed = True
+                break
+
+            tool_name = next_step.get("tool", "brain")
+            params = next_step.get("params", {})
+            action = next_step.get("action", "")
+
             if tool_name == "brain":
-                step_result = await self._ai_think(
-                    params.get("prompt", action), mode="CODING"
-                )
+                prompt_to_brain = params.get("prompt", action)
+                try:
+                    step_result = await self._ai_think(prompt_to_brain, mode=self.execute_mode)
+                except Exception as exc:
+                    step_result = f"Error: {exc}"
             else:
-                step_result = await self._call_tool(tool_name, **params)
+                try:
+                    step_result = await self._call_tool(tool_name, **params)
+                except Exception as exc:
+                    step_result = f"Error: {exc}"
+
             results.append(f"🔨 {action}\n→ {step_result}")
+            steps_done += 1
 
         # Phase 3: CODE REVIEW
         review = await self._ai_think(

@@ -1,0 +1,139 @@
+- generic [ref=e2]:
+  - banner:
+    - navigation [ref=e3]:
+      - link "Shell AI homepage" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Shell AI
+      - generic [ref=e6]:
+        - link "Download" [ref=e7] [cursor=pointer]:
+          - /url: /#download
+        - link "Story" [ref=e8] [cursor=pointer]:
+          - /url: /#story
+        - link "Features" [ref=e9] [cursor=pointer]:
+          - /url: /features
+        - link "Architecture" [ref=e10] [cursor=pointer]:
+          - /url: /architecture
+        - link "Safety" [ref=e11] [cursor=pointer]:
+          - /url: /#safety
+        - link "Docs" [ref=e12] [cursor=pointer]:
+          - /url: /docs
+        - link "GitHub" [ref=e13] [cursor=pointer]:
+          - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+          - img [ref=e14]
+          - text: GitHub
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - paragraph [ref=e20]: Features
+      - heading "Everything Shell can control, route, remember, and guard." [level=1] [ref=e21]
+      - paragraph [ref=e22]: A dedicated feature index for the real Shell product surface, grouped by daily workflow area instead of crowding the homepage.
+      - generic "Shell feature summary" [ref=e23]:
+        - generic [ref=e24]:
+          - strong [ref=e25]: "16"
+          - generic [ref=e26]: documented modules
+        - generic [ref=e27]:
+          - strong [ref=e28]: 460+
+          - generic [ref=e29]: guarded tools
+        - generic [ref=e30]:
+          - strong [ref=e31]: "3"
+          - generic [ref=e32]: safety states
+        - generic [ref=e33]:
+          - strong [ref=e34]: Windows
+          - generic [ref=e35]: best experience
+    - region "Shell features" [ref=e36]:
+      - tablist "Feature categories" [ref=e37]:
+        - tab "All Features" [selected] [ref=e38] [cursor=pointer]
+        - tab "Desktop Control" [ref=e39] [cursor=pointer]
+        - tab "Tools & Automation" [ref=e40] [cursor=pointer]
+        - tab "Memory & RAG" [ref=e41] [cursor=pointer]
+        - tab "Runtime & Safety" [ref=e42] [cursor=pointer]
+        - tab "Integrations" [ref=e43] [cursor=pointer]
+      - generic [ref=e44]:
+        - generic [ref=e45]:
+          - paragraph [ref=e46]: Active View
+          - heading "All Features" [level=2] [ref=e47]
+          - paragraph [ref=e48]: The complete Shell surface across chat, tools, desktop control, memory, safety, diagnostics, and integrations.
+        - link "Read install docs" [ref=e49] [cursor=pointer]:
+          - /url: /docs
+          - text: Read install docs
+          - img [ref=e50]
+      - generic [ref=e52]:
+        - article [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e57]: Integrations
+          - heading "Chat" [level=3] [ref=e58]
+          - paragraph [ref=e59]: Text-first assistant flow with tool routing and grounded responses.
+        - article [ref=e60]:
+          - img [ref=e61]
+          - generic [ref=e65]: Integrations
+          - heading "Voice" [level=3] [ref=e66]
+          - paragraph [ref=e67]: Gemini Live path plus backend/local fallbacks and mic readiness states.
+        - article [ref=e68]:
+          - img [ref=e69]
+          - generic [ref=e73]: Tools & Automation
+          - heading "460+ guarded tools" [level=3] [ref=e74]
+          - paragraph [ref=e75]: A catalogued Python tool surface behind a guarded execution gateway.
+        - article [ref=e76]:
+          - img [ref=e77]
+          - generic [ref=e79]: Desktop Control
+          - heading "Desktop control" [level=3] [ref=e80]
+          - paragraph [ref=e81]: Apps, windows, screenshots, clipboard, keyboard, and mouse automation.
+        - article [ref=e82]:
+          - img [ref=e83]
+          - generic [ref=e94]: Desktop Control
+          - heading "Windows control" [level=3] [ref=e95]
+          - paragraph [ref=e96]: Best PC-control path with pywinauto, Windows-MCP, pywin32, and PyAutoGUI fallbacks.
+        - article [ref=e97]:
+          - img [ref=e98]
+          - generic [ref=e101]: Tools & Automation
+          - heading "Browser wrappers" [level=3] [ref=e102]
+          - paragraph [ref=e103]: Browser automation wrappers with safety gates and dry-run expectations.
+        - article [ref=e104]:
+          - img [ref=e105]
+          - generic [ref=e108]: Integrations
+          - heading "Telegram" [level=3] [ref=e109]
+          - paragraph [ref=e110]: Remote-control bot with allowlists, status, start/stop, and test-send controls.
+        - article [ref=e111]:
+          - img [ref=e112]
+          - generic [ref=e115]: Integrations
+          - heading "Email/media" [level=3] [ref=e116]
+          - paragraph [ref=e117]: SMTP, image workflows, QR/PDF utilities, OCR hooks, and media helpers.
+        - article [ref=e118]:
+          - img [ref=e119]
+          - generic [ref=e121]: Runtime & Safety
+          - heading "Runtime diagnostics" [level=3] [ref=e122]
+          - paragraph [ref=e123]: Health checks, readiness states, logs, and repair guidance.
+        - article [ref=e124]:
+          - img [ref=e125]
+          - generic [ref=e132]: Runtime & Safety
+          - heading "Telemetry" [level=3] [ref=e133]
+          - paragraph [ref=e134]: Live local CPU, RAM, GPU, and network charts for visible confidence.
+        - article [ref=e135]:
+          - img [ref=e136]
+          - generic [ref=e139]: Desktop Control
+          - heading "ShellAI Core" [level=3] [ref=e140]
+          - paragraph [ref=e141]: Optional CLI/backend path with model routing, tools, monitor, cron, and daemon queue.
+        - article [ref=e142]:
+          - img [ref=e143]
+          - generic [ref=e153]: Desktop Control
+          - heading "AI OS Fabric" [level=3] [ref=e154]
+          - paragraph [ref=e155]: Coordinator, Shell, Safety, Memory, UI, and Optimizer agents behind stable APIs.
+        - article [ref=e156]:
+          - img [ref=e157]
+          - generic [ref=e159]: Memory & RAG
+          - heading "Memory v2" [level=3] [ref=e160]
+          - paragraph [ref=e161]: SQLite memory with tags, importance scoring, redaction, recall audit, and migration.
+        - article [ref=e162]:
+          - img [ref=e163]
+          - generic [ref=e167]: Memory & RAG
+          - heading "Project RAG v2" [level=3] [ref=e168]
+          - paragraph [ref=e169]: Incremental codebase indexing with BM25/TF-IDF fallback and semantic search.
+        - article [ref=e170]:
+          - img [ref=e171]
+          - generic [ref=e174]: Runtime & Safety
+          - heading "Secure sandbox" [level=3] [ref=e175]
+          - paragraph [ref=e176]: Per-run workspaces with timeout enforcement, audit logs, and rollback cleanup.
+        - article [ref=e177]:
+          - img [ref=e178]
+          - generic [ref=e182]: Tools & Automation
+          - heading "Workflow checkpoints" [level=3] [ref=e183]
+          - paragraph [ref=e184]: Workflow persistence, last-action tracking, resume loading, and rollback points.

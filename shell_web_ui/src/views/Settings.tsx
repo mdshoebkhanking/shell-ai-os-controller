@@ -19,9 +19,13 @@ import {
   RiDownloadCloud2Line,
   RiRocketLine,
   RiTelegramLine,
-  RiTranslate2
+  RiTranslate2,
+  RiInstagramLine,
+  RiWhatsappLine,
+  RiMailLine
 } from 'react-icons/ri'
 import { normalizeGeminiApiKey } from '../services/api-key-utils'
+import { sendWhatsAppMessage } from '../functions/whatsapp-manager-api'
 import {
   SHELL_LANGUAGE_OPTIONS,
   SHELL_LANGUAGE_STORAGE_KEY,
@@ -34,7 +38,7 @@ interface SettingsProps {
   isSystemActive: boolean
 }
 
-type TabType = 'updates' | 'general' | 'keys'
+type TabType = 'updates' | 'general' | 'keys' | 'connectors'
 type VoiceRuntime = 'auto' | 'gemini' | 'backend'
 type OfflineTtsStatus = {
   success?: boolean
@@ -149,12 +153,91 @@ const settingsTabs = [
     id: 'keys' as const,
     label: 'API KEYS',
     ariaLabel: 'Open settings api keys tab',
+    Icon: RiKey2Line
+  },
+  {
+    id: 'connectors' as const,
+    label: 'PLUGINS & CONNECTORS',
+    ariaLabel: 'Open settings connectors tab',
     Icon: RiPlugLine
+  }
+]
+
+const allPlugins = [
+  {
+    id: 'gmail',
+    name: 'Gmail API',
+    developer: 'Google / Shell AI',
+    category: 'communication' as const,
+    description: 'Check inbox, draft replies, and send emails using browser-based web session.',
+    icon: RiMailLine,
+    brandColor: 'from-red-500/10 to-transparent',
+    borderColor: 'border-red-500/20',
+    iconColor: 'text-red-400',
+  },
+  {
+    id: 'whatsapp',
+    name: 'WhatsApp Web',
+    developer: 'WhatsApp / Shell AI',
+    category: 'communication' as const,
+    description: 'Auto-reply to messages, view chat status, and send text updates via web scanner.',
+    icon: RiWhatsappLine,
+    brandColor: 'from-emerald-500/10 to-transparent',
+    borderColor: 'border-emerald-500/20',
+    iconColor: 'text-emerald-400',
+  },
+  {
+    id: 'telegram',
+    name: 'Telegram Bot',
+    developer: 'Telegram / Shell AI',
+    category: 'social' as const,
+    description: 'Configure bot commands, read stats, and control Shell remotely using direct bot tokens.',
+    icon: RiTelegramLine,
+    brandColor: 'from-sky-500/10 to-transparent',
+    borderColor: 'border-sky-500/20',
+    iconColor: 'text-sky-400',
+  },
+  {
+    id: 'instagram',
+    name: 'Instagram Automation',
+    developer: 'Meta / Shell AI',
+    category: 'social' as const,
+    description: 'Read DMs, search profiles, and automate posts using browser login session.',
+    icon: RiInstagramLine,
+    brandColor: 'from-purple-500/10 to-transparent',
+    borderColor: 'border-purple-500/20',
+    iconColor: 'text-purple-400',
+  },
+  {
+    id: 'notion',
+    name: 'Notion Database',
+    developer: 'Notion Labs',
+    category: 'productivity' as const,
+    description: 'Sync notes, sync task lists, and fetch pages directly from your workspace.',
+    icon: RiBrainLine,
+    brandColor: 'from-zinc-500/5 to-transparent',
+    borderColor: 'border-zinc-500/10 opacity-60',
+    iconColor: 'text-zinc-400',
+    comingSoon: true
+  },
+  {
+    id: 'slack',
+    name: 'Slack Integration',
+    developer: 'Slack Technologies',
+    category: 'communication' as const,
+    description: 'Post messages to channels, monitor alerts, and notify workspace users.',
+    icon: RiPlugLine,
+    brandColor: 'from-yellow-500/5 to-transparent',
+    borderColor: 'border-yellow-500/10 opacity-60',
+    iconColor: 'text-yellow-400',
+    comingSoon: true
   }
 ]
 
 const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [activeTab, setActiveTab] = useState<TabType>('updates')
+  const [pluginSearch, setPluginSearch] = useState('')
+  const [pluginCategory, setPluginCategory] = useState<'all' | 'communication' | 'social' | 'productivity'>('all')
 
   const [voice, setVoice] = useState<'MALE' | 'FEMALE'>(
     (localStorage.getItem('shell_voice_profile') as 'MALE' | 'FEMALE') || 'MALE'
@@ -220,6 +303,51 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const [telegramStatus, setTelegramStatus] = useState('Telegram status not checked yet.')
   const [telegramBusy, setTelegramBusy] = useState('')
   const [apiSaveResult, setApiSaveResult] = useState('')
+  const [instagramUsername, setInstagramUsername] = useState(localStorage.getItem('shell_instagram_username') || '')
+  const [instagramPassword, setInstagramPassword] = useState(localStorage.getItem('shell_instagram_password') || '')
+  const [instagramTargetUser, setInstagramTargetUser] = useState('')
+  const [instagramCommentReply, setInstagramCommentReply] = useState('Thanks for the support! 😊')
+  const [instagramDmReply, setInstagramDmReply] = useState('Hey! Boss will get back to you soon. 👍')
+  const [instagramStatus, setInstagramStatus] = useState('Instagram status not checked yet.')
+  const [instagramBusy, setInstagramBusy] = useState('')
+
+  const [whatsappContact, setWhatsappContact] = useState(localStorage.getItem('shell_whatsapp_test_contact') || '')
+  const [whatsappMessage, setWhatsappMessage] = useState('Hello from Shell AI!')
+  const [whatsappLogFilter, setWhatsappLogFilter] = useState('')
+  const [whatsappStatus, setWhatsappStatus] = useState('WhatsApp status not checked yet.')
+  const [whatsappBusy, setWhatsappBusy] = useState('')
+
+  // Connectors State
+  const [connectorsStatus, setConnectorsStatus] = useState<Record<string, { connected: boolean; account?: string | null; last_connected?: string | null; message_count?: number }>>({
+    whatsapp: { connected: false },
+    telegram: { connected: false },
+    instagram: { connected: false },
+    gmail: { connected: false }
+  })
+  const [connectorsLoading, setConnectorsLoading] = useState<Record<string, boolean>>({
+    whatsapp: false,
+    telegram: false,
+    instagram: false,
+    gmail: false
+  })
+  const [connectorsError, setConnectorsError] = useState<Record<string, string>>({
+    whatsapp: '',
+    telegram: '',
+    instagram: '',
+    gmail: ''
+  })
+  const [connectorsSuccess, setConnectorsSuccess] = useState<Record<string, string>>({
+    whatsapp: '',
+    telegram: '',
+    instagram: '',
+    gmail: ''
+  })
+
+  // Inputs for Connectors credentials
+  const [telegramTokenInput, setTelegramTokenInput] = useState('')
+  const [instagramUserDetail, setInstagramUserDetail] = useState({ username: '', password: '' })
+  const [whatsappPhoneInput, setWhatsappPhoneInput] = useState('')
+
   const generalHydratedRef = useRef(false)
   const keysHydratedRef = useRef(false)
 
@@ -227,7 +355,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
   const settingsTabButtonRefs = useRef<Record<TabType, HTMLButtonElement | null>>({
     updates: null,
     general: null,
-    keys: null
+    keys: null,
+    connectors: null
   })
   const [settingsTabIndicatorStyle, setSettingsTabIndicatorStyle] = useState({
     opacity: 1,
@@ -371,6 +500,14 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       if (keys.telegramAllowTerminal !== undefined) {
         setTelegramAllowTerminal(String(keys.telegramAllowTerminal) === '1')
       }
+      if (keys.instagramUsername) {
+        setInstagramUsername(keys.instagramUsername)
+        localStorage.setItem('shell_instagram_username', keys.instagramUsername)
+      }
+      if (keys.instagramPassword) {
+        setInstagramPassword(keys.instagramPassword)
+        localStorage.setItem('shell_instagram_password', keys.instagramPassword)
+      }
     }).catch(() => {})
   }, [activeTab])
 
@@ -407,6 +544,72 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       window.removeEventListener('resize', updateSettingsTabIndicator)
     }
   }, [activeTab, updateSettingsTabIndicator])
+
+  const fetchConnectorsStatus = useCallback(() => {
+    if (!window.electron?.ipcRenderer) return
+    window.electron.ipcRenderer
+      .invoke('social-media-status')
+      .then((res) => {
+        if (res && res.success && res.statuses) {
+          setConnectorsStatus(res.statuses)
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch connectors status', err)
+      })
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === 'connectors') {
+      fetchConnectorsStatus()
+    }
+  }, [activeTab, fetchConnectorsStatus])
+
+  const handleConnect = async (platform: string, payload: any) => {
+    if (!window.electron?.ipcRenderer) return
+    setConnectorsLoading((prev) => ({ ...prev, [platform]: true }))
+    setConnectorsError((prev) => ({ ...prev, [platform]: '' }))
+    setConnectorsSuccess((prev) => ({ ...prev, [platform]: '' }))
+    try {
+      const res = await window.electron.ipcRenderer.invoke('social-media-connect', {
+        platform,
+        ...payload
+      })
+      if (res && res.success) {
+        setConnectorsSuccess((prev) => ({ ...prev, [platform]: res.message || 'Connected successfully!' }))
+        fetchConnectorsStatus()
+        if (platform === 'telegram') setTelegramTokenInput('')
+        if (platform === 'instagram') setInstagramUserDetail({ username: '', password: '' })
+        if (platform === 'whatsapp') setWhatsappPhoneInput('')
+      } else {
+        setConnectorsError((prev) => ({ ...prev, [platform]: res.error || res.message || 'Connection failed' }))
+      }
+    } catch (err: any) {
+      setConnectorsError((prev) => ({ ...prev, [platform]: err.message || 'Connection error occurred' }))
+    } finally {
+      setConnectorsLoading((prev) => ({ ...prev, [platform]: false }))
+    }
+  }
+
+  const handleDisconnect = async (platform: string) => {
+    if (!window.electron?.ipcRenderer) return
+    setConnectorsLoading((prev) => ({ ...prev, [platform]: true }))
+    setConnectorsError((prev) => ({ ...prev, [platform]: '' }))
+    setConnectorsSuccess((prev) => ({ ...prev, [platform]: '' }))
+    try {
+      const res = await window.electron.ipcRenderer.invoke('social-media-disconnect', { platform })
+      if (res && res.success) {
+        setConnectorsSuccess((prev) => ({ ...prev, [platform]: res.message || 'Disconnected successfully!' }))
+        fetchConnectorsStatus()
+      } else {
+        setConnectorsError((prev) => ({ ...prev, [platform]: res.error || res.message || 'Disconnection failed' }))
+      }
+    } catch (err: any) {
+      setConnectorsError((prev) => ({ ...prev, [platform]: err.message || 'Disconnection error occurred' }))
+    } finally {
+      setConnectorsLoading((prev) => ({ ...prev, [platform]: false }))
+    }
+  }
 
   const applyUpdateResult = (result: any) => {
     if (!result) return
@@ -864,6 +1067,8 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
     localStorage.setItem('shell_telegram_allowed_chat_ids', telegramAllowedChatIds)
     localStorage.setItem('shell_telegram_remote_control_enabled', telegramRemoteEnabled ? '1' : '0')
     localStorage.setItem('shell_telegram_allow_terminal', telegramAllowTerminal ? '1' : '0')
+    localStorage.setItem('shell_instagram_username', instagramUsername)
+    localStorage.setItem('shell_instagram_password', instagramPassword)
 
     let saveMessage = 'Saved locally. Restart Shell AI to apply runtime modules.'
     if (window.electron?.ipcRenderer) {
@@ -885,7 +1090,9 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
           telegramToken,
           telegramAllowedChatIds,
           telegramRemoteControlEnabled: telegramRemoteEnabled ? '1' : '0',
-          telegramAllowTerminal: telegramAllowTerminal ? '1' : '0'
+          telegramAllowTerminal: telegramAllowTerminal ? '1' : '0',
+          instagramUsername,
+          instagramPassword
         })
         if (result?.rejected && Object.keys(result.rejected).length) {
           saveMessage = `Saved with rejected fields: ${Object.keys(result.rejected).join(', ')}`
@@ -949,6 +1156,74 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
       'save'
     )
   }
+
+  const runInstagramTool = async (toolId: string, args: Record<string, any> = {}, busyLabel = 'insta') => {
+    setInstagramBusy(busyLabel)
+    try {
+      const response = await window.electron?.ipcRenderer.invoke('execute-tool', toolId, args)
+      const text = formatToolResponse(response)
+      setInstagramStatus(text)
+      return response
+    } catch (error) {
+      const text = `Instagram action failed: ${String(error)}`
+      setInstagramStatus(text)
+      return { status: 'error', message: text }
+    } finally {
+      setInstagramBusy('')
+    }
+  }
+
+  const saveInstagramConfig = async () => {
+    localStorage.setItem('shell_instagram_username', instagramUsername)
+    localStorage.setItem('shell_instagram_password', instagramPassword)
+
+    if (window.electron?.ipcRenderer) {
+      setInstagramBusy('save')
+      try {
+        await window.electron.ipcRenderer.invoke('secure-save-keys', {
+          instagramUsername,
+          instagramPassword
+        })
+        setInstagramStatus('Instagram configuration saved securely to backend.')
+      } catch (e: any) {
+        setInstagramStatus(`Save failed: ${e?.message || e}`)
+      } finally {
+        setInstagramBusy('')
+      }
+    }
+  }
+
+  const runWhatsAppTool = async (toolId: string, args: Record<string, any> = {}, busyLabel = 'whatsapp') => {
+    setWhatsappBusy(busyLabel)
+    try {
+      const response = await window.electron?.ipcRenderer.invoke('execute-tool', toolId, args)
+      const text = formatToolResponse(response)
+      setWhatsappStatus(text)
+      return response
+    } catch (error) {
+      const text = `WhatsApp action failed: ${String(error)}`
+      setWhatsappStatus(text)
+      return { status: 'error', message: text }
+    } finally {
+      setWhatsappBusy('')
+    }
+  }
+
+  const sendDirectWhatsApp = async () => {
+    localStorage.setItem('shell_whatsapp_test_contact', whatsappContact)
+    setWhatsappBusy('send')
+    setWhatsappStatus(`Opening WhatsApp & automating GUI to send message to "${whatsappContact}"...`)
+    try {
+      const result = await sendWhatsAppMessage(whatsappContact, whatsappMessage)
+      setWhatsappStatus(result)
+    } catch (error) {
+      setWhatsappStatus(`WhatsApp GUI automation failed: ${String(error)}`)
+    } finally {
+      setWhatsappBusy('')
+    }
+  }
+
+
 
   const currentWordCount = personality
     .trim()
@@ -1963,6 +2238,293 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                     </pre>
                   </div>
 
+                  {/* --- Instagram Remote Control --- */}
+                  <div className="bg-[#050505] border border-cyan-500/15 p-5 rounded-2xl flex flex-col gap-5 mt-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                      <span className={titleClass}>
+                        <RiInstagramLine className="text-pink-500" size={18} /> Instagram Controller
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          aria-label="Check Instagram Login Status"
+                          onClick={() => runInstagramTool('shell_instagram:instagram_login_check', {}, 'login')}
+                          disabled={instagramBusy !== ''}
+                          className="px-3 py-2 rounded-lg border border-white/10 text-[10px] font-bold tracking-widest text-zinc-300 hover:text-pink-400 hover:border-pink-500/30 disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'login' ? 'CHECKING...' : 'LOGIN CHECK'}
+                        </button>
+                        <button
+                          aria-label="Check Instagram DMs"
+                          onClick={() => runInstagramTool('shell_instagram:instagram_check_dms', {}, 'dms')}
+                          disabled={instagramBusy !== ''}
+                          className="px-3 py-2 rounded-lg bg-pink-500/15 border border-pink-500/30 text-[10px] font-bold tracking-widest text-pink-300 hover:bg-pink-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'dms' ? 'FETCHING...' : 'CHECK DMS'}
+                        </button>
+                        <button
+                          aria-label="Get Instagram Followers"
+                          onClick={() => runInstagramTool('shell_instagram:instagram_get_followers_tool', {}, 'followers')}
+                          disabled={instagramBusy !== ''}
+                          className="px-3 py-2 rounded-lg border border-white/10 text-[10px] font-bold tracking-widest text-zinc-300 hover:text-pink-400 hover:border-pink-500/30 disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'followers' ? 'FETCHING...' : 'FOLLOWERS'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase flex items-center gap-2">
+                          <RiUserLine size={14} /> Username
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={instagramUsername}
+                            onChange={(e) => setInstagramUsername(e.target.value)}
+                            placeholder="Enter Instagram username..."
+                            className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase flex items-center gap-2">
+                          <RiKey2Line size={14} /> Password
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            type="password"
+                            value={instagramPassword}
+                            onChange={(e) => setInstagramPassword(e.target.value)}
+                            placeholder="Enter Instagram password..."
+                            className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase">
+                          Comment Auto-Reply text
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={instagramCommentReply}
+                            onChange={(e) => setInstagramCommentReply(e.target.value)}
+                            className="bg-transparent border-none outline-none text-xs text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                        <button
+                          onClick={() =>
+                            runInstagramTool(
+                              'shell_instagram:instagram_auto_reply_comments',
+                              { reply_message: instagramCommentReply },
+                              'comment_reply'
+                            )
+                          }
+                          disabled={instagramBusy !== ''}
+                          className="w-full py-2.5 rounded-lg border border-pink-500/30 text-pink-300 text-[10px] font-black tracking-widest hover:bg-pink-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'comment_reply' ? 'REPLYING...' : 'AUTO-REPLY COMMENTS'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase">
+                          DM Auto-Reply text
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={instagramDmReply}
+                            onChange={(e) => setInstagramDmReply(e.target.value)}
+                            className="bg-transparent border-none outline-none text-xs text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                        <button
+                          onClick={() =>
+                            runInstagramTool(
+                              'shell_instagram:instagram_auto_reply_dms',
+                              { reply_message: instagramDmReply },
+                              'dm_reply'
+                            )
+                          }
+                          disabled={instagramBusy !== ''}
+                          className="w-full py-2.5 rounded-lg border border-pink-500/30 text-pink-300 text-[10px] font-black tracking-widest hover:bg-pink-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'dm_reply' ? 'REPLYING...' : 'AUTO-REPLY DMS'}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase">
+                          Profile Info Lookup
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={instagramTargetUser}
+                            onChange={(e) => setInstagramTargetUser(e.target.value)}
+                            placeholder="username (e.g. virat.kohli)"
+                            className="bg-transparent border-none outline-none text-xs text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                        <button
+                          onClick={() =>
+                            runInstagramTool(
+                              'shell_instagram:instagram_get_profile_info_tool',
+                              { username: instagramTargetUser },
+                              'profile_info'
+                            )
+                          }
+                          disabled={instagramBusy !== ''}
+                          className="w-full py-2.5 rounded-lg bg-pink-500/10 border border-pink-500/25 text-pink-300 text-[10px] font-black tracking-widest hover:bg-pink-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {instagramBusy === 'profile_info' ? 'SEARCHING...' : 'LOOKUP PROFILE'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-1">
+                      <button
+                        onClick={saveInstagramConfig}
+                        disabled={instagramBusy !== ''}
+                        className="px-6 py-3 rounded-lg bg-white text-black text-[10px] font-black tracking-widest hover:bg-zinc-200 disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        {instagramBusy === 'save' ? 'SAVING...' : 'SAVE INSTAGRAM CONFIG'}
+                      </button>
+                    </div>
+
+                    <pre className="min-h-28 max-h-52 overflow-auto scrollbar-small whitespace-pre-wrap rounded-xl bg-black/70 border border-white/10 p-4 text-[11px] text-zinc-300 font-mono leading-relaxed">
+                      {instagramStatus}
+                    </pre>
+                  </div>
+
+                  {/* --- WhatsApp Controller --- */}
+                  <div className="bg-[#050505] border border-cyan-500/15 p-5 rounded-2xl flex flex-col gap-5 mt-4">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+                      <span className={titleClass}>
+                        <RiWhatsappLine className="text-emerald-400" size={18} /> WhatsApp Controller & Auto-Reply
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          aria-label="Check WhatsApp Auto Reply Status"
+                          onClick={() => runWhatsAppTool('shell_whatsapp_auto_reply:auto_reply_status', {}, 'status')}
+                          disabled={whatsappBusy !== ''}
+                          className="px-3 py-2 rounded-lg border border-white/10 text-[10px] font-bold tracking-widest text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {whatsappBusy === 'status' ? 'CHECKING...' : 'STATUS'}
+                        </button>
+                        <button
+                          aria-label="Start WhatsApp Bot"
+                          onClick={() => runWhatsAppTool('shell_whatsapp_auto_reply:start_auto_reply', {}, 'start')}
+                          disabled={whatsappBusy !== ''}
+                          className="px-3 py-2 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-bold tracking-widest text-emerald-300 hover:bg-emerald-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {whatsappBusy === 'start' ? 'STARTING...' : 'START AUTO-REPLY'}
+                        </button>
+                        <button
+                          aria-label="Stop WhatsApp Bot"
+                          onClick={() => runWhatsAppTool('shell_whatsapp_auto_reply:stop_auto_reply', {}, 'stop')}
+                          disabled={whatsappBusy !== ''}
+                          className="px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/25 text-[10px] font-bold tracking-widest text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {whatsappBusy === 'stop' ? 'STOPPING...' : 'STOP AUTO-REPLY'}
+                        </button>
+                        <button
+                          aria-label="Get WhatsApp Contact Memory"
+                          onClick={() => runWhatsAppTool('shell_whatsapp_auto_reply:whatsapp_contact_memory', {}, 'memory')}
+                          disabled={whatsappBusy !== ''}
+                          className="px-3 py-2 rounded-lg border border-white/10 text-[10px] font-bold tracking-widest text-zinc-300 hover:text-emerald-400 hover:border-emerald-500/30 disabled:opacity-50 transition-all cursor-pointer"
+                        >
+                          {whatsappBusy === 'memory' ? 'LOADING...' : 'CONTACT MEMORY'}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase flex items-center gap-2">
+                          <RiUserLine size={14} /> Direct Message Recipient Name
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={whatsappContact}
+                            onChange={(e) => setWhatsappContact(e.target.value)}
+                            placeholder="Enter contact name (e.g. Papa, Raj)..."
+                            className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <label className="text-[10px] text-zinc-400 font-mono tracking-widest uppercase flex items-center gap-2">
+                          <RiTranslate2 size={14} /> Message Text
+                        </label>
+                        <div className={inputContainerClass}>
+                          <input
+                            value={whatsappMessage}
+                            onChange={(e) => setWhatsappMessage(e.target.value)}
+                            placeholder="Type direct WhatsApp message..."
+                            className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full placeholder:text-zinc-700"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-3">
+                      <div className={inputContainerClass}>
+                        <input
+                          value={whatsappLogFilter}
+                          onChange={(e) => setWhatsappLogFilter(e.target.value)}
+                          placeholder="Filter log by contact name..."
+                          className="bg-transparent border-none outline-none text-sm font-mono text-zinc-100 w-full placeholder:text-zinc-700"
+                        />
+                      </div>
+                      <button
+                        onClick={() =>
+                          runWhatsAppTool(
+                            'shell_whatsapp_auto_reply:whatsapp_reply_log',
+                            { filter: whatsappLogFilter },
+                            'view_log'
+                          )
+                        }
+                        disabled={whatsappBusy !== ''}
+                        className="px-5 py-3 rounded-lg border border-emerald-500/30 text-emerald-300 text-[10px] font-black tracking-widest hover:bg-emerald-500 hover:text-black disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        {whatsappBusy === 'view_log' ? 'FETCHING...' : 'VIEW REPLY LOG'}
+                      </button>
+                      <button
+                        onClick={() =>
+                          runWhatsAppTool(
+                            'shell_whatsapp_auto_reply:clear_whatsapp_reply_log_tool',
+                            { confirm: 'yes' },
+                            'clear_log'
+                          )
+                        }
+                        disabled={whatsappBusy !== ''}
+                        className="px-5 py-3 rounded-lg bg-red-500/10 border border-red-500/25 text-[10px] font-bold tracking-widest text-red-300 hover:bg-red-500 hover:text-white disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        {whatsappBusy === 'clear_log' ? 'CLEARING...' : 'CLEAR REPLY LOG'}
+                      </button>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-1">
+                      <button
+                        onClick={sendDirectWhatsApp}
+                        disabled={whatsappBusy !== ''}
+                        className="px-6 py-3 rounded-lg bg-white text-black text-[10px] font-black tracking-widest hover:bg-zinc-200 disabled:opacity-50 transition-all cursor-pointer"
+                      >
+                        {whatsappBusy === 'send' ? 'SENDING MESSAGE...' : 'SEND MSG (DIRECT)'}
+                      </button>
+                    </div>
+
+                    <pre className="min-h-28 max-h-52 overflow-auto scrollbar-small whitespace-pre-wrap rounded-xl bg-black/70 border border-white/10 p-4 text-[11px] text-zinc-300 font-mono leading-relaxed">
+                      {whatsappStatus}
+                    </pre>
+                  </div>
+
+
+
                   {apiSaveResult && (
                     <div className="bg-emerald-500/5 border border-emerald-500/20 p-3 rounded-xl text-[10px] text-emerald-300 font-mono">
                       {apiSaveResult}
@@ -1979,6 +2541,211 @@ const SettingsView = ({ isSystemActive }: SettingsProps) => {
                   </div>
                 </div>
               </motion.div>
+            )}
+
+            {activeTab === 'connectors' && (
+              <div className="flex flex-col gap-6 w-full animate-fadeIn">
+                {/* Search & Category Filter Bar */}
+                <div className="flex flex-col sm:flex-row gap-4 items-center justify-between border-b border-white/10 pb-6 mb-2">
+                  <div className="flex gap-2 bg-black/40 border border-white/10 rounded-lg px-3 py-2 w-full sm:max-w-xs focus-within:border-zinc-500 transition-all">
+                    <input
+                      type="text"
+                      value={pluginSearch}
+                      onChange={(e) => setPluginSearch(e.target.value)}
+                      placeholder="Search plugins & connectors..."
+                      className="bg-transparent border-none outline-none text-xs font-mono text-zinc-100 w-full placeholder:text-zinc-600"
+                    />
+                  </div>
+                  <div className="flex gap-1.5 p-1 bg-black/40 border border-white/5 rounded-lg overflow-x-auto max-w-full">
+                    {(['all', 'communication', 'social', 'productivity'] as const).map((cat) => (
+                      <button
+                        key={cat}
+                        onClick={() => setPluginCategory(cat)}
+                        className={`px-3 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase transition-all cursor-pointer whitespace-nowrap ${
+                          pluginCategory === cat
+                            ? 'bg-white text-black font-semibold shadow'
+                            : 'text-zinc-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <motion.div
+                  key="connectors"
+                  initial={false}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                  className="grid grid-cols-1 md:grid-cols-2 gap-6 w-full"
+                >
+                  {allPlugins
+                    .filter((p) => {
+                      const matchesSearch =
+                        p.name.toLowerCase().includes(pluginSearch.toLowerCase()) ||
+                        p.description.toLowerCase().includes(pluginSearch.toLowerCase()) ||
+                        p.developer.toLowerCase().includes(pluginSearch.toLowerCase());
+                      const matchesCategory = pluginCategory === 'all' || p.category === pluginCategory;
+                      return matchesSearch && matchesCategory;
+                    })
+                    .map((plugin) => {
+                      const isConnected = connectorsStatus[plugin.id]?.connected || false;
+                      const details = connectorsStatus[plugin.id] || {};
+                      const isLoading = connectorsLoading[plugin.id] || false;
+                      const errorMsg = connectorsError[plugin.id] || '';
+                      const successMsg = connectorsSuccess[plugin.id] || '';
+                      const IconComponent = plugin.icon;
+
+                      return (
+                        <div
+                          key={plugin.id}
+                          className={`${cardClass} border-white/10 bg-gradient-to-br ${plugin.brandColor} ${plugin.borderColor} flex flex-col justify-between h-full relative overflow-hidden group`}
+                        >
+                          <div className="absolute inset-0 bg-white/[0.01] opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                          
+                          <div>
+                            <div className="flex justify-between items-start border-b border-white/10 pb-4 mb-4">
+                              <div className="flex flex-col">
+                                <span className={`${titleClass} flex items-center gap-2`}>
+                                  <IconComponent className={plugin.iconColor} size={20} />
+                                  {plugin.name}
+                                </span>
+                                <span className="text-[10px] text-zinc-500 font-sans mt-0.5">by {plugin.developer}</span>
+                              </div>
+                              
+                              {plugin.comingSoon ? (
+                                <span className="px-2 py-0.5 rounded bg-zinc-800/50 text-zinc-500 text-[9px] font-bold tracking-wider">
+                                  COMING SOON
+                                </span>
+                              ) : (
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-widest flex items-center gap-1.5 ${
+                                  isConnected
+                                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]'
+                                    : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${isConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`} />
+                                  {isConnected ? 'CONNECTED' : 'DISCONNECTED'}
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="text-[11px] text-zinc-400 leading-relaxed font-sans mb-6">
+                              {plugin.description}
+                            </p>
+
+                            {!plugin.comingSoon && (
+                              <div className="flex flex-col gap-4 text-xs font-mono text-zinc-300 mb-4">
+                                {isConnected ? (
+                                  <div className="flex flex-col gap-2 bg-black/30 border border-white/5 p-3 rounded-xl">
+                                    <p className="text-emerald-300 text-[11px]">✓ Integration configured successfully.</p>
+                                    {details.account && (
+                                      <p className="text-zinc-400 text-[11px]">Account: <span className="text-white">{details.account}</span></p>
+                                    )}
+                                    {details.last_connected && (
+                                      <p className="text-zinc-400 text-[11px]">Last Active: <span className="text-white">{new Date(details.last_connected).toLocaleString()}</span></p>
+                                    )}
+                                    {details.message_count !== undefined && details.message_count > 0 && (
+                                      <p className="text-zinc-400 text-[11px]">Messages Sent: <span className="text-white">{details.message_count}</span></p>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <>
+                                    {plugin.id === 'whatsapp' && (
+                                      <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] text-zinc-500 font-mono tracking-widest uppercase">Phone Number (Optional)</label>
+                                        <div className={`${inputContainerClass} bg-black/40 border-zinc-800`}>
+                                          <input
+                                            type="text"
+                                            value={whatsappPhoneInput}
+                                            onChange={(e) => setWhatsappPhoneInput(e.target.value)}
+                                            placeholder="+919876543210"
+                                            className="bg-transparent border-none outline-none text-xs font-mono text-zinc-100 w-full placeholder:text-zinc-800"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                    {plugin.id === 'telegram' && (
+                                      <div className="flex flex-col gap-1.5">
+                                        <label className="text-[10px] text-zinc-500 font-mono tracking-widest uppercase">Telegram Bot Token</label>
+                                        <div className={`${inputContainerClass} bg-black/40 border-zinc-800`}>
+                                          <input
+                                            type="password"
+                                            value={telegramTokenInput}
+                                            onChange={(e) => setTelegramTokenInput(e.target.value)}
+                                            placeholder="123456789:bot_token"
+                                            className="bg-transparent border-none outline-none text-xs font-mono text-zinc-100 w-full placeholder:text-zinc-800"
+                                          />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
+
+                          {!plugin.comingSoon && (
+                            <div className="flex flex-col gap-2 mt-auto">
+                              {isConnected ? (
+                                <button
+                                  onClick={() => handleDisconnect(plugin.id)}
+                                  disabled={isLoading}
+                                  className="w-full py-2.5 rounded-lg bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500 hover:text-white transition-all text-xs font-bold tracking-wider cursor-pointer disabled:opacity-50"
+                                >
+                                  {isLoading ? 'DISCONNECTING...' : 'DISCONNECT'}
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    if (plugin.id === 'telegram') {
+                                      handleConnect('telegram', { bot_token: telegramTokenInput });
+                                    } else if (plugin.id === 'whatsapp') {
+                                      handleConnect('whatsapp', { phone_number: whatsappPhoneInput });
+                                    } else {
+                                      handleConnect(plugin.id, {});
+                                    }
+                                  }}
+                                  disabled={isLoading}
+                                  className="w-full py-2.5 rounded-lg bg-white text-black hover:bg-zinc-200 transition-all text-xs font-bold tracking-wider cursor-pointer disabled:opacity-50"
+                                >
+                                  {isLoading
+                                    ? 'INITIALIZING...'
+                                    : plugin.id === 'whatsapp'
+                                    ? 'CONNECT (QR CODE)'
+                                    : plugin.id === 'telegram'
+                                    ? 'CONNECT BOT'
+                                    : 'CONNECT ACCOUNT'}
+                                </button>
+                              )}
+
+                              {errorMsg && (
+                                <div className="bg-red-500/5 border border-red-500/20 p-2.5 rounded-lg text-[10px] text-red-400 font-sans mt-2">
+                                  {errorMsg}
+                                </div>
+                              )}
+                              {successMsg && (
+                                <div className="bg-emerald-500/5 border border-emerald-500/20 p-2.5 rounded-lg text-[10px] text-emerald-400 font-sans mt-2">
+                                  {successMsg}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {plugin.comingSoon && (
+                            <button
+                              disabled
+                              className="w-full py-2.5 rounded-lg bg-white/5 border border-white/5 text-zinc-500 text-xs font-bold tracking-wider mt-auto cursor-not-allowed"
+                            >
+                              COMING SOON
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                </motion.div>
+              </div>
             )}
           </>
         </div>

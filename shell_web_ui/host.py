@@ -19,6 +19,32 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+_ONLINE_CACHE_TIME = 0.0
+_ONLINE_CACHE_VAL = False
+
+def is_network_online() -> bool:
+    import os
+    if os.environ.get("SHELL_TEST_FORCE_OFFLINE") == "1":
+        return False
+    if os.environ.get("SHELL_TEST_FORCE_ONLINE") == "1":
+        return True
+    global _ONLINE_CACHE_TIME, _ONLINE_CACHE_VAL
+    now = time.monotonic()
+    if now - _ONLINE_CACHE_TIME < 5.0:
+        return _ONLINE_CACHE_VAL
+    
+    online = False
+    for host, port in [("8.8.8.8", 53), ("1.1.1.1", 53), ("www.google.com", 80)]:
+        try:
+            with socket.create_connection((host, port), timeout=0.8):
+                online = True
+                break
+        except OSError:
+            continue
+    _ONLINE_CACHE_TIME = now
+    _ONLINE_CACHE_VAL = online
+    return online
+
 try:
     from shell_offline_tts import offline_tts_status, prewarm_offline_tts, prime_offline_tts_cache, speak_offline_tts
 except Exception:  # pragma: no cover - fallback keeps the host importable
@@ -391,11 +417,83 @@ class ShellBackendBridge:
             "open-image-location": self._open_image_location,
             "save-image-external": self._save_image_external,
             "toggle-overlay": lambda _args: {"success": True},
+            "social-media-status": self._social_media_status,
+            "social-media-connect": self._social_media_connect,
+            "social-media-disconnect": self._social_media_disconnect,
         }
         handler = handlers.get(channel)
         if handler is None:
             return {"success": False, "message": f"Unhandled Shell UI channel: {channel}"}
         return handler(args)
+
+    def _social_media_status(self, _args: list[Any]) -> dict[str, Any]:
+        try:
+            from shell_social_connector import social_connector
+            
+            statuses = {}
+            for platform in ["whatsapp", "telegram", "instagram", "gmail"]:
+                statuses[platform] = social_connector.get_status(platform)
+            
+            return {"success": True, "statuses": statuses}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _social_media_connect(self, args: list[Any]) -> dict[str, Any]:
+        payload = args[0] if args and isinstance(args[0], dict) else {}
+        platform = str(payload.get("platform") or "").lower().strip()
+        if not platform:
+            return {"success": False, "error": "Platform required"}
+        
+        from shell_social_connector import social_connector
+        
+        try:
+            if platform == "whatsapp":
+                phone = payload.get("phone_number")
+                success, msg = social_connector.connect_whatsapp(phone)
+                return {"success": success, "message": msg}
+            elif platform == "telegram":
+                token = payload.get("bot_token")
+                success, msg = social_connector.connect_telegram(bot_token=token)
+                return {"success": success, "message": msg}
+            elif platform in ("instagram", "gmail"):
+                # Run browser session capture in background thread to avoid freezing UI
+                import threading
+                
+                def run_background_connect():
+                    try:
+                        if platform == "instagram":
+                            success, msg = social_connector.connect_instagram()
+                        else:
+                            success, msg = social_connector.connect_gmail()
+                        logger.info(f"Background connection for {platform} finished: {success}, {msg}")
+                    except Exception as exc:
+                        logger.error(f"Background connection for {platform} failed: {exc}")
+                
+                t = threading.Thread(target=run_background_connect, daemon=True)
+                t.start()
+                
+                return {
+                    "success": True,
+                    "message": "Browser session launched. Please log in on the official site in Chrome."
+                }
+            else:
+                return {"success": False, "error": f"Unknown platform: {platform}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def _social_media_disconnect(self, args: list[Any]) -> dict[str, Any]:
+        payload = args[0] if args and isinstance(args[0], dict) else {}
+        platform = str(payload.get("platform") or "").lower().strip()
+        if not platform:
+            return {"success": False, "error": "Platform required"}
+        
+        from shell_social_connector import social_connector
+        
+        try:
+            success = social_connector.disconnect(platform)
+            return {"success": success, "message": f"{platform.title()} disconnected successfully!" if success else f"Failed to disconnect {platform}"}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def _get_app_version(self, _args: list[Any] | None = None) -> str:
         try:
@@ -1465,14 +1563,15 @@ class ShellBackendBridge:
 
     @staticmethod
     def _internet_research_allowed() -> bool:
-        return os.environ.get("SHELL_ALLOW_INTERNET_RESEARCH", "0").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-            "allow",
-            "enabled",
-        }
+        raw = os.environ.get("SHELL_ALLOW_INTERNET_RESEARCH", "").strip().lower()
+        # Agar user ne explicitly disable kiya hai, toh respect karo
+        if raw in {"0", "false", "no", "off", "disabled"}:
+            return False
+        # Agar explicitly enabled hai, allow karo
+        if raw in {"1", "true", "yes", "on", "allow", "enabled"}:
+            return True
+        # Default: auto-enable jab internet online hai
+        return is_network_online()
 
     @staticmethod
     def _internet_research_disabled_reply() -> str:
@@ -1484,7 +1583,7 @@ class ShellBackendBridge:
         if not lower:
             return False
         explicit_research = bool(
-            re.search(r"\b(research|recerch|deep\s+research|fact\s*check|web\s+search|internet|online)\b", lower)
+            re.search(r"\b(research|recerch|reserch|deep\s+research|deep\s+reserch|fact\s*check|web\s+search|internet|online)\b", lower)
         )
         current_info = bool(
             re.search(
@@ -2773,6 +2872,8 @@ class ShellBackendBridge:
         return configured
 
     def _chat_provider_network_ready(self, configured_keys: list[str]) -> bool:
+        if not is_network_online():
+            return False
         if not configured_keys:
             return False
         if not self._env_flag_enabled("SHELL_CHAT_ONLINE_CHECK", default=True):
@@ -2797,18 +2898,38 @@ class ShellBackendBridge:
         self._chat_provider_network_cache = (now, cache_key, False)
         return False
 
+
     def _should_try_provider_chat(self) -> bool:
-        mode = os.environ.get("SHELL_CHAT_PROVIDER_MODE", os.environ.get("SHELL_WEB_CHAT_PROVIDER_MODE", "auto")).strip().lower()
-        if mode in {"offline", "local", "none", "disabled", "off"}:
+        # Pehle explicit voice_mode/chat_mode lock check karo —
+        # agar user ne manually "local"/"offline" set kiya hai, respect karo.
+        voice_mode = os.environ.get("SHELL_VOICE_MODE", "").strip().lower()
+        if voice_mode in {"local", "offline"}:
             return False
+
+        mode = os.environ.get("SHELL_CHAT_MODE", "auto").strip().lower()
+        if mode in {"local", "offline"}:
+            return False
+
         configured_keys = self._configured_chat_provider_keys()
         if not configured_keys:
             return False
-        if mode in {"auto", "", "cloud", "provider", "online"}:
+
+        # Keys configured hain aur mode lock nahi hai —
+        # network probe karo aur result return karo.
+        if self._chat_provider_network_ready(configured_keys):
+            return True
+
+        # Fallback: agar network probe fail hua but is_network_online() says
+        # we're online, try once more through the probe.
+        if is_network_online():
             return self._chat_provider_network_ready(configured_keys)
-        return self._chat_provider_network_ready(configured_keys)
+
+        return False
 
     def _provider_chat_reply(self, prompt: str, system_prompt: str, *, limit: int = 360) -> str:
+        mock = os.environ.get("SHELL_TEST_MOCK_ONLINE_REPLY")
+        if mock:
+            return mock
         try:
             import concurrent.futures
 
@@ -2922,6 +3043,29 @@ class ShellBackendBridge:
     def _local_chat_answer(self, text: str) -> str:
         language = _shell_language()
         query = " ".join(str(text or "").lower().split())
+        
+        # Conversational Hinglish check-ins
+        if re.search(r"\b(kaise\s+ho|how\s+are\s+you|how\s+r\s+u)\b", query):
+            if language == "english":
+                return "I'm doing well, thank you! How can I help you today?"
+            if language == "hindi":
+                return "मैं ठीक हूँ, धन्यवाद! आज आपकी क्या सेवा करूँ?"
+            return "Main badhiya hoon bhai! Aap batao, aaj kya help chahiye?"
+        if re.search(r"\b(kya\s+kar\s+rahe\s+ho|kya\s+kar\s+rahe|kya\s+kar\s+raha|what\s+are\s+you\s+doing|what\s+u\s+doing)\b", query):
+            if language == "english":
+                return "I am ready to help you run commands or research queries offline."
+            if language == "hindi":
+                return "मैं आपके ऑफलाइन कमांड और रिसर्च क्वेरी में मदद के लिए तैयार हूँ।"
+            return "Kuch nahi bhai, aapki help karne ke liye ready baithi hoon offline mode mein."
+        if re.search(r"\b(kya\s+chal\s+raha|kya\s+chal\s+raha\s+hai|whats\s+up|what's\s+up)\b", query):
+            if language == "english":
+                return "Everything is good! How can I assist you?"
+            if language == "hindi":
+                return "सब ठीक है! मैं आपकी क्या सहायता करूँ?"
+            return "Sab badhiya chal raha hai bhai! Batao kya madad karu?"
+        if re.search(r"\b(namaste|pranam|ram\s+ram)\b", query):
+            return "Namaste bhai! Kaise ho? Kya help chahiye aaj?"
+
         if "capital of france" in query:
             if language == "english":
                 return "The capital of France is Paris."
@@ -3121,7 +3265,7 @@ class ShellBackendBridge:
                 return {
                     "user_message": (
                         "Gmail/email integration is not configured yet. I can open Gmail in the browser, "
-                        "but inbox reading, summaries, monitoring, and attachment downloads need a Gmail/API or SMTP setup first."
+                        "but inbox reading, summaries, monitoring, and attachment downloads need a Gmail API setup first."
                     ),
                     "ui_actions": [
                         {
@@ -3131,7 +3275,7 @@ class ShellBackendBridge:
                         }
                     ],
                 }
-            return {"user_message": "Email sending credentials are configured. Gmail inbox reading/monitoring still needs a Gmail API integration.", "ui_actions": []}
+            return {"user_message": rendered, "ui_actions": []}
 
         return {"user_message": "", "ui_actions": []}
 
@@ -3366,9 +3510,104 @@ class ShellBackendBridge:
         self._speech_process = None
 
     def _start_os_tts(self, text: str, *, job_id: int | None = None) -> dict[str, Any]:
-        message = "Kokoro offline voice is unavailable and OS TTS fallback is disabled."
-        self.emit_event("speech-status", {"state": "error", "engine": "kokoro", "message": message})
-        return {"success": False, "message": message, "source": "kokoro-unavailable", "engine": "kokoro"}
+        job_id = job_id or self._next_speech_job_id()
+        self.emit_event(
+            "speech-status",
+            {
+                "state": "queued",
+                "engine": "system",
+                "source": "os-tts",
+                "chars": len(text),
+            },
+        )
+
+        def run() -> None:
+            system = platform.system().lower()
+            success = False
+            engine_name = "System SAPI"
+            
+            if system == "windows":
+                powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+                if powershell:
+                    safe_text = text.replace("'", "''").replace('"', '`"')
+                    script = (
+                        "Add-Type -AssemblyName System.Speech; "
+                        "$synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+                        f"$synth.Speak('{safe_text}'); $synth.Dispose()"
+                    )
+                    try:
+                        subprocess.run(
+                            [powershell, "-NoProfile", "-NonInteractive", "-Command", script],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            timeout=30,
+                        )
+                        success = True
+                    except Exception:
+                        pass
+            elif system == "darwin":
+                if shutil.which("say"):
+                    try:
+                        subprocess.run(["say", text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                        success = True
+                        engine_name = "macOS say"
+                    except Exception:
+                        pass
+            else:
+                for name in ("spd-say", "espeak-ng", "espeak"):
+                    if shutil.which(name):
+                        try:
+                            subprocess.run([name, text], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30)
+                            success = True
+                            engine_name = name
+                            break
+                        except Exception:
+                            pass
+            
+            if not success:
+                try:
+                    import pyttsx3
+                    engine = pyttsx3.init()
+                    engine.say(text)
+                    engine.runAndWait()
+                    engine.stop()
+                    success = True
+                    engine_name = "pyttsx3"
+                except Exception:
+                    pass
+
+            if job_id != self._current_speech_job_id():
+                return
+
+            if success:
+                self.emit_event(
+                    "speech-status",
+                    {
+                        "state": "speaking",
+                        "engine": "system",
+                        "voice": engine_name,
+                        "chars": len(text),
+                    },
+                )
+            else:
+                self.emit_event(
+                    "speech-status",
+                    {
+                        "state": "error",
+                        "engine": "system",
+                        "message": "No local TTS engine available.",
+                    },
+                )
+
+        self._start_background_task("ShellOSTTS", run)
+        return {
+            "success": True,
+            "queued": True,
+            "source": "os-tts",
+            "engine": "system",
+            "message": "System OS speech queued",
+            "chars": len(text),
+        }
 
     @staticmethod
     def _offline_tts_ready() -> tuple[bool, dict[str, Any]]:
@@ -3477,6 +3716,8 @@ class ShellBackendBridge:
         return bool(self._configured_gemini_voice_key())
 
     def _cloud_voice_requested(self) -> bool:
+        if is_network_online() and self._gemini_voice_configured():
+            return True
         mode = os.environ.get("SHELL_VOICE_MODE", "").strip().lower()
         engine = os.environ.get("SHELL_TTS_ENGINE", "").strip().lower()
         if mode == "cloud":
@@ -3877,15 +4118,22 @@ class ShellBackendBridge:
             queued["label"] = status.get("label", "Offline natural voice")
             return queued
 
-        message = str(status.get("reason") or "Kokoro offline voice is unavailable.")
-        self.emit_event("speech-status", {"state": "error", "engine": "kokoro", "message": message})
+        # Agar offline model (Kokoro) unavailable hai, toh error return karo.
+        # OS TTS fallback desktop EXE me focus steal karta hai, isliye yahan
+        # silently use nahi karna.
+        self.emit_event(
+            "speech-status",
+            {
+                "state": "error",
+                "engine": status.get("engine", "kokoro"),
+                "message": status.get("reason") or "Offline voice model is unavailable.",
+            },
+        )
         return {
             "success": False,
-            "available": False,
-            "engine": "kokoro",
             "source": "kokoro-unavailable",
-            "message": message,
-            "status": status,
+            "engine": status.get("engine", "kokoro"),
+            "message": status.get("reason") or "Offline voice model is unavailable.",
         }
 
     def _stop_speech(self, _args: list[Any]) -> dict[str, Any]:

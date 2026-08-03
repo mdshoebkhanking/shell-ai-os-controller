@@ -65,7 +65,11 @@ def _active_window_macos() -> ActiveWindowInfo:
 
 
 def _active_window_windows() -> ActiveWindowInfo:
+    # This script gets the active window's details and, if it belongs to a browser
+    # (Chrome/Edge/Brave/Firefox), uses UIAutomationClient to extract the active tab URL.
+    # We use $processId instead of $pid because $pid is read-only in PowerShell.
     script = r"""
+Add-Type -AssemblyName UIAutomationClient
 Add-Type @"
 using System;
 using System.Text;
@@ -79,22 +83,52 @@ public class WinApi {
 $hwnd = [WinApi]::GetForegroundWindow()
 $sb = New-Object System.Text.StringBuilder 512
 [void][WinApi]::GetWindowText($hwnd, $sb, $sb.Capacity)
-$pid = 0
-[void][WinApi]::GetWindowThreadProcessId($hwnd, [ref]$pid)
-$proc = Get-Process -Id $pid -ErrorAction SilentlyContinue
-[pscustomobject]@{ app_name = $proc.ProcessName; process_name = $proc.ProcessName; title = $sb.ToString(); url = "" } | ConvertTo-Json -Compress
+$processId = 0
+[void][WinApi]::GetWindowThreadProcessId($hwnd, [ref]$processId)
+$proc = Get-Process -Id $processId -ErrorAction SilentlyContinue
+
+$url = ""
+if ($proc.ProcessName -match "chrome|msedge|brave|firefox") {
+  try {
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Edit
+    )
+    $edits = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)
+    foreach ($edit in $edits) {
+      try {
+        $vp = $edit.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
+        if ($vp -and $vp.Current.Value -match "\.|:|/") {
+          $url = $vp.Current.Value
+          break
+        }
+      } catch {}
+    }
+  } catch {}
+}
+
+[pscustomobject]@{ app_name = $proc.ProcessName; process_name = $proc.ProcessName; title = $sb.ToString(); url = $url } | ConvertTo-Json -Compress
 """
-    raw = _run_text(["powershell", "-NoProfile", "-Command", script], timeout=4)
+    import base64
     try:
+        encoded_script = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+        raw = _run_text(["powershell", "-NoProfile", "-EncodedCommand", encoded_script], timeout=4)
         data = json.loads(raw)
     except Exception:
         data = {}
+    
+    url = str(data.get("url") or "").strip()
+    if url and not url.startswith(("http://", "https://")):
+        url = "https://" + url
+
     return ActiveWindowInfo(
         app_name=str(data.get("app_name") or ""),
         process_name=str(data.get("process_name") or ""),
         title=str(data.get("title") or ""),
-        url=str(data.get("url") or ""),
+        url=url,
     )
+
 
 
 def _clipboard_text(system: str) -> str:

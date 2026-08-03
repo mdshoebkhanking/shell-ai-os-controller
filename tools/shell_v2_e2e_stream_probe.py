@@ -90,7 +90,7 @@ def _cadence(times_ms: list[float]) -> dict[str, Any]:
 
 
 def _run_worker_probe(url: str, prompt: str, timeout_s: float) -> dict[str, Any]:
-    from shell_ui.shell_cinematic_full import ShellV2Worker
+    from shell_v2_worker import ShellV2Worker
 
     old_url = ShellV2Worker.SHELL_V2_URL
     old_timeout = ShellV2Worker.TIMEOUT_S

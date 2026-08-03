@@ -40,7 +40,7 @@ def test_realtime_runtime_import_stays_lightweight() -> None:
 
 def test_ui_reexports_realtime_audio_client() -> None:
     from shell_realtime_audio_runtime import LiveKitAudioClient as RuntimeLiveKitAudioClient
-    from shell_ui.shell_cinematic_full import LiveKitAudioClient as UiLiveKitAudioClient
+    from shell_realtime_audio_runtime import LiveKitAudioClient as UiLiveKitAudioClient
 
     assert UiLiveKitAudioClient is RuntimeLiveKitAudioClient
 

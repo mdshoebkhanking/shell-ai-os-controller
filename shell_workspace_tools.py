@@ -242,7 +242,7 @@ async def create_workspace_file_tool(path: str, content: str = "", overwrite: bo
             "action": "exists",
             "message": "File already exists. Say overwrite/replace to update it.",
             "workspace": str(root),
-            "relative_path": str(rel),
+            "relative_path": rel.as_posix(),
             "path": str(full),
             "ui_hint": "open_in_workspace",
         }
@@ -252,9 +252,9 @@ async def create_workspace_file_tool(path: str, content: str = "", overwrite: bo
     return {
         "ok": True,
         "action": "updated" if exists else "created",
-        "message": f"{'Updated' if exists else 'Created'} {rel}",
+        "message": f"{'Updated' if exists else 'Created'} {rel.as_posix()}",
         "workspace": str(root),
-        "relative_path": str(rel),
+        "relative_path": rel.as_posix(),
         "path": str(full),
         "bytes": len(text.encode("utf-8")),
         "ui_hint": "open_in_workspace",
@@ -358,7 +358,7 @@ async def read_workspace_file_tool(path: str, max_chars: int = 20000) -> dict[st
             "ok": False,
             "message": "File not found in the Shell workspace.",
             "workspace": str(root),
-            "relative_path": str(rel),
+            "relative_path": rel.as_posix(),
             "path": str(full),
             "ui_hint": "open_in_workspace",
         }
@@ -367,7 +367,7 @@ async def read_workspace_file_tool(path: str, max_chars: int = 20000) -> dict[st
             "ok": False,
             "message": "That path is a folder, not a file.",
             "workspace": str(root),
-            "relative_path": str(rel),
+            "relative_path": rel.as_posix(),
             "path": str(full),
             "ui_hint": "open_in_workspace",
         }
@@ -378,7 +378,7 @@ async def read_workspace_file_tool(path: str, max_chars: int = 20000) -> dict[st
             "ok": False,
             "message": "File is not valid UTF-8 text.",
             "workspace": str(root),
-            "relative_path": str(rel),
+            "relative_path": rel.as_posix(),
             "path": str(full),
             "ui_hint": "open_in_workspace",
         }
@@ -387,7 +387,7 @@ async def read_workspace_file_tool(path: str, max_chars: int = 20000) -> dict[st
         "ok": True,
         "action": "read",
         "workspace": str(root),
-        "relative_path": str(rel),
+        "relative_path": rel.as_posix(),
         "path": str(full),
         "chars": len(text),
         "truncated": truncated,
@@ -420,7 +420,7 @@ async def list_workspace_files_tool(limit: int = 200) -> dict[str, Any]:
             continue
         rows.append({
             "path": str(full),
-            "relative_path": str(rel),
+            "relative_path": rel.as_posix(),
             "bytes": stat.st_size,
             "modified": stat.st_mtime,
         })

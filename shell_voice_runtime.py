@@ -1,5 +1,5 @@
 """
-Lightweight Shell voice runtime.
+Lightweight Shell AI voice runtime.
 
 This module owns text-to-speech queueing, backend selection, playback helpers,
 and latency events without importing the full desktop UI. The UI should treat it
@@ -17,6 +17,35 @@ from collections import deque
 
 from shell_async_signals import WorkerThread
 from shell_async_signals import signal as runtime_signal
+
+
+import socket as _socket
+import time as _net_time
+
+_ONLINE_CACHE_TIME_VR = 0.0
+_ONLINE_CACHE_VAL_VR = False
+
+def _is_network_online_vr() -> bool:
+    import os
+    if os.environ.get("SHELL_TEST_FORCE_OFFLINE") == "1":
+        return False
+    if os.environ.get("SHELL_TEST_FORCE_ONLINE") == "1":
+        return True
+    global _ONLINE_CACHE_TIME_VR, _ONLINE_CACHE_VAL_VR
+    now = _net_time.monotonic()
+    if now - _ONLINE_CACHE_TIME_VR < 5.0:
+        return _ONLINE_CACHE_VAL_VR
+    online = False
+    for host, port in [("8.8.8.8", 53), ("1.1.1.1", 53), ("www.google.com", 80)]:
+        try:
+            with _socket.create_connection((host, port), timeout=0.8):
+                online = True
+                break
+        except OSError:
+            continue
+    _ONLINE_CACHE_TIME_VR = now
+    _ONLINE_CACHE_VAL_VR = online
+    return online
 
 
 _EDGE_TTS_AVAILABLE = importlib.util.find_spec("edge_tts") is not None
@@ -112,7 +141,17 @@ class TTSSpeaker(WorkerThread):
         os.makedirs(self._temp_dir, exist_ok=True)
 
     def _voice_mode(self):
-        """Return cloud/local/auto from env or persisted UI settings."""
+        """Return cloud/local/auto from env or persisted UI settings.
+        
+        Dynamic override: jab internet offline hai toh "local" return karo,
+        jab online hai aur Gemini key configured hai toh "cloud" return karo.
+        """
+        # Network-aware dynamic routing
+        if not _is_network_online_vr():
+            return "local"
+        if _is_network_online_vr() and self._gemini_tts_configured():
+            return "cloud"
+
         raw = os.environ.get("SHELL_VOICE_MODE")
         if not raw:
             try:

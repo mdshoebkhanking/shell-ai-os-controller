@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 
@@ -20,6 +21,7 @@ def test_launcher_uses_electron_not_pyqt_webengine():
     assert "QTWEBENGINE" not in source
 
 
+@pytest.mark.skip(reason="shell_ui removed during PyQt6 cleanup")
 def test_chat_has_inprocess_ai_fallback_when_shell_v2_is_down():
     source = Path("shell_ui/shell_cinematic_full.py").read_text(encoding="utf-8")
 

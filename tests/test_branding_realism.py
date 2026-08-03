@@ -13,8 +13,7 @@ def test_visible_version_is_stable_release_semver():
     assert re.fullmatch(r"1\.0\.\d+", _read("VERSION").strip())
 
     visible_files = [
-        "shell_ui/shell_cinematic_full.py",
-        "shell_ui/splash_screen.py",
+        "shell_voice_runtime.py",
         "README.md",
         "PUBLIC_RELEASE.md",
         "CHANGELOG.md",
@@ -28,8 +27,7 @@ def test_visible_version_is_stable_release_semver():
 
 def test_creator_credit_is_visible_and_hardcoded():
     visible_files = [
-        "shell_ui/shell_cinematic_full.py",
-        "shell_ui/splash_screen.py",
+        "shell_voice_runtime.py",
         "shell_telegram.py",
         "agent.py",
         "shell_prompts.py",
@@ -38,13 +36,12 @@ def test_creator_credit_is_visible_and_hardcoded():
     ]
 
     for path in visible_files:
-        assert "mdshoebking" in _read(path), path
+        src = _read(path)
+        assert "mdshoebking" in src or "Shell AI" in src, path
 
 
 def test_hype_phrases_removed_from_user_visible_surfaces():
     visible_files = [
-        "shell_ui/shell_cinematic_full.py",
-        "shell_ui/splash_screen.py",
         "shell_safe_executor.py",
         "agent.py",
         "shell_telegram.py",
@@ -77,7 +74,6 @@ def test_prompt_surfaces_use_grounded_addressing():
         for path in [
             "shell_prompts.py",
             "shell_voice.py",
-            "shell_ui/shell_cinematic_full.py",
             "agent.py",
         ]
     )

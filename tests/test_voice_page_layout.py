@@ -1,3 +1,6 @@
+import pytest
+pytest.skip("VoicePage is removed", allow_module_level=True)
+
 import os
 
 
@@ -5,7 +8,7 @@ def test_voice_page_modern_layout_smoke():
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
     from PyQt6.QtWidgets import QApplication, QFrame
-    from shell_ui.shell_cinematic_full import VoicePage
+    # VoicePage removed (PyQt6 cleanup)
 
     app = QApplication.instance() or QApplication([])
     page = VoicePage()

@@ -852,7 +852,8 @@ function DashboardView({
   }
 
   const sendTranscriptPrompt = async (overrideText = '') => {
-    const text = overrideText.trim() || readTranscriptPrompt()
+    const cleanOverride = typeof overrideText === 'string' ? overrideText : ''
+    const text = cleanOverride.trim() || readTranscriptPrompt()
     if ((!text && attachedFiles.length === 0) || isSendingPrompt) return
     setIsSendingPrompt(true)
     setTranscriptPrompt('')

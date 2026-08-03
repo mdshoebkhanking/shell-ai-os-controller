@@ -1,3 +1,5 @@
+import pytest
+
 def test_voice_aliases_resolve_to_aoede(monkeypatch):
     monkeypatch.delenv("VOICE_NAME", raising=False)
 
@@ -11,7 +13,7 @@ def test_voice_aliases_resolve_to_aoede(monkeypatch):
 def test_tts_command_detection_is_non_throwing(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker, _system_tts_available
+    from shell_voice_runtime import TTSSpeaker, _system_tts_available
 
     speaker = TTSSpeaker()
     assert isinstance(speaker._detect_system_tts_command(), str)
@@ -21,7 +23,7 @@ def test_tts_command_detection_is_non_throwing(monkeypatch):
 def test_tts_speak_reports_no_audio_output(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker._engine = "system"
@@ -35,7 +37,7 @@ def test_explicit_system_tts_does_not_use_cloud_voice(monkeypatch):
     monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker._engine = "system"
@@ -57,7 +59,7 @@ def test_explicit_system_tts_does_not_use_cloud_voice(monkeypatch):
 def test_tts_warmup_requests_are_deduped(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker._warmup_in_progress = True
@@ -73,7 +75,7 @@ def test_tts_warmup_requests_are_deduped(monkeypatch):
 def test_tts_voice_intent_prewarm_requests_provider_modules(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     calls = []
@@ -96,7 +98,7 @@ def test_cloud_voice_prioritizes_gemini_identity_even_instant_mode(monkeypatch):
     monkeypatch.setenv("SHELL_TTS_LATENCY_MODE", "instant")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     calls = []
@@ -117,7 +119,7 @@ def test_cloud_voice_prefers_gemini_live_streaming(monkeypatch):
     monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     calls = []
@@ -143,7 +145,7 @@ def test_cloud_voice_fallback_is_logged_only_when_explicitly_allowed(monkeypatch
     monkeypatch.setenv("SHELL_CLOUD_TTS_LOCAL_FALLBACK", "1")
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     events = []
@@ -165,7 +167,7 @@ def test_cloud_voice_does_not_silently_use_local_fallback(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("SHELL_CLOUD_TTS_LOCAL_FALLBACK", raising=False)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     monkeypatch.setattr(speaker, "_speak_system", lambda _text: (_ for _ in ()).throw(AssertionError("local fallback used")))
@@ -181,7 +183,7 @@ def test_cloud_voice_fallback_blocked_is_logged(monkeypatch):
     monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("SHELL_CLOUD_TTS_LOCAL_FALLBACK", raising=False)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     events = []
@@ -203,7 +205,7 @@ def test_cloud_voice_cancel_does_not_emit_fallback_failure(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
     monkeypatch.delenv("SHELL_CLOUD_TTS_LOCAL_FALLBACK", raising=False)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     events = []
@@ -226,7 +228,7 @@ def test_mac_audio_output_probe_is_cached(monkeypatch):
 
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker._audio_output_probe_ttl_s = 60.0
@@ -249,7 +251,7 @@ def test_openai_streaming_tts_uses_pcm_player(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "sk-" + "x" * 40)
     monkeypatch.setenv("OPENAI_TTS_PCM_CHUNK_BYTES", "480")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     consumed = []
     create_calls = []
@@ -323,7 +325,7 @@ def test_gemini_live_streaming_tts_uses_aoede_pcm_player(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     consumed = []
     connect_calls = []
@@ -426,7 +428,7 @@ def test_gemini_live_streaming_reports_first_audible_chunk_after_primer(monkeypa
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
     monkeypatch.setenv("SHELL_GEMINI_LIVE_FIRST_AUDIBLE_BYTES", "480")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     consumed = []
 
@@ -515,7 +517,7 @@ def test_gemini_live_streaming_preflights_pcm_audio_before_network(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     monkeypatch.setenv("GOOGLE_API_KEY", "g" * 32)
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker._last_error = "no pcm output"
@@ -534,7 +536,7 @@ def test_gemini_live_streaming_preflights_pcm_audio_before_network(monkeypatch):
 def test_set_voice_keeps_gemini_voice_name(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     speaker = TTSSpeaker()
     speaker.set_voice("Charon")
@@ -545,7 +547,7 @@ def test_set_voice_keeps_gemini_voice_name(monkeypatch):
 def test_gemini_pcm_audio_is_wrapped_as_wav(tmp_path, monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import TTSSpeaker
+    from shell_voice_runtime import TTSSpeaker
 
     path = tmp_path / "speech.wav"
     TTSSpeaker._write_gemini_audio_file(b"\x00\x00\x01\x00", "audio/l16;rate=24000", str(path))
@@ -568,11 +570,12 @@ def test_speak_tool_cloud_mode_requires_gemini_not_local(monkeypatch):
     assert "Spoke" not in result
 
 
+@pytest.mark.skip(reason="VoicePage removed during PyQt6 cleanup")
 def test_voice_page_has_no_test_voice_button(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
     from PyQt6.QtWidgets import QApplication
-    from shell_ui.shell_cinematic_full import VoicePage
+    # VoicePage removed (PyQt6 cleanup)
     import sys
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -754,9 +757,9 @@ def test_voice_tts_first_segment_can_start_before_full_sentence(monkeypatch):
     monkeypatch.setenv("SHELL_VOICE_TTS_FIRST_CHARS", "12")
     monkeypatch.setenv("SHELL_VOICE_TTS_FIRST_HARD_CHARS", "40")
 
-    from shell_ui.shell_cinematic_full import ShellHoloUI
+    from shell_v2_worker import ShellV2Worker
 
-    segment, offset = ShellHoloUI._voice_tts_next_segment(
+    segment, offset = ShellV2Worker._voice_tts_next_segment(
         "I can absolutely help, and I will keep going with details. More text.",
         0,
     )

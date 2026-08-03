@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import pytest
 
 
 def _brain_with_providers(providers):
@@ -141,8 +142,9 @@ def test_brain_true_stream_rejects_provider_error_chunk(monkeypatch) -> None:
     assert any("bad_stream stream" in err and "OpenAI Error" in err for err in metrics["errors"])
 
 
+@pytest.mark.skip(reason="AIChatWorker removed during PyQt6 cleanup")
 def test_ai_chat_worker_emits_first_token_latency() -> None:
-    from shell_ui.shell_cinematic_full import AIChatWorker
+    # AIChatWorker removed (PyQt6 cleanup)
 
     class FakeBrain:
         providers = {"fake": object()}
@@ -171,8 +173,9 @@ def test_ai_chat_worker_emits_first_token_latency() -> None:
     assert first_payload["elapsed_ms"] >= 0
 
 
+@pytest.mark.skip(reason="AIChatWorker removed during PyQt6 cleanup")
 def test_ai_chat_worker_cancels_stream_on_interruption() -> None:
-    from shell_ui.shell_cinematic_full import AIChatWorker
+    # AIChatWorker removed (PyQt6 cleanup)
 
     class FakeBrain:
         providers = {"fake": object()}

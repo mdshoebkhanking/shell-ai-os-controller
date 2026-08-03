@@ -100,6 +100,9 @@ deep-translator>=1.11.4       # alternate translation backend (shell_translator)
 
 # ── Communication integrations ──────────────────────────────────────
 instagrapi>=2.0.0
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.1.0
 
 
 # ── UI / desktop shell support ──────────────────────────────────────

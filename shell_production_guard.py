@@ -37,7 +37,6 @@ REQUIRED_PUBLIC_RELEASE_FILES = [
     "installer/bootstrap.py",
     "launch.py",
     "shell_hub.py",
-    "shell_ui/requirements_ui.txt",
     "shell_web_ui/host.py",
     "shell_web_ui/index.html",
     "shell_web_ui/package-lock.json",

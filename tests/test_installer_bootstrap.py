@@ -53,7 +53,8 @@ def test_bootstrap_prefers_current_compatible_python(monkeypatch):
     assert bootstrap.preferred_python_executable() == bootstrap.sys.executable
 
 
-def test_bootstrap_health_report_shape():
+def test_bootstrap_health_report_shape(monkeypatch):
+    monkeypatch.setattr(bootstrap, "run_cmd", lambda *args, **kwargs: bootstrap.StepResult("mock", True, "OK", "ok\n"))
     report = bootstrap.health_report(bootstrap.venv_dir())
 
     assert "state" in report
@@ -573,6 +574,14 @@ def test_bootstrap_installs_ui_requirements(monkeypatch, tmp_path):
     def fake_run_cmd(argv, **kwargs):
         calls.append([str(part) for part in argv])
         return bootstrap.StepResult(kwargs.get("name", "cmd"), True, "OK", "")
+
+    # Mock Path.exists to simulate shell_ui/requirements_ui.txt existing for installer test
+    orig_exists = Path.exists
+    def fake_exists(self):
+        if "shell_ui" in str(self) and "requirements_ui.txt" in str(self):
+            return True
+        return orig_exists(self)
+    monkeypatch.setattr(Path, "exists", fake_exists)
 
     monkeypatch.setattr(bootstrap, "run_cmd", fake_run_cmd)
     bootstrap.install_python_deps(tmp_path)

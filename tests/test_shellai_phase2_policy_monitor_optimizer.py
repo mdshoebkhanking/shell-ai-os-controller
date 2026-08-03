@@ -81,7 +81,7 @@ def test_monitor_empty_and_after_task_with_redaction(tmp_path) -> None:
     config = _config(tmp_path)
     assert list_trace_snapshots(config) == []
 
-    result = run_agent_task(create_user_request("!pwd", context={"cwd": str(tmp_path)}), config=config)
+    result = run_agent_task(create_user_request("!whoami", context={"cwd": str(tmp_path)}), config=config)
     rows = list_trace_snapshots(config)
     assert len(rows) == 1
     assert rows[0]["trace_id"] == result["trace_id"]

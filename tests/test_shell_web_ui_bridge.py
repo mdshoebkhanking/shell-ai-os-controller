@@ -825,7 +825,7 @@ def test_research_chat_stays_offline_when_internet_research_disabled(monkeypatch
 
     assert result["success"] is True
     assert result["result"]["status"] == "offline_research_disabled"
-    assert result["reply"] == host.ShellBackendBridge._internet_research_disabled_reply()
+    assert result["reply"] == bridge._internet_research_disabled_reply()
 
 
 def test_allowed_research_injects_fetched_web_context(monkeypatch, tmp_path):
@@ -1732,3 +1732,24 @@ def test_update_install_refuses_to_launch_exe_off_windows(monkeypatch, tmp_path)
 
     assert result["success"] is False
     assert "only supported on Windows" in result["message"]
+
+
+def test_should_try_provider_chat_respects_voice_mode(monkeypatch):
+    import shell_web_ui.host as host
+
+    bridge = host.ShellBackendBridge()
+
+    # If SHELL_VOICE_MODE is local, it should return False
+    monkeypatch.setenv("SHELL_VOICE_MODE", "local")
+    assert bridge._should_try_provider_chat() is False
+
+    # If SHELL_VOICE_MODE is offline, it should return False
+    monkeypatch.setenv("SHELL_VOICE_MODE", "offline")
+    assert bridge._should_try_provider_chat() is False
+
+    # If SHELL_VOICE_MODE is cloud and keys are set (simulate by patching configured keys and network ready), it should check online status
+    monkeypatch.setenv("SHELL_VOICE_MODE", "cloud")
+    monkeypatch.setattr(bridge, "_configured_chat_provider_keys", lambda: ["GOOGLE_API_KEY"])
+    monkeypatch.setattr(bridge, "_chat_provider_network_ready", lambda _keys: True)
+    assert bridge._should_try_provider_chat() is True
+

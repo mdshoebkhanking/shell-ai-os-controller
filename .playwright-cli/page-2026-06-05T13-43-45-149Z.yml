@@ -1,0 +1,357 @@
+- generic [ref=e2]:
+  - banner:
+    - navigation [ref=e3]:
+      - link "Shell AI homepage" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Shell AI
+      - button "Open navigation" [ref=e6]:
+        - img [ref=e7]
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - generic [ref=e12]: Open source
+          - generic [ref=e13]: Apache-2.0
+          - generic [ref=e14]: Windows best experience
+          - generic [ref=e15]: macOS/Linux partial
+          - generic [ref=e16]: Local-first
+          - generic [ref=e17]: Safety-gated
+        - heading "Shell AI OS Controller" [level=1] [ref=e18]
+        - paragraph [ref=e19]: An open-source AI desktop control layer for chat, voice, tools, automation, memory, agents, diagnostics, and safe local workflows.
+        - generic [ref=e20]:
+          - link "Download for Windows" [ref=e21] [cursor=pointer]:
+            - /url: "#download"
+            - img [ref=e22]
+            - text: Download for Windows
+          - link "View GitHub" [ref=e25] [cursor=pointer]:
+            - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+            - img [ref=e26]
+            - text: View GitHub
+          - link "Read Docs" [ref=e30] [cursor=pointer]:
+            - /url: /docs
+            - img [ref=e31]
+            - text: Read Docs
+      - generic [ref=e34]:
+        - generic [ref=e38]:
+          - img "Shell Dashboard screenshot" [ref=e39]
+          - img "Shell Control screenshot" [ref=e40]
+          - img "Shell Settings screenshot" [ref=e41]
+          - img "Shell Gallery screenshot" [ref=e42]
+          - img "Shell Apps screenshot" [ref=e43]
+          - img "Shell Notes screenshot" [ref=e44]
+          - img "Shell Phone screenshot" [ref=e45]
+          - img "Shell Macros screenshot" [ref=e46]
+        - generic [ref=e52]:
+          - generic [ref=e53]: Dashboard
+          - strong [ref=e54]: Live command surface
+    - generic [ref=e55]:
+      - generic [ref=e56]:
+        - paragraph [ref=e57]: Scroll Story
+        - heading "The laptop stays with the story while Shell changes context." [level=2] [ref=e58]
+        - paragraph [ref=e59]: The real site animates the mockup downward with a subtle hardware tilt. The screen state changes as each Shell workflow enters the viewport.
+        - generic [ref=e60]:
+          - article [ref=e61]:
+            - generic [ref=e62]: "01"
+            - generic [ref=e63]:
+              - heading "Live command surface" [level=3] [ref=e64]
+              - paragraph [ref=e65]: Chat, telemetry, readiness, transcript state, and live work activity in one cockpit.
+          - article [ref=e66]:
+            - generic [ref=e67]: "02"
+            - generic [ref=e68]:
+              - heading "Guarded tool execution" [level=3] [ref=e69]
+              - paragraph [ref=e70]: Browse tools, inspect risk, pass parameters, and execute through the Shell gateway.
+          - article [ref=e71]:
+            - generic [ref=e72]: "03"
+            - generic [ref=e73]:
+              - heading "Keys, safety, and runtime" [level=3] [ref=e74]
+              - paragraph [ref=e75]: Manage providers, Telegram controls, voice runtime, updates, and safety surfaces.
+          - article [ref=e76]:
+            - generic [ref=e77]: "04"
+            - generic [ref=e78]:
+              - heading "Generated media workspace" [level=3] [ref=e79]
+              - paragraph [ref=e80]: Generated images and media workflows stay organized inside Shell.
+          - article [ref=e81]:
+            - generic [ref=e82]: "05"
+            - generic [ref=e83]:
+              - heading "Application workflows" [level=3] [ref=e84]
+              - paragraph [ref=e85]: Index local applications and route app/window work through a controlled interface.
+          - article [ref=e86]:
+            - generic [ref=e87]: "06"
+            - generic [ref=e88]:
+              - heading "Memory-backed notes" [level=3] [ref=e89]
+              - paragraph [ref=e90]: Keep local context, notes, and workspace records available for future workflows.
+          - article [ref=e91]:
+            - generic [ref=e92]: "07"
+            - generic [ref=e93]:
+              - heading "Remote workflow surface" [level=3] [ref=e94]
+              - paragraph [ref=e95]: Phone and remote-control workflows stay visible with clear readiness states.
+          - article [ref=e96]:
+            - generic [ref=e97]: "08"
+            - generic [ref=e98]:
+              - heading "Workflow checkpoints" [level=3] [ref=e99]
+              - paragraph [ref=e100]: Build repeatable automation paths with human-visible steps and checkpoints.
+      - generic [ref=e102]:
+        - generic "Future Shell video mockup frame" [ref=e103]
+        - generic [ref=e111]:
+          - generic [ref=e112]: Dashboard
+          - strong [ref=e113]: Live command surface
+        - generic [ref=e114]: "Reduced motion: static laptop, screenshot changes on section enter."
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - paragraph [ref=e117]: Positioning
+        - heading "Not an OS. A control layer over your OS." [level=2] [ref=e118]
+      - generic [ref=e119]:
+        - paragraph [ref=e120]: Windows, macOS, and Linux already provide your desktop, kernel, files, permissions, and security boundaries. Shell sits above them as an AI command surface.
+        - paragraph [ref=e121]: It routes work through chat, voice, diagnostics, tools, memory, and safety gates, then returns structured results, logs, and visible readiness state.
+    - generic [ref=e122]:
+      - generic [ref=e123]:
+        - paragraph [ref=e124]: The Desktop Problem
+        - heading "Most assistants stop at chat." [level=2] [ref=e125]
+        - paragraph [ref=e126]: "Shell connects the prompt to the messy parts of real work: apps, files, terminal commands, browser tasks, APIs, memory, logs, and local readiness."
+      - generic "Desktop workflow layers" [ref=e127]:
+        - generic [ref=e128]: Apps
+        - generic [ref=e129]: Files
+        - generic [ref=e130]: Terminal
+        - generic [ref=e131]: Browser
+        - generic [ref=e132]: APIs
+        - generic [ref=e133]: Logs
+        - generic [ref=e134]: Memory
+        - generic [ref=e135]:
+          - img [ref=e136]
+          - text: Shell control layer
+    - generic [ref=e140]:
+      - generic [ref=e141]:
+        - paragraph [ref=e142]: How Shell Thinks
+        - heading "Every request moves through a visible routing layer." [level=2] [ref=e143]
+        - paragraph [ref=e144]: Intent becomes a guarded tool call only after routing, policy, and runtime state checks.
+      - generic [ref=e145]:
+        - generic [ref=e146]:
+          - generic [ref=e147]: "01"
+          - strong [ref=e148]: User input
+        - generic [ref=e149]:
+          - generic [ref=e150]: "02"
+          - strong [ref=e151]: Shell UI / voice / Telegram / CLI
+        - generic [ref=e152]:
+          - generic [ref=e153]: "03"
+          - strong [ref=e154]: QWebChannel + Shell Hub
+        - generic [ref=e155]:
+          - generic [ref=e156]: "04"
+          - strong [ref=e157]: Natural-language router
+        - generic [ref=e158]:
+          - generic [ref=e159]: "05"
+          - strong [ref=e160]: Tool gateway
+        - generic [ref=e161]:
+          - generic [ref=e162]: "06"
+          - strong [ref=e163]: Safety policy
+        - generic [ref=e164]:
+          - generic [ref=e165]: "07"
+          - strong [ref=e166]: Local tools / APIs / automation
+        - generic [ref=e167]:
+          - generic [ref=e168]: "08"
+          - strong [ref=e169]: Structured result + logs + memory
+    - generic [ref=e170]:
+      - generic [ref=e171]:
+        - paragraph [ref=e172]: What Shell Can Do
+        - heading "Feature-complete enough to explain the real product." [level=2] [ref=e173]
+      - generic [ref=e174]:
+        - article [ref=e175]:
+          - img [ref=e176]
+          - heading "Chat" [level=3] [ref=e179]
+          - paragraph [ref=e180]: Text-first assistant flow with tool routing and grounded responses.
+        - article [ref=e181]:
+          - img [ref=e182]
+          - heading "Voice" [level=3] [ref=e186]
+          - paragraph [ref=e187]: Gemini Live path plus backend/local fallbacks and mic readiness states.
+        - article [ref=e188]:
+          - img [ref=e189]
+          - heading "460+ guarded tools" [level=3] [ref=e193]
+          - paragraph [ref=e194]: A catalogued Python tool surface behind a guarded execution gateway.
+        - article [ref=e195]:
+          - img [ref=e196]
+          - heading "Desktop control" [level=3] [ref=e198]
+          - paragraph [ref=e199]: Apps, windows, screenshots, clipboard, keyboard, and mouse automation.
+        - article [ref=e200]:
+          - img [ref=e201]
+          - heading "Windows control" [level=3] [ref=e212]
+          - paragraph [ref=e213]: Best PC-control path with pywinauto, Windows-MCP, pywin32, and PyAutoGUI fallbacks.
+        - article [ref=e214]:
+          - img [ref=e215]
+          - heading "Browser wrappers" [level=3] [ref=e218]
+          - paragraph [ref=e219]: Browser automation wrappers with safety gates and dry-run expectations.
+        - article [ref=e220]:
+          - img [ref=e221]
+          - heading "Telegram" [level=3] [ref=e224]
+          - paragraph [ref=e225]: Remote-control bot with allowlists, status, start/stop, and test-send controls.
+        - article [ref=e226]:
+          - img [ref=e227]
+          - heading "Email/media" [level=3] [ref=e230]
+          - paragraph [ref=e231]: SMTP, image workflows, QR/PDF utilities, OCR hooks, and media helpers.
+        - article [ref=e232]:
+          - img [ref=e233]
+          - heading "Runtime diagnostics" [level=3] [ref=e235]
+          - paragraph [ref=e236]: Health checks, readiness states, logs, and repair guidance.
+        - article [ref=e237]:
+          - img [ref=e238]
+          - heading "Telemetry" [level=3] [ref=e245]
+          - paragraph [ref=e246]: Live local CPU, RAM, GPU, and network charts for visible confidence.
+        - article [ref=e247]:
+          - img [ref=e248]
+          - heading "ShellAI Core" [level=3] [ref=e251]
+          - paragraph [ref=e252]: Optional CLI/backend path with model routing, tools, monitor, cron, and daemon queue.
+        - article [ref=e253]:
+          - img [ref=e254]
+          - heading "AI OS Fabric" [level=3] [ref=e264]
+          - paragraph [ref=e265]: Coordinator, Shell, Safety, Memory, UI, and Optimizer agents behind stable APIs.
+        - article [ref=e266]:
+          - img [ref=e267]
+          - heading "Memory v2" [level=3] [ref=e269]
+          - paragraph [ref=e270]: SQLite memory with tags, importance scoring, redaction, recall audit, and migration.
+        - article [ref=e271]:
+          - img [ref=e272]
+          - heading "Project RAG v2" [level=3] [ref=e276]
+          - paragraph [ref=e277]: Incremental codebase indexing with BM25/TF-IDF fallback and semantic search.
+        - article [ref=e278]:
+          - img [ref=e279]
+          - heading "Secure sandbox" [level=3] [ref=e282]
+          - paragraph [ref=e283]: Per-run workspaces with timeout enforcement, audit logs, and rollback cleanup.
+        - article [ref=e284]:
+          - img [ref=e285]
+          - heading "Workflow checkpoints" [level=3] [ref=e289]
+          - paragraph [ref=e290]: Workflow persistence, last-action tracking, resume loading, and rollback points.
+    - generic [ref=e291]:
+      - generic [ref=e292]:
+        - paragraph [ref=e293]: Platform Story
+        - heading "Windows first, honest cross-platform support." [level=2] [ref=e294]
+      - generic [ref=e295]:
+        - article [ref=e296]:
+          - img [ref=e297]
+          - generic [ref=e300]:
+            - heading "Windows" [level=3] [ref=e301]
+            - text: Best experience
+          - list [ref=e302]:
+            - listitem [ref=e303]:
+              - img [ref=e304]
+              - text: One-click setup EXE
+            - listitem [ref=e307]:
+              - img [ref=e308]
+              - text: Bundled ShellAI.exe
+            - listitem [ref=e311]:
+              - img [ref=e312]
+              - text: Start Menu shortcut
+            - listitem [ref=e315]:
+              - img [ref=e316]
+              - text: Optional desktop/startup shortcuts
+            - listitem [ref=e319]:
+              - img [ref=e320]
+              - text: pywinauto and Windows-MCP support
+            - listitem [ref=e323]:
+              - img [ref=e324]
+              - text: PyAutoGUI/pywin32 fallback
+        - article [ref=e327]:
+          - img [ref=e328]
+          - generic [ref=e330]:
+            - heading "macOS" [level=3] [ref=e331]
+            - text: Partial support
+          - list [ref=e332]:
+            - listitem [ref=e333]:
+              - img [ref=e334]
+              - text: Source/helper launch
+            - listitem [ref=e337]:
+              - img [ref=e338]
+              - text: Web UI, chat, docs, and dev workflows
+            - listitem [ref=e341]:
+              - img [ref=e342]
+              - text: Many Python tools
+            - listitem [ref=e345]:
+              - img [ref=e346]
+              - text: Camera/mic permissions may be needed
+            - listitem [ref=e349]:
+              - img [ref=e350]
+              - text: Windows control unavailable
+        - article [ref=e353]:
+          - img [ref=e354]
+          - generic [ref=e359]:
+            - heading "Linux" [level=3] [ref=e360]
+            - text: Partial support
+          - list [ref=e361]:
+            - listitem [ref=e362]:
+              - img [ref=e363]
+              - text: Source/helper launch
+            - listitem [ref=e366]:
+              - img [ref=e367]
+              - text: ShellAI Core CLI
+            - listitem [ref=e370]:
+              - img [ref=e371]
+              - text: Web UI, chat, diagnostics, dev workflows
+            - listitem [ref=e374]:
+              - img [ref=e375]
+              - text: Desktop automation depends on local environment
+            - listitem [ref=e378]:
+              - img [ref=e379]
+              - text: Windows-MCP/pywinauto unavailable
+    - generic [ref=e382]:
+      - generic [ref=e383]:
+        - paragraph [ref=e384]: Safety Cockpit
+        - heading "Human-controlled automation, not blind autonomy." [level=2] [ref=e385]
+        - paragraph [ref=e386]: "Risky work stays behind visible gates: preview, approval, block, and trace. Shell should explain what ran, what was blocked, and why."
+      - generic [ref=e387]:
+        - generic [ref=e388]:
+          - img [ref=e389]
+          - strong [ref=e392]: SAFE
+          - generic [ref=e393]: Read-only or low-risk action
+        - generic [ref=e394]:
+          - img [ref=e395]
+          - strong [ref=e397]: ASK
+          - generic [ref=e398]: Needs explicit approval
+        - generic [ref=e399]:
+          - img [ref=e400]
+          - strong [ref=e404]: BLOCK
+          - generic [ref=e405]: Outside allowed boundary
+        - generic [ref=e406]:
+          - img [ref=e407]
+          - strong [ref=e410]: TRACE
+          - generic [ref=e411]: Logs and structured result
+    - generic [ref=e412]:
+      - generic [ref=e413]:
+        - paragraph [ref=e414]: Latest Release
+        - heading "Download the newest Windows setup EXE." [level=2] [ref=e415]
+        - paragraph [ref=e416]: "The card resolves the latest GitHub release at runtime and selects the `shell-ai-os-controller-setup-*.exe` asset when it exists."
+      - generic [ref=e417]:
+        - generic [ref=e418]:
+          - img [ref=e420]
+          - generic [ref=e425]:
+            - generic [ref=e426]: Version
+            - strong [ref=e427]: Checking latest release...
+          - link "GitHub Releases" [ref=e428] [cursor=pointer]:
+            - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller/releases
+            - text: GitHub Releases
+            - img [ref=e429]
+        - generic [ref=e433]:
+          - generic [ref=e434]:
+            - generic [ref=e435]: Asset
+            - strong [ref=e436]: shell-ai-os-controller-setup-*.exe
+          - generic [ref=e437]:
+            - generic [ref=e438]: Size
+            - strong [ref=e439]: Fetching from GitHub
+          - generic [ref=e440]:
+            - generic [ref=e441]: Published
+            - strong [ref=e442]: Live release API
+          - generic [ref=e443]:
+            - generic [ref=e444]: SHA256 / Digest
+            - strong [ref=e445]: Digest appears here when GitHub provides it
+        - link "Download latest Windows EXE" [disabled]:
+          - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller/releases
+          - img
+          - text: Download latest Windows EXE
+    - generic [ref=e446]:
+      - img [ref=e447]
+      - heading "Control your workspace with AI, safely." [level=2] [ref=e457]
+      - generic [ref=e458]:
+        - link "Download Shell AI for Windows" [ref=e459] [cursor=pointer]:
+          - /url: "#download"
+          - text: Download Shell AI for Windows
+          - img [ref=e460]
+        - link "Audit the source on GitHub" [ref=e462] [cursor=pointer]:
+          - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+        - link "Read install guide" [ref=e463] [cursor=pointer]:
+          - /url: /docs

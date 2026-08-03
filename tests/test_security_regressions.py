@@ -178,29 +178,6 @@ def test_email_attachment_validation_accepts_real_file(monkeypatch, tmp_path):
     assert paths == [str(report)]
 
 
-def test_email_gmail_auth_error_is_actionable():
-    import smtplib
-    import shell_email_tool
-
-    message = shell_email_tool._friendly_smtp_error(
-        smtplib.SMTPAuthenticationError(535, b"5.7.8 Username and Password not accepted")
-    )
-
-    assert "Google App Password" in message
-    assert "normal Gmail password" in message
-
-
-def test_email_web_fallback_selenium_error_is_actionable():
-    import shell_email_tool
-
-    message = shell_email_tool._friendly_web_fallback_error(
-        "Gmail web fallback import failed: No module named 'selenium'"
-    )
-
-    assert "Selenium is not installed" in message
-    assert "Repair Shell AI" in message
-
-
 def test_api_key_delete_removes_env_line(monkeypatch, tmp_path):
     import shell_api_manager
 

@@ -41,8 +41,8 @@ def test_daemon_enqueue_process_and_stop(monkeypatch, tmp_path) -> None:
 
     started = daemon.start()
     assert started["running"] is True
-    task = daemon.enqueue_task("!pwd", context={"cwd": str(tmp_path), "source": "test"})
-    assert task["text"] == "!pwd"
+    task = daemon.enqueue_task("!whoami", context={"cwd": str(tmp_path), "source": "test"})
+    assert task["text"] == "!whoami"
     assert daemon.status()["queued_tasks"] == 1
 
     processed = daemon.process_all()

@@ -49,7 +49,7 @@ def _connections_file() -> Path:
 
 CONNECTIONS_FILE = str(_connections_file())
 
-SUPPORTED_PLATFORMS = ["whatsapp", "telegram", "instagram"]
+SUPPORTED_PLATFORMS = ["whatsapp", "telegram", "instagram", "gmail"]
 
 class SocialMediaConnector:
     """Manages social media platform connections"""
@@ -59,17 +59,22 @@ class SocialMediaConnector:
 
     def _load_connections(self) -> Dict:
         """Load saved connections from disk"""
+        conns = {
+            "whatsapp": {"connected": False, "account": None, "last_connected": None},
+            "telegram": {"connected": False, "account": None, "last_connected": None},
+            "instagram": {"connected": False, "account": None, "last_connected": None},
+            "gmail": {"connected": False, "account": None, "last_connected": None}
+        }
         if os.path.exists(CONNECTIONS_FILE):
             try:
                 with open(CONNECTIONS_FILE, 'r') as f:
-                    return json.load(f)
+                    disk = json.load(f)
+                    for k, v in disk.items():
+                        if k in conns:
+                            conns[k] = v
             except Exception as e:
                 logger.error(f"Failed to load connections: {e}")
-        return {
-            "whatsapp": {"connected": False, "account": None, "last_connected": None},
-            "telegram": {"connected": False, "account": None, "last_connected": None},
-            "instagram": {"connected": False, "account": None, "last_connected": None}
-        }
+        return conns
 
     def _save_connections(self):
         """Save connections to disk"""
@@ -168,68 +173,152 @@ class SocialMediaConnector:
 
     def connect_instagram(self, username: str = None, password: str = None) -> Tuple[bool, str]:
         """
-        Connect to Instagram using instagrapi (if available) or credential validation.
-        Falls back to session-based login check.
-        Returns: (success, message)
+        Connect to Instagram using browser-based login session capture.
         """
+        import time
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+
+        driver = None
         try:
-            # Resolve credentials from env if not provided
-            username = username or os.getenv("INSTAGRAM_USERNAME", "")
-            password = password or os.getenv("INSTAGRAM_PASSWORD", "")
+            options = Options()
+            options.add_argument("--no-sandbox")
+            options.add_argument("--disable-dev-shm-usage")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--window-size=1600,1000")
+            
+            # Chrome stealth settings
+            options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            options.add_experimental_option("useAutomationExtension", False)
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
 
-            if not username:
-                return False, "Instagram username nahi mila! .env mein INSTAGRAM_USERNAME set karo ya parameter mein do."
+            profile_dir = os.path.expanduser("~/.shell_instagram_chrome")
+            os.makedirs(profile_dir, exist_ok=True)
+            options.add_argument(f"--user-data-dir={profile_dir}")
 
-            # Try instagrapi if available (full API access)
+            driver = webdriver.Chrome(options=options)
             try:
-                from instagrapi import Client as InstaClient
-                cl = InstaClient()
-                if password:
-                    cl.login(username, password)
-                    user_info = cl.account_info()
-                    full_name = user_info.full_name or username
-                    followers = user_info.follower_count
+                driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
+                    "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                })
+            except Exception as cdp_exc:
+                logger.debug("Failed to set Instagram CDP stealth script: %s", cdp_exc)
+            driver.get("https://www.instagram.com/")
 
-                    self.connections["instagram"] = {
-                        "connected": True,
-                        "account": f"@{username} ({full_name})",
-                        "followers": followers,
-                        "method": "instagrapi",
-                        "last_connected": datetime.now().isoformat(),
-                        "connected_at": datetime.now().isoformat(),
-                        "message_count": 0
-                    }
-                    self._save_connections()
-                    logger.info(f"Instagram Connected via instagrapi: @{username}")
-                    return True, f"Instagram connected as @{username} ({full_name})! Followers: {followers}"
-                else:
-                    return False, "Instagram password required for instagrapi login."
+            start_time = time.time()
+            logged_in = False
 
-            except ImportError:
-                logger.info("instagrapi not installed, using basic session mode")
+            while time.time() - start_time < 120:
+                try:
+                    # Check if browser was closed
+                    _ = driver.title
+                except Exception:
+                    return False, "Browser was closed before login completed."
 
-            # Fallback: basic session mode (stores credentials, marks connected)
-            if not password:
-                return False, "Instagram password required. .env mein INSTAGRAM_PASSWORD set karo."
+                try:
+                    cookies = driver.get_cookies()
+                    if any(c.get('name') == 'sessionid' for c in cookies):
+                        logged_in = True
+                        break
+                except Exception:
+                    pass
+                time.sleep(2)
 
-            # Basic validation — at minimum confirm credentials are non-empty
-            if len(username) < 3 or len(password) < 6:
-                return False, "Instagram credentials too short. Valid username aur password do."
+            if logged_in:
+                account_name = "Instagram Account"
+                try:
+                    # Fetch cookies to find username if any
+                    cookies = driver.get_cookies()
+                except Exception:
+                    pass
 
-            self.connections["instagram"] = {
-                "connected": True,
-                "account": f"@{username}",
-                "method": "session_basic",
-                "last_connected": datetime.now().isoformat(),
-                "connected_at": datetime.now().isoformat(),
-                "message_count": 0
-            }
-            self._save_connections()
-            logger.info(f"Instagram Connected (basic session): @{username}")
-            return True, f"Instagram connected as @{username}! (Basic mode — install instagrapi for full API access)"
+                self.connections["instagram"] = {
+                    "connected": True,
+                    "account": account_name,
+                    "last_connected": datetime.now().isoformat(),
+                    "connected_at": datetime.now().isoformat(),
+                    "message_count": 0
+                }
+                self._save_connections()
+                logger.info("Instagram connected via browser login.")
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                return True, "Instagram connected successfully!"
+            else:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
+                return False, "Instagram login timeout. Please login within 120 seconds."
 
         except Exception as e:
+            if driver:
+                try:
+                    driver.quit()
+                except Exception:
+                    pass
             logger.error(f"Instagram connection failed: {e}")
+            return False, f"Connection failed: {str(e)}"
+
+    def connect_gmail(self) -> Tuple[bool, str]:
+        """
+        Connect to Gmail using browser-based login session capture.
+        """
+        try:
+            from shell_email_web import gmail_web_mailer
+            import time
+
+            # Start session (this opens the browser window)
+            ok, msg = gmail_web_mailer.start_session(headless=False)
+            if not ok:
+                return False, f"Failed to start Gmail browser session: {msg}"
+
+            # Poll for login success (up to 120 seconds)
+            start_time = time.time()
+            logged_in = False
+            while time.time() - start_time < 120:
+                if gmail_web_mailer.driver is None:
+                    # User closed the browser window before completing login
+                    return False, "Browser was closed before login completed."
+
+                try:
+                    if gmail_web_mailer._is_logged_in():
+                        logged_in = True
+                        break
+                except Exception:
+                    # If browser window was closed or nav error
+                    return False, "Browser window closed or error during login."
+                time.sleep(2)
+
+            if logged_in:
+                account_name = "Gmail Web Session"
+                try:
+                    # Try to find user email in Gmail page title
+                    title = gmail_web_mailer.driver.title
+                    if "@" in title:
+                        for part in title.split(" "):
+                            if "@" in part:
+                                account_name = part.strip()
+                                break
+                except Exception:
+                    pass
+
+                self.connections["gmail"] = {
+                    "connected": True,
+                    "account": account_name,
+                    "last_connected": datetime.now().isoformat(),
+                    "connected_at": datetime.now().isoformat(),
+                }
+                self._save_connections()
+                logger.info(f"Gmail connected via browser login as {account_name}.")
+                return True, f"Gmail connected successfully as {account_name}!"
+            else:
+                return False, "Gmail login timeout. Please login within 120 seconds."
+        except Exception as e:
+            logger.error(f"Gmail connection failed: {e}")
             return False, f"Connection failed: {str(e)}"
 
     def disconnect(self, platform: str) -> bool:

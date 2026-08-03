@@ -1,12 +1,11 @@
 import re
 import ssl
 import json
-import smtplib
 from email.message import EmailMessage
 from urllib.parse import urlparse
 from typing import Dict, List, Optional, Tuple
-
 import requests
+
 from shell_safe_executor import god_tier_tool as function_tool
 from shell_config import config
 from shell_logger import get_logger
@@ -72,67 +71,124 @@ def _is_probably_valid_email(email: str) -> bool:
     return True
 
 
-def _smtp_config() -> Dict[str, str]:
-    server = config.get_str("SHELL_SMTP_SERVER", "smtp.gmail.com").strip() or "smtp.gmail.com"
-    port = config.get_str("SHELL_SMTP_PORT", "587").strip() or "587"
-    return {
-        "server": server,
-        "port": port,
-        "sender_email": config.get_str("SHELL_SENDER_EMAIL", "").strip(),
-        "sender_password": config.get_str("SHELL_SENDER_PASSWORD", "").strip(),
-        "use_ssl": config.get_str("SHELL_SMTP_USE_SSL", "false").strip().lower(),
-    }
 
 
-def _web_fallback_enabled() -> bool:
-    return config.get_str("SHELL_EMAIL_WEB_FALLBACK", "true").strip().lower() in {"1", "true", "yes"}
+
+def _is_gmail_api_configured() -> bool:
+    import os
+    creds_path = config.get_str("SHELL_GMAIL_CREDENTIALS_JSON", "credentials.json").strip()
+    token_path = config.get_str("SHELL_GMAIL_TOKEN_JSON", "token.json").strip()
+    return os.path.exists(token_path) or os.path.exists(creds_path)
 
 
-def _validate_smtp_credentials(config: Dict[str, str]) -> Tuple[bool, str]:
-    sender_email = config.get("sender_email", "")
-    sender_password = config.get("sender_password", "")
-
-    if not sender_email or not sender_password:
-        return False, (
-            "SMTP credentials missing. Set SHELL_SENDER_EMAIL and SHELL_SENDER_PASSWORD in .env "
-            "(use app password for Gmail)."
+def _get_gmail_service():
+    import os
+    try:
+        from googleapiclient.discovery import build
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.oauth2.credentials import Credentials
+        from google.auth.transport.requests import Request
+    except ImportError:
+        raise ImportError(
+            "Gmail API client libraries are missing. Please install them by running:\n"
+            "pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
         )
 
-    if sender_email == "your_email@gmail.com" or sender_password == "your_password":
-        return False, "SMTP placeholders detected. Please set real credentials in .env."
+    scopes = [
+        'https://www.googleapis.com/auth/gmail.readonly',
+        'https://www.googleapis.com/auth/gmail.compose',
+        'https://www.googleapis.com/auth/gmail.send',
+        'https://www.googleapis.com/auth/gmail.labels',
+        'https://www.googleapis.com/auth/gmail.modify'
+    ]
 
-    if not _is_probably_valid_email(sender_email):
-        return False, f"Invalid sender email format: {sender_email}"
+    token_path = config.get_str("SHELL_GMAIL_TOKEN_JSON", "token.json").strip()
+    creds_path = config.get_str("SHELL_GMAIL_CREDENTIALS_JSON", "credentials.json").strip()
+    creds = None
 
-    return True, "ok"
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, scopes)
+
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            if not os.path.exists(creds_path):
+                raise FileNotFoundError(
+                    f"Gmail API credentials file not found at '{creds_path}'. "
+                    "Please download OAuth Client ID credentials (JSON format) from the Google Cloud Console "
+                    "and place the file in the workspace directory."
+                )
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, scopes)
+            creds = flow.run_local_server(port=0, timeout=120)
+        
+        with open(token_path, 'w') as token_file:
+            token_file.write(creds.to_json())
+
+    return build('gmail', 'v1', credentials=creds)
 
 
-def _friendly_smtp_error(exc: Exception) -> str:
-    text = str(exc)
-    lower = text.lower()
-    if isinstance(exc, smtplib.SMTPAuthenticationError) or "535" in text or "badcredentials" in lower:
-        return (
-            "Gmail rejected the SMTP login (535 BadCredentials). Use a Google App Password, "
-            "not your normal Gmail password. Enable 2-Step Verification on the sender account, "
-            "create an App Password for Mail, then save that 16-character app password as "
-            "SHELL_SENDER_PASSWORD. SHELL_SENDER_EMAIL must be the same Gmail account."
-        )
-    if isinstance(exc, smtplib.SMTPConnectError):
-        return f"SMTP connection failed. Check SHELL_SMTP_SERVER and SHELL_SMTP_PORT. Raw error: {text}"
-    if isinstance(exc, smtplib.SMTPServerDisconnected):
-        return f"SMTP server disconnected. Check network/provider availability. Raw error: {text}"
-    return text
+def _send_email_via_gmail_api(sender_email: str, recipient: str, subject: str, body: str, 
+                              cc: str = "", bcc: str = "", attachments: str = "", html_body: str = "") -> bool:
+    import base64
+    import os
+    import mimetypes
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    service = _get_gmail_service()
+
+    if attachments or html_body:
+        msg = MIMEMultipart()
+        msg['to'] = recipient
+        msg['subject'] = subject
+        if cc:
+            msg['cc'] = cc
+        if bcc:
+            msg['bcc'] = bcc
+            
+        if html_body:
+            msg_alternative = MIMEMultipart('alternative')
+            msg.attach(msg_alternative)
+            msg_alternative.attach(MIMEText(body, 'plain'))
+            msg_alternative.attach(MIMEText(html_body, 'html'))
+        else:
+            msg.attach(MIMEText(body, 'plain'))
+            
+        if attachments:
+            for path in attachments.split(','):
+                path = path.strip()
+                if not path or not os.path.exists(path):
+                    continue
+                filename = os.path.basename(path)
+                content_type, encoding = mimetypes.guess_type(path)
+                if content_type is None or encoding is not None:
+                    content_type = 'application/octet-stream'
+                main_type, sub_type = content_type.split('/', 1)
+                with open(path, 'rb') as fp:
+                    part = MIMEBase(main_type, sub_type)
+                    part.set_payload(fp.read())
+                encoders.encode_base64(part)
+                part.add_header('Content-Disposition', 'attachment', filename=filename)
+                msg.attach(part)
+    else:
+        msg = MIMEText(body)
+        msg['to'] = recipient
+        msg['subject'] = subject
+        if cc:
+            msg['cc'] = cc
+        if bcc:
+            msg['bcc'] = bcc
+
+    raw_message = base64.urlsafe_b64encode(msg.as_bytes()).decode('utf-8')
+    send_body = {'raw': raw_message}
+    service.users().messages().send(userId='me', body=send_body).execute()
+    return True
 
 
-def _friendly_web_fallback_error(message: str) -> str:
-    text = str(message or "")
-    if "No module named 'selenium'" in text or 'No module named "selenium"' in text:
-        return (
-            "Gmail web fallback is unavailable because Selenium is not installed in the active "
-            "Shell environment. Run Repair Shell AI or install selenium in the active venv. "
-            "SMTP with a Gmail App Password is still the recommended path."
-        )
-    return text
+
 
 
 def _sender_profile() -> Dict[str, str]:
@@ -262,7 +318,7 @@ def _generate_professional_body(
 
 
 def _validate_attachment_paths(attachments: str) -> Tuple[bool, str, List[str]]:
-    """Validate requested attachments before SMTP send."""
+    """Validate requested attachments before Gmail API send."""
     if not attachments:
         return True, "", []
 
@@ -349,59 +405,7 @@ def _build_email_message(
     return msg
 
 
-def _smtp_send_message(msg: EmailMessage) -> None:
-    config = _smtp_config()
-    ok, reason = _validate_smtp_credentials(config)
-    if not ok:
-        raise ValueError(reason)
 
-    server = config["server"]
-    port = int(config["port"])
-    sender_email = config["sender_email"]
-    sender_password = config["sender_password"]
-    use_ssl = config["use_ssl"] in {"1", "true", "yes"}
-
-    if use_ssl:
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(server, port, context=context, timeout=20) as smtp:
-            smtp.login(sender_email, sender_password)
-            smtp.send_message(msg)
-        return
-
-    with smtplib.SMTP(server, port, timeout=20) as smtp:
-        smtp.ehlo()
-        smtp.starttls(context=ssl.create_default_context())
-        smtp.ehlo()
-        smtp.login(sender_email, sender_password)
-        smtp.send_message(msg)
-
-
-def _send_via_web_fallback(
-    recipient: str,
-    subject: str,
-    body: str,
-    cc: str = "",
-    bcc: str = "",
-    auto_send: bool = True,
-) -> Tuple[bool, str]:
-    try:
-        from shell_email_web import gmail_web_mailer
-    except Exception as exc:
-        return False, f"Gmail web fallback import failed: {exc}"
-
-    try:
-        ok, message = gmail_web_mailer.send_mail(
-            recipient=recipient,
-            subject=subject,
-            body=body,
-            cc=cc,
-            bcc=bcc,
-            auto_send=auto_send,
-            headless=False,
-        )
-        return ok, message
-    except Exception as exc:
-        return False, f"Gmail web fallback failed: {exc}"
 
 
 def _google_custom_search(query: str, num: int = 5) -> List[Dict[str, str]]:
@@ -578,7 +582,7 @@ def _discover_company_email(company_name: str, company_website: str = "") -> Tup
 def send_email_tool(recipient: str, subject: str, body: str, cc: str = "", bcc: str = "",
                     attachments: str = "", html_body: str = "") -> str:
     """
-    Sends an email using SMTP credentials from .env.
+    Sends an email using Gmail API.
     Supports attachments and HTML body.
     Args:
         recipient: Email address to send to.
@@ -591,21 +595,22 @@ def send_email_tool(recipient: str, subject: str, body: str, cc: str = "", bcc: 
     """
     recipient_clean = _clean_email(recipient)
     if not _is_probably_valid_email(recipient_clean):
-        return f"Failed: invalid recipient email '{recipient}'."
-
-    smtp_cfg = _smtp_config()
-    ok, reason = _validate_smtp_credentials(smtp_cfg)
-    if not ok:
-        return f"Failed: {reason}"
+        return json.dumps({"success": False, "error": f"Failed: invalid recipient email '{recipient}'."}, ensure_ascii=True)
 
     ok, reason, valid_attachments = _validate_attachment_paths(attachments)
     if not ok:
-        return f"Failed: {reason}"
+        return json.dumps({"success": False, "error": f"Failed: {reason}"}, ensure_ascii=True)
     attachments = ",".join(valid_attachments)
 
+    if not _is_gmail_api_configured():
+        return json.dumps({
+            "success": False,
+            "error": "Failed: Gmail API is not configured. Please place your client credentials.json in the workspace root."
+        }, ensure_ascii=True)
+
     try:
-        msg = _build_email_message(
-            sender_email=smtp_cfg["sender_email"],
+        _send_email_via_gmail_api(
+            sender_email="",
             recipient=recipient_clean,
             subject=subject.strip() or "No Subject",
             body=body.strip() or "",
@@ -614,32 +619,10 @@ def send_email_tool(recipient: str, subject: str, body: str, cc: str = "", bcc: 
             attachments=attachments,
             html_body=html_body,
         )
-        _smtp_send_message(msg)
-        attachment_note = ""
-        if attachments:
-            import os
-            att_names = [os.path.basename(a.strip()) for a in attachments.split(",") if a.strip()]
-            attachment_note = f" (Attachments: {', '.join(att_names)})"
-        return f"Success: email sent to {recipient_clean}.{attachment_note}"
+        return json.dumps({"success": True, "error": None}, ensure_ascii=True)
     except Exception as exc:
-        smtp_error = _friendly_smtp_error(exc)
-        if _web_fallback_enabled():
-            ok_web, web_msg = _send_via_web_fallback(
-                recipient=recipient_clean,
-                subject=subject.strip() or "No Subject",
-                body=body.strip() or "",
-                cc=cc,
-                bcc=bcc,
-                auto_send=True,
-            )
-            if ok_web:
-                return f"Success: SMTP failed, but sent via Gmail Web fallback. ({web_msg})"
-            return (
-                f"Failed to send email. SMTP error: {smtp_error}. "
-                f"Web fallback error: {_friendly_web_fallback_error(web_msg)}"
-            )
-
-        return f"Failed to send email: {smtp_error}"
+        logger.error("Gmail API send failed: %s", exc)
+        return json.dumps({"success": False, "error": f"Failed to send email via Gmail API: {exc}"}, ensure_ascii=True)
 
 
 @function_tool
@@ -648,54 +631,32 @@ def email_setup_status_tool() -> str:
     Reports whether Shell can send real email right now.
     Does not send anything.
     """
-    smtp_cfg = _smtp_config()
-    ok, reason = _validate_smtp_credentials(smtp_cfg)
-    if ok:
-        return (
-            "Email credentials are present. Shell can attempt real email through SMTP "
-            f"as {smtp_cfg.get('sender_email')}. "
-            "This does not guarantee provider login: Gmail will reject normal passwords; "
-            "use a Google App Password for SHELL_SENDER_PASSWORD. "
-            "For PDFs/files, Shell needs a real existing attachment path; it must not "
-            "claim delivery until send_email_tool returns Success."
-        )
-    return (
-        "Email sending is not configured, so Shell must not claim that an email was sent. "
-        f"{reason}"
-    )
-
-
-@function_tool
-def email_smtp_login_test_tool() -> str:
-    """
-    Tests SMTP login without sending an email.
-    """
-    smtp_cfg = _smtp_config()
-    ok, reason = _validate_smtp_credentials(smtp_cfg)
-    if not ok:
-        return f"Failed: {reason}"
+    import os
+    # Check Gmail API status first
+    gmail_api_available = False
     try:
-        msg = EmailMessage()
-        msg["From"] = smtp_cfg["sender_email"]
-        msg["To"] = smtp_cfg["sender_email"]
-        msg["Subject"] = "Shell SMTP login test"
-        msg.set_content("login test")
-        server = smtp_cfg["server"]
-        port = int(smtp_cfg["port"])
-        use_ssl = smtp_cfg["use_ssl"] in {"1", "true", "yes"}
-        if use_ssl:
-            context = ssl.create_default_context()
-            with smtplib.SMTP_SSL(server, port, context=context, timeout=20) as smtp:
-                smtp.login(smtp_cfg["sender_email"], smtp_cfg["sender_password"])
+        from googleapiclient.discovery import build
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from google.oauth2.credentials import Credentials
+        gmail_api_available = True
+    except ImportError:
+        pass
+
+    creds_path = config.get_str("SHELL_GMAIL_CREDENTIALS_JSON", "credentials.json").strip()
+    token_path = config.get_str("SHELL_GMAIL_TOKEN_JSON", "token.json").strip()
+
+    if _is_gmail_api_configured():
+        if not gmail_api_available:
+            return (
+                "Gmail API credentials are detected, but the required client libraries are missing. "
+                "Please run: pip install google-api-python-client google-auth-oauthlib google-auth-httplib2"
+            )
+        if os.path.exists(token_path):
+            return "Gmail API setup status: ready and authorized (token.json present). Shell can read, search, draft, and send emails using the Gmail API."
         else:
-            with smtplib.SMTP(server, port, timeout=20) as smtp:
-                smtp.ehlo()
-                smtp.starttls(context=ssl.create_default_context())
-                smtp.ehlo()
-                smtp.login(smtp_cfg["sender_email"], smtp_cfg["sender_password"])
-        return f"Success: SMTP login works for {smtp_cfg['sender_email']}. No email was sent."
-    except Exception as exc:
-        return f"Failed: {_friendly_smtp_error(exc)}"
+            return f"Gmail API setup status: credentials file present ({creds_path}) but not authorized. The next email command will trigger a browser authorization flow."
+
+    return "Email sending is not configured. Please place your client credentials.json in the workspace root to enable Gmail API."
 
 
 @function_tool
@@ -768,7 +729,7 @@ def smart_company_email_tool(
     Flow:
     1. If recipient_email not provided, discover public company email from internet.
     2. Draft professional subject/body.
-    3. Send email from configured sender SMTP.
+    3. Send email from Gmail API.
     """
     company = _sanitize_text(company_name)
     if not company:
@@ -777,10 +738,8 @@ def smart_company_email_tool(
     if not _sanitize_text(purpose):
         return "Failed: purpose is required so I can draft a professional email."
 
-    config = _smtp_config()
-    ok, reason = _validate_smtp_credentials(config)
-    if not ok:
-        return f"Failed: {reason}"
+    if not _is_gmail_api_configured():
+        return "Failed: Gmail API is not configured. Please place your client credentials.json in the workspace root."
 
     recipient = _clean_email(recipient_email)
     discovery_meta: Dict[str, str] = {}
@@ -808,15 +767,16 @@ def smart_company_email_tool(
     body = _generate_professional_body(company, purpose, additional_context=additional_context, tone=tone)
 
     try:
-        msg = _build_email_message(
-            sender_email=config["sender_email"],
+        if not _is_gmail_api_configured():
+            return "Failed to send smart company email: Gmail API is not configured."
+        _send_email_via_gmail_api(
+            sender_email="",
             recipient=recipient,
             subject=subject,
             body=body,
             cc=cc,
             bcc=bcc,
         )
-        _smtp_send_message(msg)
 
         result = {
             "status": "sent",
@@ -827,24 +787,262 @@ def smart_company_email_tool(
         }
         return json.dumps(result, ensure_ascii=True)
     except Exception as exc:
-        if _web_fallback_enabled():
-            ok_web, web_msg = _send_via_web_fallback(
-                recipient=recipient,
-                subject=subject,
-                body=body,
-                cc=cc,
-                bcc=bcc,
-                auto_send=True,
-            )
-            if ok_web:
-                result = {
-                    "status": "sent_via_web_fallback",
-                    "company": company,
-                    "recipient": recipient,
-                    "subject": subject,
-                    "discovery": discovery_meta,
-                }
-                return json.dumps(result, ensure_ascii=True)
-            return f"Failed to send smart company email. SMTP error: {exc}. Web fallback error: {web_msg}"
-
         return f"Failed to send smart company email: {exc}"
+
+
+@function_tool
+def research_and_email_tool(topic: str, recipient: str) -> str:
+    """
+    Does deep AI research on a topic and emails a detailed HTML report.
+    Args:
+        topic: The topic or subject to research.
+        recipient: Email address to send the report to.
+    """
+    import time
+
+    recipient_clean = _clean_email(recipient)
+    if not _is_probably_valid_email(recipient_clean):
+        return json.dumps({"success": False, "error": f"Invalid recipient: '{recipient}'"}, ensure_ascii=True)
+
+
+
+    if not _is_gmail_api_configured():
+        return json.dumps({"success": False, "error": "Email not configured: Gmail API is missing credentials.json"}, ensure_ascii=True)
+
+    topic_clean = str(topic or "").strip()
+    if not topic_clean:
+        return json.dumps({"success": False, "error": "Topic is required."}, ensure_ascii=True)
+
+    # --- Step 1: Research using AI brain ---
+    research_text = ""
+    try:
+        from brain.core import MultiAIBrain
+        brain = MultiAIBrain.get_instance()
+        research_prompt = (
+            f"Do a comprehensive, detailed deep research report on: {topic_clean}.\n\n"
+            "Include:\n"
+            "- Overview / Introduction\n"
+            "- Key facts and specifications (if applicable)\n"
+            "- History and background\n"
+            "- Current status / latest developments (2024-2025)\n"
+            "- Pros and cons (if applicable)\n"
+            "- Expert opinions and community feedback\n"
+            "- Conclusion and recommendations\n\n"
+            "Write in clear, informative paragraphs. Be thorough and detailed."
+        )
+        research_text = str(
+            brain.generate_response_sync(research_prompt, mode="STANDARD") or ""
+        ).strip()
+    except Exception as exc:
+        logger.warning("Brain research failed for topic=%s: %s", topic_clean, exc)
+
+    # Fallback: web search snippets
+    if not research_text or len(research_text) < 100:
+        try:
+            results = _google_custom_search(f"{topic_clean} comprehensive overview", num=5)
+            if results:
+                snippets = []
+                for item in results:
+                    title = item.get("title", "")
+                    snippet = item.get("snippet", "")
+                    link = item.get("link", "")
+                    if snippet:
+                        snippets.append(f"<b>{title}</b>: {snippet} <i>({link})</i>")
+                research_text = f"Research findings for '{topic_clean}':\n\n" + "\n\n".join(snippets)
+        except Exception as exc:
+            logger.warning("Web search fallback failed: %s", exc)
+
+    if not research_text:
+        research_text = (
+            f"Deep research on '{topic_clean}' was attempted but could not retrieve "
+            "detailed information. Please enable internet research for richer results."
+        )
+
+    # --- Step 2: Build HTML email ---
+    timestamp = time.strftime("%d %B %Y, %I:%M %p")
+    paragraphs = [p.strip() for p in research_text.split("\n\n") if p.strip()]
+    html_paragraphs = ""
+    for para in paragraphs:
+        lines = para.split("\n")
+        if para.startswith(("*", "-", "\u2022")):
+            items = [li.lstrip("*-\u2022 ").strip() for li in lines if li.strip()]
+            items_html = "".join(f"<li style='margin-bottom:6px;'>{item}</li>" for item in items)
+            html_paragraphs += f"<ul style='margin:8px 0 16px 20px;color:#d1d5db;'>{items_html}</ul>"
+        elif para.startswith("#"):
+            heading = para.lstrip("#").strip()
+            html_paragraphs += f"<h3 style='color:#818cf8;margin:20px 0 8px;font-size:16px;border-bottom:1px solid rgba(129,140,248,0.2);padding-bottom:6px;'>{heading}</h3>"
+        else:
+            html_paragraphs += f"<p style='margin:0 0 14px;color:#d1d5db;line-height:1.75;'>{para}</p>"
+
+    html_body = f"""<!DOCTYPE html>
+<html lang='en'>
+<head><meta charset='UTF-8'><meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Shell AI Research Report</title></head>
+<body style='margin:0;padding:0;background:#0a0a14;font-family:Inter,Segoe UI,Arial,sans-serif;'>
+  <div style='max-width:700px;margin:32px auto;background:linear-gradient(160deg,#1a1a2e 0%,#12122a 100%);border-radius:20px;overflow:hidden;border:1px solid rgba(99,102,241,0.25);box-shadow:0 24px 80px rgba(0,0,0,0.6);'>
+    <div style='background:linear-gradient(135deg,#4338ca,#7c3aed);padding:36px;'>
+      <p style='color:rgba(255,255,255,0.6);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 8px;'>Shell AI &bull; Deep Research Report</p>
+      <h1 style='color:#fff;font-size:26px;font-weight:700;margin:0 0 6px;letter-spacing:-0.5px;'>\U0001f52c {topic_clean}</h1>
+      <p style='color:rgba(255,255,255,0.7);font-size:13px;margin:0;'>{timestamp}</p>
+    </div>
+    <div style='padding:32px 36px;'>
+      <div style='background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:12px;padding:28px;'>
+        {html_paragraphs}
+      </div>
+    </div>
+    <div style='background:rgba(0,0,0,0.35);padding:18px 36px;border-top:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:8px;'>
+      <span style='font-size:16px;'>\U0001f916</span>
+      <p style='color:#6b7280;font-size:12px;margin:0;'>Generated by <strong style='color:#818cf8;'>Shell AI</strong> &bull; Developed by <strong style='color:#a78bfa;'>mdshoebking</strong></p>
+    </div>
+  </div>
+</body></html>"""
+
+    plain_body = f"Shell AI Deep Research Report\nTopic: {topic_clean}\nGenerated: {timestamp}\n\n{research_text}"
+
+    if not _is_gmail_api_configured():
+        return json.dumps({"success": False, "error": "Gmail API is not configured."}, ensure_ascii=True)
+
+    try:
+        _send_email_via_gmail_api(
+            sender_email="",
+            recipient=recipient_clean,
+            subject=f"\U0001f52c Deep Research: {topic_clean}",
+            body=plain_body,
+            html_body=html_body,
+        )
+        return json.dumps({"success": True, "error": None, "topic": topic_clean, "recipient": recipient_clean}, ensure_ascii=True)
+    except Exception as exc:
+        logger.error("Gmail API send failed: %s", exc)
+        return json.dumps({"success": False, "error": f"Failed to send email via Gmail API: {exc}"}, ensure_ascii=True)
+
+
+@function_tool
+def gmail_read_inbox_tool(max_results: int = 5) -> str:
+    """
+    Reads the latest emails from the Gmail inbox.
+    Args:
+        max_results: Maximum number of emails to retrieve (default 5).
+    """
+    import json
+
+    if not _is_gmail_api_configured():
+        return json.dumps({
+            "success": False,
+            "error": "Gmail API is not configured. Please place your client credentials.json in the workspace root.",
+            "emails": []
+        }, ensure_ascii=True)
+
+    try:
+        service = _get_gmail_service()
+        results = service.users().messages().list(userId='me', q='in:inbox', maxResults=max_results).execute()
+        messages = results.get('messages', [])
+        
+        emails_list = []
+        for message in messages:
+            msg = service.users().messages().get(userId='me', id=message['id'], format='full').execute()
+            payload = msg.get('payload', {})
+            headers = payload.get('headers', [])
+            
+            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'No Subject')
+            from_ = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'Unknown Sender')
+            date = next((h['value'] for h in headers if h['name'].lower() == 'date'), 'Unknown Date')
+            
+            snippet = msg.get('snippet', '')
+            body = ""
+            
+            def parse_parts(parts):
+                text_body = ""
+                for part in parts:
+                    mime_type = part.get('mimeType', '')
+                    body_data = part.get('body', {}).get('data', '')
+                    if mime_type == 'text/plain' and body_data:
+                        import base64
+                        text_body += base64.urlsafe_b64decode(body_data).decode('utf-8', errors='replace')
+                        break
+                    elif 'parts' in part:
+                        sub_body = parse_parts(part['parts'])
+                        if sub_body:
+                            text_body += sub_body
+                            break
+                return text_body
+
+            if 'parts' in payload:
+                body = parse_parts(payload['parts'])
+            else:
+                body_data = payload.get('body', {}).get('data', '')
+                if body_data:
+                    import base64
+                    body = base64.urlsafe_b64decode(body_data).decode('utf-8', errors='replace')
+            
+            if not body:
+                body = snippet
+            cleaned_snippet = " ".join(body.split())[:200]
+            
+            emails_list.append({
+                "from": from_,
+                "subject": subject,
+                "date": date,
+                "snippet": cleaned_snippet
+            })
+            
+        return json.dumps({
+            "success": True,
+            "error": None,
+            "emails": emails_list
+        }, ensure_ascii=True)
+    except Exception as exc:
+        logger.error("Gmail API read failed: %s", exc)
+        return json.dumps({
+            "success": False,
+            "error": f"Gmail API read failed: {exc}",
+            "emails": []
+        }, ensure_ascii=True)
+
+
+@function_tool
+def gmail_create_draft_tool(to: str, subject: str, body: str, cc: str = "", bcc: str = "") -> str:
+    """
+    Creates a draft email in the Gmail Drafts folder.
+    Args:
+        to: Recipient email address.
+        subject: Email subject.
+        body: Plain text email body.
+        cc: Comma-separated CC email addresses (optional).
+        bcc: Comma-separated BCC email addresses (optional).
+    """
+    import json
+
+    if not _is_gmail_api_configured():
+        return json.dumps({
+            "success": False,
+            "error": "Gmail API is not configured. Please place your client credentials.json in the workspace root."
+        }, ensure_ascii=True)
+
+    try:
+        service = _get_gmail_service()
+        from email.mime.text import MIMEText
+        import base64
+        
+        mime_msg = MIMEText(body)
+        mime_msg['to'] = to
+        mime_msg['subject'] = subject
+        if cc:
+            mime_msg['cc'] = cc
+        if bcc:
+            mime_msg['bcc'] = bcc
+            
+        raw_message = base64.urlsafe_b64encode(mime_msg.as_bytes()).decode('utf-8')
+        draft_body = {
+            'message': {
+                'raw': raw_message
+            }
+        }
+        
+        draft = service.users().drafts().create(userId='me', body=draft_body).execute()
+        return json.dumps({"success": True, "error": None}, ensure_ascii=True)
+    except Exception as exc:
+        logger.error("Gmail API draft creation failed: %s", exc)
+        return json.dumps({
+            "success": False,
+            "error": f"Gmail API draft creation failed: {exc}"
+        }, ensure_ascii=True)

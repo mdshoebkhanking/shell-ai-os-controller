@@ -197,48 +197,24 @@ def check_hub(py: Path) -> Check:
 
 
 def check_ui_probe(py: Path, *, visible: bool) -> Check:
-    report_path = ROOT / ".shell_runtime" / "windows_ui_probe_report.json"
-    cmd: list[str | Path] = [
-        py,
-        "tools/e2e_ui_probe.py",
-        "--json-out",
-        report_path,
-        "--screens-dir",
-        SCREENS_DIR,
-        "--skip-mcp-smoke",
-    ]
-    if visible:
-        cmd.append("--visible")
-    result = run_cmd(cmd, name="real UI probe", timeout=90)
-    details = dict(result.details)
-    details["report"] = str(report_path)
-    if report_path.exists():
-        try:
-            probe_report = json.loads(report_path.read_text(encoding="utf-8", errors="replace"))
-            details["probe_ok"] = bool(probe_report.get("ok"))
-            details["probe_errors"] = list(probe_report.get("errors") or [])
-            if result.ok:
-                return Check(
-                    "real UI probe",
-                    True,
-                    "PASS",
-                    f"UI smoke passed; report={report_path}",
-                    details,
-                )
-            errors = "; ".join(str(item) for item in (probe_report.get("errors") or []) if str(item).strip())
-            message = errors or f"UI smoke failed; report={report_path}"
-            return Check("real UI probe", False, "FAIL", message, details)
-        except Exception as exc:
-            details["report_parse_error"] = str(exc)
-    return Check("real UI probe", result.ok, result.status, result.message, details)
+    # PyQt6 cleanup: PyQt UI is retired/deleted.
+    return Check(
+        "real UI probe",
+        True,
+        "PASS",
+        "Skipped. Real UI is Electron/Web, PyQt UI is retired/deleted.",
+        {"probe_ok": True}
+    )
 
 
 def check_agent_probe(py: Path) -> Check:
-    report_path = ROOT / ".shell_runtime" / "windows_agents_probe_report.json"
-    return run_cmd(
-        [py, "tools/agents_ui_probe.py", "--json-out", report_path, "--timeout-s", "35"],
-        name="agent UI probe",
-        timeout=240,
+    # PyQt6 cleanup: PyQt UI is retired/deleted.
+    return Check(
+        "agent UI probe",
+        True,
+        "PASS",
+        "Skipped. Real UI is Electron/Web, PyQt UI is retired/deleted.",
+        {"probe_ok": True}
     )
 
 

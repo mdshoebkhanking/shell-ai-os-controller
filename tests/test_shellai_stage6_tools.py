@@ -21,17 +21,19 @@ def test_shell_tool_classifies_safe_ask_and_block(tmp_path) -> None:
 
 
 def test_shell_tool_executes_safe_command_and_traces(tmp_path) -> None:
+    import platform
     from shellai.config import ShellAIConfig
     from shellai.observability import TRACE_STORE
     from shellai.tools import ShellTool, ToolRequest
 
+    cmd = "dir" if platform.system().lower() == "windows" else "pwd"
     TRACE_STORE.clear()
-    trace = TRACE_STORE.start_trace("run pwd")
+    trace = TRACE_STORE.start_trace(f"run {cmd}")
     tool = ShellTool(ShellAIConfig())
     result = tool.run(
         ToolRequest(
             tool_name="shell",
-            args={"command": "pwd"},
+            args={"command": cmd},
             working_dir=str(tmp_path),
             trace=trace,
         )
@@ -39,7 +41,10 @@ def test_shell_tool_executes_safe_command_and_traces(tmp_path) -> None:
 
     assert result.status == "ok"
     assert result.exit_code == 0
-    assert str(tmp_path) in result.stdout
+    if cmd == "pwd":
+        assert str(tmp_path) in result.stdout
+    else:
+        assert str(tmp_path).lower().replace('/', '\\') in result.stdout.lower()
     assert trace.steps[-1].name == "Tool:shell"
     assert trace.steps[-1].metadata["risk"]["level"] == "SAFE"
 

@@ -509,10 +509,101 @@ async def get_event_log_errors_tool(count: int = 10) -> str:
         return f"❌ Event log check fail ho gaya: {str(e)}"
 
 
+@function_tool
+async def diagnose_voice_hardware_tool() -> str:
+    """
+    Checks voice hardware input/output devices and presence of required TTS/STT models.
+    Use this if the user asks "why is voice not working?", "voice diagnostics run karo",
+    or if the UI needs to report voice readiness.
+    """
+    import json
+    import os
+    from pathlib import Path
+    
+    microphone_present = False
+    microphone_details = "No input devices detected"
+    speaker_present = False
+    speaker_details = "No output devices detected"
+    
+    # Check audio devices
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        input_devs = [d for d in devices if d.get("max_input_channels", 0) > 0]
+        output_devs = [d for d in devices if d.get("max_output_channels", 0) > 0]
+        
+        if input_devs:
+            microphone_present = True
+            microphone_details = f"Found input device: {input_devs[0]['name']}"
+        if output_devs:
+            speaker_present = True
+            speaker_details = f"Found output device: {output_devs[0]['name']}"
+    except Exception as exc:
+        microphone_details = f"Failed to query audio devices: {exc}"
+        speaker_details = f"Failed to query audio devices: {exc}"
+
+    # Check Kokoro TTS model
+    kokoro_present = False
+    kokoro_path = None
+    try:
+        from shell_offline_tts import _candidate_model_dirs, _find_kokoro_model
+        paths = _candidate_model_dirs("kokoro")
+        model_path, voices_path, model_dir = _find_kokoro_model(paths)
+        if model_path and voices_path:
+            kokoro_present = True
+            kokoro_path = str(model_path)
+    except Exception:
+        pass
+
+    # Check Sherpa-ONNX STT models
+    sherpa_present = False
+    sherpa_missing = []
+    try:
+        from shell_local_stt import LocalSTTConfig
+        cfg = LocalSTTConfig.from_environment()
+        if not cfg.tokens:
+            sherpa_missing.append("tokens.txt")
+        if not cfg.encoder:
+            sherpa_missing.append("encoder-epoch-99-avg-1.int8.onnx")
+        if not cfg.decoder:
+            sherpa_missing.append("decoder-epoch-99-avg-1.onnx")
+        if not cfg.joiner:
+            sherpa_missing.append("joiner-epoch-99-avg-1.int8.onnx")
+        
+        sherpa_present = len(sherpa_missing) == 0
+    except Exception as exc:
+        sherpa_missing.append(f"Config load error: {exc}")
+
+    ok = bool(microphone_present and speaker_present and kokoro_present and sherpa_present)
+
+    result = {
+        "ok": ok,
+        "microphone": {
+            "present": microphone_present,
+            "details": microphone_details
+        },
+        "speaker": {
+            "present": speaker_present,
+            "details": speaker_details
+        },
+        "kokoro_model": {
+            "present": kokoro_present,
+            "path": kokoro_path
+        },
+        "sherpa_models": {
+            "present": sherpa_present,
+            "missing_files": sherpa_missing
+        }
+    }
+
+    return json.dumps(result, ensure_ascii=True)
+
+
 __all__ = [
     'scan_system_health',
     'check_network_health_tool',
     'check_disk_health_tool',
     'list_resource_hogs_tool',
-    'get_event_log_errors_tool'
+    'get_event_log_errors_tool',
+    'diagnose_voice_hardware_tool'
 ]

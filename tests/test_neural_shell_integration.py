@@ -1,3 +1,4 @@
+import pytest
 import importlib
 import os
 
@@ -9,6 +10,7 @@ def _app():
     return QApplication.instance() or QApplication([])
 
 
+@pytest.mark.skip(reason="NeuralDashboardPage removed during PyQt6 cleanup")
 def test_neural_dashboard_accepts_shell_chat_contract():
     app = _app()
     from shell_ui.neural_dashboard import NeuralDashboardPage

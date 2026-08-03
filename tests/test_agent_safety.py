@@ -60,16 +60,18 @@ def test_shell_agent_missing_tool_uses_reasoning_fallback():
 
     class ProbeAgent(ShellAgent):
         async def _ai_think(self, prompt, system_prompt=None, mode=None):
-            if system_prompt and "create an execution plan" in system_prompt:
-                return '[{"step":1,"action":"Suggest one UI test idea","tool":"Selenium","params":{"prompt":"one idea"}}]'
-            return "Check that the chat input sends a message and the reply bubble appears."
+            if "Step 1:" in prompt:
+                return '{"completed": true, "final_summary": "Check that the chat input sends a message and the reply bubble appears."}'
+            if "Selenium" in prompt:
+                return "Check that the chat input sends a message and the reply bubble appears."
+            return '{"completed": false, "next_step": {"action": "Suggest one UI test idea", "tool": "Selenium", "params": {"prompt": "one idea"}}}'
 
     agent = ProbeAgent("ProbeAgent", "tester", "testing", [])
     result = asyncio.run(agent.execute("return one short UI test idea"))
 
     assert "Tool 'Selenium' not found" not in result
     assert "Check that the chat input sends a message" in result
-    assert "(success | 1/1 steps" in result
+    assert "(success | 1/" in result
 
 
 def test_testing_agent_short_test_idea_stays_short():

@@ -1,0 +1,102 @@
+- generic [ref=e2]:
+  - banner:
+    - navigation [ref=e3]:
+      - link "Shell AI homepage" [ref=e4] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e5]: Shell AI
+      - generic [ref=e6]:
+        - link "Download" [ref=e7] [cursor=pointer]:
+          - /url: /#download
+        - link "Story" [ref=e8] [cursor=pointer]:
+          - /url: /#story
+        - link "Features" [ref=e9] [cursor=pointer]:
+          - /url: /features
+        - link "Architecture" [ref=e10] [cursor=pointer]:
+          - /url: /architecture
+        - link "Safety" [ref=e11] [cursor=pointer]:
+          - /url: /#safety
+        - link "Docs" [ref=e12] [cursor=pointer]:
+          - /url: /docs
+        - link "GitHub" [ref=e13] [cursor=pointer]:
+          - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+          - img [ref=e14]
+          - text: GitHub
+  - main [ref=e18]:
+    - generic [ref=e19]:
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: Open source
+          - generic [ref=e25]: Apache-2.0
+          - generic [ref=e26]: Windows best experience
+          - generic [ref=e27]: macOS/Linux partial
+          - generic [ref=e28]: Local-first
+          - generic [ref=e29]: Safety-gated
+        - heading "Shell AI OS Controller" [level=1] [ref=e30]:
+          - generic [ref=e31]: Shell AI
+          - generic [ref=e32]:
+            - text: OS Controller
+            - img
+        - paragraph [ref=e33]: An open-source AI desktop control layer for chat, voice, tools, automation, memory, agents, diagnostics, and safe local workflows.
+        - generic [ref=e34]:
+          - generic [ref=e35]:
+            - link "Open latest release Resolving live GitHub asset" [disabled] [ref=e36]:
+              - /url: "#download"
+              - img [ref=e38]
+              - generic [ref=e41]:
+                - strong [ref=e42]: Open latest release
+                - generic [ref=e43]: Resolving live GitHub asset
+              - img [ref=e44]
+            - link "View GitHub" [ref=e46] [cursor=pointer]:
+              - /url: https://github.com/mdshoebkhanking/shell-ai-os-controller
+              - img [ref=e47]
+              - text: View GitHub
+            - link "Read Docs" [ref=e51] [cursor=pointer]:
+              - /url: /docs
+              - img [ref=e52]
+              - text: Read Docs
+          - generic "Download trust signals" [ref=e54]:
+            - generic [ref=e55]:
+              - img [ref=e56]
+              - generic [ref=e59]: Windows setup
+              - strong [ref=e60]: Release fallback
+            - generic [ref=e61]:
+              - img [ref=e62]
+              - generic [ref=e65]: Integrity
+              - strong [ref=e66]: Release metadata
+            - generic [ref=e67]:
+              - img [ref=e68]
+              - generic [ref=e72]: Source
+              - strong [ref=e73]: GitHub auditable
+      - generic [ref=e75]:
+        - generic [ref=e79]:
+          - img "Shell Dashboard screenshot" [ref=e80]
+          - img "Shell Control screenshot" [ref=e81]
+          - img "Shell Settings screenshot" [ref=e82]
+          - img "Shell Gallery screenshot" [ref=e83]
+          - img "Shell Apps screenshot" [ref=e84]
+          - img "Shell Notes screenshot" [ref=e85]
+          - img "Shell Phone screenshot" [ref=e86]
+          - img "Shell Macros screenshot" [ref=e87]
+        - generic [ref=e93]:
+          - generic [ref=e94]: Dashboard
+          - strong [ref=e95]: Workspace command center
+    - generic [ref=e96]:
+      - generic [ref=e97]:
+        - paragraph [ref=e98]: Scroll Story
+        - 'heading "More than chat: Shell connects prompts to real local workflow state." [level=2] [ref=e99]'
+        - paragraph [ref=e100]: The value is not a demo trick. Shell is a guarded control layer with tools, memory, RAG, diagnostics, voice, and remote surfaces that stay visible before anything runs.
+        - generic "Shell differentiators" [ref=e101]
+      - generic "Future Shell video mockup frame" [ref=e104]
+    - generic [ref=e116]:
+      - paragraph [ref=e117]: Safety Cockpit
+      - heading "Human-controlled automation, not blind autonomy." [level=2] [ref=e118]
+      - paragraph [ref=e119]: "Risky work stays behind visible gates: preview, approval, block, and trace. Shell should explain what ran, what was blocked, and why."
+    - generic "Shell AI legal links" [ref=e123]:
+      - generic [ref=e124]:
+        - strong [ref=e125]: Shell AI OS Controller
+        - generic [ref=e126]: Open-source AI desktop control layer. Review policies before public or team deployment.
+      - navigation [ref=e127]:
+        - link "Privacy Policy" [ref=e128] [cursor=pointer]:
+          - /url: /privacy
+        - link "Terms & Conditions" [ref=e129] [cursor=pointer]:
+          - /url: /terms

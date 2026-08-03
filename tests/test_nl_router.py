@@ -467,7 +467,7 @@ def test_email_status_route_prevents_fake_sent_claims():
 def test_email_login_test_route():
     route = route_natural_command("email login test karo")
 
-    assert route["tool"] == "shell_email_tool:email_smtp_login_test_tool"
+    assert route["tool"] == "shell_email_tool:email_setup_status_tool"
     assert route["kind"] == "tool"
 
 

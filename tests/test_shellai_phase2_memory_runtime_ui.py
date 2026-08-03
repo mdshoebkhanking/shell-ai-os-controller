@@ -86,12 +86,14 @@ class FakeRouter:
 
 
 def test_agent_runtime_single_task_keeps_old_shape_and_agent_boundaries(tmp_path) -> None:
+    import platform
     from shellai.fabric import AgentRuntime
 
     config, memory, skills = _memory_stack(tmp_path)
+    cmd = "dir" if platform.system().lower() == "windows" else "pwd"
     runtime = AgentRuntime(
         config=config,
-        model_router=FakeRouter({"steps": [{"id": "pwd", "tool": "shell", "description": "pwd", "args": {"command": "pwd"}}]}),
+        model_router=FakeRouter({"steps": [{"id": "pwd", "tool": "shell", "description": "pwd", "args": {"command": cmd}}]}),
         memory_store=memory,
         skill_manager=skills,
     )

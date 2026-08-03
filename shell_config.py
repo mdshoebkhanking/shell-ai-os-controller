@@ -139,17 +139,7 @@ class ShellConfig:
             "local_mirror": self.get_bool("LOCAL_TTS_MIRROR", False),
         }
 
-    @property
-    def email(self) -> dict:
-        return {
-            "smtp_server": self.get_str("SHELL_SMTP_SERVER", "smtp.gmail.com"),
-            "smtp_port": self.get_int("SHELL_SMTP_PORT", 587),
-            "use_ssl": self.get_bool("SHELL_SMTP_USE_SSL", False),
-            "sender_email": self.get_str("SHELL_SENDER_EMAIL", ""),
-            "sender_name": self.get_str("SHELL_SENDER_NAME", ""),
-            "sender_role": self.get_str("SHELL_SENDER_ROLE", ""),
-            "sender_company": self.get_str("SHELL_SENDER_COMPANY", ""),
-        }
+
 
     @property
     def audio(self) -> dict:

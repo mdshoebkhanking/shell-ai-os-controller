@@ -1,4 +1,4 @@
-import { Suspense, lazy, useState, useEffect, useRef } from 'react'
+import { Suspense, lazy, useState, useEffect, useRef, useCallback } from 'react'
 import MiniOverlay from './components/MiniOverlay'
 import { getScreenSourceId } from './hooks/CaptureDesktop'
 import ShellAI from './UI/ShellAI'
@@ -34,6 +34,9 @@ type IdleWindow = Window & {
   requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
   cancelIdleCallback?: (handle: number) => void
 }
+
+// Browser Web Speech Recognition type shim
+type BrowserSpeechRecognition = any
 
 let shellVoiceServicePromise: Promise<ShellVoiceService> | null = null
 
@@ -76,6 +79,12 @@ const hasGeminiVoiceKey = async () => {
   }
 }
 
+// Get browser SpeechRecognition API (cross-browser)
+const getBrowserSpeechRecognition = (): (new () => BrowserSpeechRecognition) | null => {
+  const w = window as any
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null
+}
+
 const IndexRoot = () => {
   const [isOverlay, setIsOverlay] = useState(false)
 
@@ -87,6 +96,10 @@ const IndexRoot = () => {
   const [voiceRuntime, setVoiceRuntime] = useState<VoiceRuntime>(() =>
     normalizeVoiceRuntime(localStorage.getItem('shell_voice_runtime'))
   )
+
+  // Browser Web Speech Recognition fallback — used when Python sounddevice has no mic
+  const browserSpeechRef = useRef<BrowserSpeechRecognition | null>(null)
+  const browserSpeechActiveRef = useRef(false)
 
   const [isVideoOn, setIsVideoOn] = useState(false)
   const [visionMode, setVisionMode] = useState<VisionMode>('none')
@@ -148,12 +161,10 @@ const IndexRoot = () => {
       const message = String(payload?.message || payload?.error || '').trim()
       setBackendVoiceState(message ? `${state}: ${message}` : state)
       if (state === 'MIC_MISSING' || state === 'MIC MISSING') {
-        showSystemNotice(
-          'Microphone not found',
-          message || 'Shell can still start and speak; voice input is disabled.'
-        )
         setIsSystemActive(true)
         setIsMicMuted(true)
+        // Trigger browser Speech Recognition fallback automatically
+        // (will be started via the backendVoiceState watcher useEffect below)
         return
       }
       if (state === 'ERROR') {
@@ -184,6 +195,16 @@ const IndexRoot = () => {
       window.removeEventListener('shell-voice-runtime-changed', onStorage)
     }
   }, [])
+
+  useEffect(() => {
+    if (window.electron?.ipcRenderer) {
+      const nextVoiceMode = voiceRuntime === 'gemini' ? 'cloud' : 'local'
+      window.electron.ipcRenderer.invoke('set-settings', {
+        voice_mode: nextVoiceMode
+      }).catch((err) => console.error('Failed to sync voice mode on start:', err))
+    }
+  }, [voiceRuntime])
+
 
   useEffect(() => {
     const onGeminiVoiceStatus = (event: Event) => {
@@ -298,15 +319,136 @@ const IndexRoot = () => {
       setBackendVoiceState('OFFLINE')
       peekShellService()?.setMute(true)
       stopVision()
+      // Stop browser speech fallback if running
+      stopBrowserSpeech()
     }
   }
 
+  // ── Browser Web Speech Recognition fallback ─────────────────────────────────
+  // When Python's sounddevice has no input device (MIC_MISSING), use the
+  // browser's SpeechRecognition API to capture voice and send to Shell
+  // with source='voice' so Kokoro TTS speaks the reply.
+
+  const stopBrowserSpeech = useCallback(() => {
+    browserSpeechActiveRef.current = false
+    const recognition = browserSpeechRef.current
+    if (recognition) {
+      try { recognition.stop() } catch {}
+      try { recognition.abort() } catch {}
+      browserSpeechRef.current = null
+    }
+  }, [])
+
+  const startBrowserSpeech = useCallback(() => {
+    const SpeechRecognition = getBrowserSpeechRecognition()
+    if (!SpeechRecognition) {
+      setBackendVoiceState('MIC_MISSING: Browser speech API not available')
+      return
+    }
+    if (browserSpeechActiveRef.current) return
+    browserSpeechActiveRef.current = true
+    setBackendVoiceState('LISTENING')
+    setIsMicMuted(false)
+    clearSystemNotice()
+
+    const recognition: BrowserSpeechRecognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = false
+    recognition.lang = 'hi-IN'  // Hinglish — Hindi locale picks up mixed speech well
+    recognition.maxAlternatives = 1
+    browserSpeechRef.current = recognition
+
+    recognition.onstart = () => {
+      setBackendVoiceState('LISTENING')
+      setIsMicMuted(false)
+    }
+
+    recognition.onresult = async (event: any) => {
+      const last = event.results[event.results.length - 1]
+      if (!last?.isFinal) return
+      const transcript = String(last[0]?.transcript || '').trim()
+      if (!transcript) return
+      // Emit voice transcript so UI shows it
+      window.shellAPI?.emit?.('voice-transcript', { text: transcript })
+      setBackendVoiceState('PROCESSING')
+      // Send to Shell backend as voice source → reply will trigger Kokoro TTS
+      try {
+        if (window.electron?.ipcRenderer) {
+          await window.electron.ipcRenderer.invoke('chat-message', transcript, { source: 'voice' })
+        } else if (window.shellAPI?.call) {
+          await window.shellAPI.call('chat-message', transcript, { source: 'voice' })
+        }
+      } catch {}
+      setBackendVoiceState('LISTENING')
+    }
+
+    recognition.onerror = (event: any) => {
+      const err = String(event?.error || 'unknown')
+      if (err === 'no-speech') {
+        // Silently restart on no-speech — normal during pauses
+        if (browserSpeechActiveRef.current) {
+          try { recognition.start() } catch {}
+        }
+        return
+      }
+      if (err === 'aborted' || err === 'not-allowed') {
+        browserSpeechActiveRef.current = false
+        setBackendVoiceState('MIC_MISSING: Browser mic permission denied')
+        setIsMicMuted(true)
+        showSystemNotice('Mic permission denied', 'Browser mic access allow karo Settings mein.')
+        return
+      }
+      // On other errors, attempt restart
+      if (browserSpeechActiveRef.current) {
+        setTimeout(() => {
+          if (browserSpeechActiveRef.current) {
+            try { recognition.start() } catch {}
+          }
+        }, 1000)
+      }
+    }
+
+    recognition.onend = () => {
+      // Auto-restart for continuous listening
+      if (browserSpeechActiveRef.current) {
+        setTimeout(() => {
+          if (browserSpeechActiveRef.current) {
+            try { recognition.start() } catch {}
+          }
+        }, 200)
+      } else {
+        setBackendVoiceState('STOPPED')
+        setIsMicMuted(true)
+      }
+    }
+
+    try {
+      recognition.start()
+    } catch {
+      browserSpeechActiveRef.current = false
+      setBackendVoiceState('ERROR: Browser speech start failed')
+    }
+  }, [clearSystemNotice, showSystemNotice])
+
   const toggleMic = async () => {
-    if (usesShellBackend && isSystemActive && isMicMuted && backendVoiceState.toUpperCase().includes('MIC_MISSING')) {
-      showSystemNotice(
-        'Microphone not found',
-        'Shell can still start and speak; voice input is disabled.'
-      )
+    // Browser speech fallback: when backend has no mic (sounddevice fails),
+    // use browser SpeechRecognition to toggle mic on/off
+    if (usesShellBackend && isSystemActive && backendVoiceState.toUpperCase().includes('MIC_MISSING')) {
+      if (isMicMuted) {
+        // User wants to unmute — start browser speech recognition
+        startBrowserSpeech()
+      } else {
+        // User wants to mute — stop browser speech
+        stopBrowserSpeech()
+        setIsMicMuted(true)
+        setBackendVoiceState('MIC_MISSING: Browser mic paused')
+      }
+      return
+    }
+    // If browser speech is active, toggle it
+    if (browserSpeechActiveRef.current) {
+      stopBrowserSpeech()
+      setIsMicMuted(true)
       return
     }
     const loadedShellService = peekShellService()
@@ -327,6 +469,25 @@ const IndexRoot = () => {
     const shellService = await getShellService()
     shellService.setMute(s)
   }
+
+  // Auto-start browser Speech Recognition when Python backend reports MIC_MISSING
+  // This is the key bridge: browser mic -> Shell voice pipeline -> Kokoro TTS reply
+  useEffect(() => {
+    const state = backendVoiceState.toUpperCase()
+    if (
+      usesShellBackend &&
+      isSystemActive &&
+      (state.startsWith('MIC_MISSING') || state === 'MIC MISSING') &&
+      !browserSpeechActiveRef.current
+    ) {
+      // Small delay to let the backend settle
+      const timer = setTimeout(() => {
+        startBrowserSpeech()
+      }, 500)
+      return () => clearTimeout(timer)
+    }
+    return undefined
+  }, [backendVoiceState, isSystemActive, usesShellBackend, startBrowserSpeech])
 
   const speakRealVoice = async (text: string) => {
     if (!usesGeminiVoice) return false

@@ -1,3 +1,4 @@
+import pytest
 import os
 import json
 from pathlib import Path
@@ -74,6 +75,7 @@ def test_planner_marks_unready_route():
     assert plan["steps"][0]["readiness"]["state"] == "READY"
 
 
+@pytest.mark.skip(reason="shell_ui pages removed during PyQt6 cleanup")
 def test_ui_modular_import_seams_exist(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 

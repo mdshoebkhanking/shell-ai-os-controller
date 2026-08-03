@@ -42,15 +42,17 @@ def _services(tmp_path, router):
 
 
 def test_agent_loop_safe_shell_plan_executes_and_saves_conversation(tmp_path) -> None:
+    import platform
     from shellai.agent_loop import create_user_request, run_agent_task
 
+    cmd = "dir" if platform.system().lower() == "windows" else "pwd"
     plan = {
         "steps": [
             {
                 "id": "pwd",
                 "tool": "shell",
                 "description": "Print working directory",
-                "args": {"command": "pwd"},
+                "args": {"command": cmd},
             }
         ]
     }
@@ -67,7 +69,10 @@ def test_agent_loop_safe_shell_plan_executes_and_saves_conversation(tmp_path) ->
 
     assert result["status"] == "ok"
     assert result["steps"][0]["status"] == "ok"
-    assert str(tmp_path) in result["steps"][0]["stdout"]
+    if cmd == "pwd":
+        assert str(tmp_path) in result["steps"][0]["stdout"]
+    else:
+        assert str(tmp_path).lower().replace('/', '\\') in result["steps"][0]["stdout"].lower()
     assert [call["role"] for call in router.calls] == ["planning", "summarization"]
 
     rows = memory.search_memory("conversation", "Fake memory", limit=5)
@@ -133,12 +138,14 @@ def test_agent_loop_file_tool_writes_file(tmp_path) -> None:
 
 
 def test_agent_loop_creates_auto_skill_for_reusable_multi_shell_plan(tmp_path) -> None:
+    import platform
     from shellai.agent_loop import create_user_request, run_agent_task
 
+    cmd = "dir" if platform.system().lower() == "windows" else "pwd"
     plan = {
         "mark_reusable": True,
         "steps": [
-            {"id": "pwd", "tool": "shell", "description": "pwd", "args": {"command": "pwd"}},
+            {"id": "pwd", "tool": "shell", "description": "pwd", "args": {"command": cmd}},
             {"id": "whoami", "tool": "shell", "description": "whoami", "args": {"command": "whoami"}},
         ],
     }

@@ -415,7 +415,8 @@ def _png_chunk(kind: bytes, data: bytes) -> bytes:
 def _local_preview_png_bytes(prompt: str, width: int, height: int) -> bytes:
     width = max(256, min(1024, int(width or 768)))
     height = max(256, min(1024, int(height or 768)))
-    seed = int(hashlib.sha256((prompt or "shell").encode("utf-8")).hexdigest()[:8], 16)
+    unique_str = f"{prompt or 'shell'}_{time.time()}_{random.random()}"
+    seed = int(hashlib.sha256(unique_str.encode("utf-8")).hexdigest()[:8], 16)
     rows = []
     for y in range(height):
         row = bytearray([0])
@@ -447,7 +448,8 @@ def _local_preview_image_bytes(prompt: str, width: int, height: int, *, style: s
         return _local_preview_png_bytes(prompt, width, height)
     width = max(512, min(1536, int(width or 1024)))
     height = max(512, min(1536, int(height or 1024)))
-    seed = int(hashlib.sha256((prompt or "shell").encode("utf-8")).hexdigest()[:8], 16)
+    unique_str = f"{prompt or 'shell'}_{time.time()}_{random.random()}"
+    seed = int(hashlib.sha256(unique_str.encode("utf-8")).hexdigest()[:8], 16)
     rng = random.Random(seed)
     base = Image.new("RGB", (width, height), "#07090f")
     draw = ImageDraw.Draw(base)
@@ -1512,7 +1514,11 @@ class HuggingFaceProvider(ImageProvider):
     
     def __init__(self):
         super().__init__("HuggingFace")
-        self.model = "stabilityai/stable-diffusion-xl-base-1.0"
+        self.models = [
+            "black-forest-labs/FLUX.1-schnell",
+            "stabilityai/stable-diffusion-xl-base-1.0"
+        ]
+        self.model = self.models[0]
 
     def is_available(self) -> Tuple[bool, str]:
         if _is_missing_key(Config.HF_API_KEY):
@@ -1525,38 +1531,54 @@ class HuggingFaceProvider(ImageProvider):
     async def generate(self, prompt: str, width: int, height: int,
                       negative_prompt: str = "", **kwargs) -> Optional[bytes]:
         start = time.time()
-        try:
-            api_url = f"https://router.huggingface.co/hf-inference/models/{self.model}"
-            headers = {"Authorization": f"Bearer {Config.HF_API_KEY}"}
-            payload = {
-                "inputs": prompt,
-                "parameters": {
-                    "width": width, "height": height,
-                    "num_inference_steps": kwargs.get('steps', Config.DEFAULT_STEPS),
-                    "guidance_scale": kwargs.get('guidance', Config.DEFAULT_GUIDANCE_SCALE),
+        errors: List[str] = []
+        for model in self.models:
+            try:
+                api_url = f"https://router.huggingface.co/hf-inference/models/{model}"
+                headers = {"Authorization": f"Bearer {Config.HF_API_KEY}"}
+                payload = {
+                    "inputs": prompt,
+                    "parameters": {
+                        "width": width,
+                        "height": height,
+                    }
                 }
-            }
-            
-            if negative_prompt:
-                payload["parameters"]["negative_prompt"] = negative_prompt
-            
-            response = await asyncio.to_thread(
-                requests.post, api_url, headers=headers, json=payload,
-                timeout=Config.HUGGINGFACE_TIMEOUT
-            )
-            
-            duration = time.time() - start
-            
-            if response.status_code == 200:
-                self._log_success(duration)
-                return response.content
-            
-            self._log_error(f"Status {response.status_code}", duration)
-            return None
-            
-        except Exception as e:
-            self._log_error(str(e), time.time() - start)
-            return None
+                
+                # FLUX schnell works best with 4 steps and no guidance or negative prompt parameters.
+                if "flux" in model.lower():
+                    payload["parameters"]["num_inference_steps"] = 4
+                else:
+                    payload["parameters"]["num_inference_steps"] = kwargs.get('steps', Config.DEFAULT_STEPS)
+                    payload["parameters"]["guidance_scale"] = kwargs.get('guidance', Config.DEFAULT_GUIDANCE_SCALE)
+                    if negative_prompt:
+                        payload["parameters"]["negative_prompt"] = negative_prompt
+                
+                response = await asyncio.to_thread(
+                    requests.post, api_url, headers=headers, json=payload,
+                    timeout=Config.HUGGINGFACE_TIMEOUT
+                )
+                
+                duration = time.time() - start
+                
+                if response.status_code == 200:
+                    ok, check_msg = _valid_image_bytes(response.content)
+                    if ok:
+                        self.model = model  # record which model succeeded
+                        self._log_success(duration)
+                        return response.content
+                    else:
+                        errors.append(f"{model} invalid image: {check_msg}")
+                else:
+                    try:
+                        err_msg = response.json().get("error") or response.text[:100]
+                    except Exception:
+                        err_msg = response.text[:100]
+                    errors.append(f"{model} failed: {response.status_code} {err_msg}")
+            except Exception as e:
+                errors.append(f"{model} exception: {e}")
+                
+        self._log_error("; ".join(errors), time.time() - start)
+        return None
 
 
 class ReplicateProvider(ImageProvider):

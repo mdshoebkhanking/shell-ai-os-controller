@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 import tools.windows_acceptance_probe as probe
@@ -72,6 +73,7 @@ def test_check_hub_accepts_fast_ready_endpoint(monkeypatch, tmp_path):
     assert calls[0][0].endswith(":5000/ready")
 
 
+@pytest.mark.skip(reason="PyQt6 legacy UI probe is retired/deleted")
 def test_ui_probe_skips_mcp_and_reports_json_errors(monkeypatch, tmp_path):
     captured = {}
 
@@ -129,6 +131,7 @@ def test_env_flag_accepts_common_truthy_values(monkeypatch):
     assert probe.env_flag("SHELL_ACCEPTANCE_OPEN_APPS") is True
 
 
+@pytest.mark.skip(reason="PyQt6 legacy UI probe is retired/deleted")
 def test_ui_probe_reports_settings_typing_latency():
     source = (Path(__file__).resolve().parents[1] / "tools" / "e2e_ui_probe.py").read_text(encoding="utf-8")
 

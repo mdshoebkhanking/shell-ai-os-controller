@@ -58,30 +58,17 @@ def _tool_execution_probe(*, iterations: int = 1) -> dict[str, Any]:
 
 
 def _ui_probe() -> dict[str, Any]:
-    from PyQt6.QtWidgets import QApplication
-    from shell_ui.app_bootstrap import configure_qt_application
-    from shell_ui.shell_cinematic_full import ShellHoloUI
-
-    app = QApplication.instance() or QApplication(sys.argv)
-    configure_qt_application(app)
-    window = ShellHoloUI()
-    window.resize(1100, 680)
-    window.show()
-    deadline = time.time() + 0.35
-    while time.time() < deadline:
-        app.processEvents()
-        time.sleep(0.01)
-    pages = window.pages.count()
-    modules = {
-        "socketio": "socketio" in sys.modules,
-        "engineio": "engineio" in sys.modules,
-        "aiohttp": "aiohttp" in sys.modules,
-        "brain_core": "brain.core" in sys.modules,
-        "livekit_rtc": "livekit.rtc" in sys.modules,
+    # PyQt6 cleanup: PyQt UI is retired/deleted. Real UI is Electron/Web.
+    return {
+        "pages": 0,
+        "modules": {
+            "socketio": "socketio" in sys.modules,
+            "engineio": "engineio" in sys.modules,
+            "aiohttp": "aiohttp" in sys.modules,
+            "brain_core": "brain.core" in sys.modules,
+            "livekit_rtc": "livekit.rtc" in sys.modules,
+        }
     }
-    window.close()
-    app.processEvents()
-    return {"pages": pages, "modules": modules}
 
 
 def _tts_probe() -> dict[str, Any]:

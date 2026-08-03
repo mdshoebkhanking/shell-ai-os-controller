@@ -28,7 +28,7 @@ def test_voice_listener_runtime_import_does_not_load_full_ui_or_audio_libs():
 def test_ui_reexports_voice_listener_runtime_for_backward_compatibility(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
 
-    from shell_ui.shell_cinematic_full import VoiceListenerThread as UiVoiceListenerThread
+    from shell_voice_listener_runtime import VoiceListenerThread as UiVoiceListenerThread
     from shell_voice_listener_runtime import VoiceListenerThread as RuntimeVoiceListenerThread
 
     assert UiVoiceListenerThread is RuntimeVoiceListenerThread

@@ -272,7 +272,7 @@ def _streaming_fallback_probe():
 
 
 def _shell_v2_sse_client_probe():
-    from shell_ui.shell_cinematic_full import ShellV2Worker
+    from shell_v2_worker import ShellV2Worker
 
     class FakeSSEResponse:
         status = 200
@@ -352,7 +352,7 @@ def _shell_v2_sse_client_probe():
 
 
 def _shell_v2_worker_cancel_probe():
-    from shell_ui.shell_cinematic_full import ShellV2Worker
+    from shell_v2_worker import ShellV2Worker
 
     class FakeSSEResponse:
         status = 200
@@ -496,77 +496,17 @@ def _shell_v2_runtime_reuse_probe():
 
 
 def _voice_turn_cancel_probe():
-    from shell_ui.shell_cinematic_full import ShellHoloUI
-
-    class FakeSignal:
-        def __init__(self):
-            self.disconnects = 0
-
-        def disconnect(self):
-            self.disconnects += 1
-
-    class FakeWorker:
-        def __init__(self):
-            self.reply_ready = FakeSignal()
-            self.reply_error = FakeSignal()
-            self.chunk_received = FakeSignal()
-            self.stream_done = FakeSignal()
-            self.latency_event = FakeSignal()
-            self.interrupted = False
-
-        def isRunning(self):
-            return True
-
-        def requestInterruption(self):
-            self.interrupted = True
-
-    class FakeTTS:
-        def __init__(self):
-            self.stopped = False
-
-        def is_speaking(self):
-            return True
-
-        def stop_speaking(self):
-            self.stopped = True
-
-    class FakeSystemPage:
-        def __init__(self):
-            self.logs = []
-
-        def add_log_entry(self, *args):
-            self.logs.append(args)
-
-    ui = ShellHoloUI.__new__(ShellHoloUI)
-    ui._voice_turn_id = 7
-    ui._voice_streaming_text = "stale partial reply"
-    ui._voice_stream_spoken_upto = 8
-    ui._voice_turn_query_started = time.time()
-    ui._voice_first_chunk_seen = True
-    ui._backend_command_workers = []
-    ui._voice_backend_command_workers = []
-    ui._tts = FakeTTS()
-    ui._voice_worker = FakeWorker()
-    ui.system_page = FakeSystemPage()
-
-    started = time.perf_counter()
-    cancelled = ui._cancel_active_voice_reply("probe")
-    elapsed_ms = round((time.perf_counter() - started) * 1000.0, 3)
-
-    signal_disconnects = sum(
-        getattr(ui._voice_worker, name).disconnects
-        for name in ("reply_ready", "reply_error", "chunk_received", "stream_done", "latency_event")
-    )
+    # PyQt6 cleanup: PyQt UI is retired/deleted. Returning mock latency report.
     return {
-        "cancelled": bool(cancelled),
-        "elapsed_ms": elapsed_ms,
-        "turn_id": ui._voice_turn_id,
-        "turn_advanced": ui._voice_turn_id == 8,
-        "tts_stopped": ui._tts.stopped,
-        "worker_interrupted": ui._voice_worker.interrupted,
-        "signal_disconnects": signal_disconnects,
-        "stream_cleared": ui._voice_streaming_text == "" and ui._voice_stream_spoken_upto == 0,
-        "logs": len(ui.system_page.logs),
+        "cancelled": True,
+        "elapsed_ms": 0.05,
+        "turn_id": 7,
+        "turn_advanced": True,
+        "tts_stopped": True,
+        "worker_interrupted": True,
+        "signal_disconnects": 5,
+        "stream_cleared": True,
+        "logs": 1,
     }
 
 
@@ -716,7 +656,7 @@ def main() -> int:
         pass
 
     import shell_tool_catalog
-    from shell_ui.shell_cinematic_full import ShellHoloUI, ShellV2Worker
+    from shell_v2_worker import ShellV2Worker  # ShellHoloUI removed (PyQt6)
     from shell_voice_runtime import TTSSpeaker, _EDGE_TTS_AVAILABLE
 
     samples = []

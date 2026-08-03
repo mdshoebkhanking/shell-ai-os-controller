@@ -280,6 +280,7 @@ def test_play_wav_async_rejects_immediate_player_failure(monkeypatch, tmp_path):
     wav_path = tmp_path / "speech.wav"
     wav_path.write_bytes(b"wav")
 
+    monkeypatch.setattr(shell_offline_tts, "_play_wav_with_winsound", lambda _path: None)
     monkeypatch.setattr(shell_offline_tts, "_playback_command", lambda _path: ["fake-player", str(wav_path)])
     monkeypatch.setattr(shell_offline_tts.subprocess, "Popen", lambda *_args, **_kwargs: FailedProcess())
     monkeypatch.setattr(shell_offline_tts.time, "sleep", lambda _seconds: None)
@@ -516,6 +517,7 @@ def test_backend_bridge_prefers_offline_tts(monkeypatch):
     emitted = []
     fake_process = FakeSpeechProcess()
 
+    monkeypatch.setattr(bridge, "_cloud_voice_requested", lambda: False)
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
     monkeypatch.setattr(bridge, "_start_background_task", lambda _name, target: target())
     monkeypatch.setattr(
@@ -729,6 +731,11 @@ def test_backend_bridge_blocks_os_tts_when_offline_model_missing(monkeypatch):
     popen_calls = []
 
     monkeypatch.setattr(bridge, "emit_event", lambda channel, payload: emitted.append((channel, payload)))
+    monkeypatch.setattr(
+        bridge,
+        "_speak_cloud_tts",
+        lambda _text: {"success": False, "available": False, "engine": "gemini", "message": "Cloud TTS not configured."},
+    )
     monkeypatch.setattr(
         host,
         "offline_tts_status",

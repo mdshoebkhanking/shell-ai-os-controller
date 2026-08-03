@@ -1,8 +1,11 @@
 import ast
+import pytest
 from pathlib import Path
 
-
 SRC_PATH = Path(__file__).resolve().parents[1] / "shell_ui" / "shell_cinematic_full.py"
+if not SRC_PATH.exists():
+    pytest.skip("shell_ui is retired and deleted", allow_module_level=True)
+
 SRC = SRC_PATH.read_text(encoding="utf-8")
 TREE = ast.parse(SRC)
 VOICE_RUNTIME_PATH = Path(__file__).resolve().parents[1] / "shell_voice_runtime.py"

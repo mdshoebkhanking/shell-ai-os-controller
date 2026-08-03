@@ -49,6 +49,7 @@ def test_workspace_tools_reject_path_escape(monkeypatch, tmp_path):
 
 def test_create_user_file_writes_to_desktop(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
     result = execute_tool_sync(
         "shell_workspace_tools:create_user_file_tool",
@@ -68,6 +69,7 @@ def test_create_user_file_writes_to_desktop(monkeypatch, tmp_path):
 
 def test_create_user_file_can_write_pdf(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
     result = execute_tool_sync(
         "shell_workspace_tools:create_user_file_tool",
@@ -87,6 +89,7 @@ def test_create_user_file_can_write_pdf(monkeypatch, tmp_path):
 
 def test_create_user_file_rejects_unsupported_extension(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
 
     result = execute_tool_sync(
         "shell_workspace_tools:create_user_file_tool",

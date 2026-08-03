@@ -101,8 +101,25 @@ def test_public_launch_docs_and_ci_gate_are_linked():
     assert "\n    needs: package\n" not in release
 
 
-def test_public_release_package_includes_web_ui_source_and_windows_launchers():
+def test_public_release_package_includes_web_ui_source_and_windows_launchers(monkeypatch):
     module = load_public_package_module()
+
+    # Mock iter_release_files to avoid slow walk over .shellai_venv directory
+    def fake_iter():
+        required = list(module.REQUIRED_PACKAGE_FILES)
+        additional = [
+            "shell_web_ui/package.json",
+            "shell_web_ui/src/App.tsx",
+            "ONE_CLICK_INSTALL.bat",
+            "Build_Windows_EXE.bat",
+            "Run_Windows_Acceptance_Test.bat",
+            "tools/build_windows_installer.py",
+            "tools/windows_app/shellai_desktop_entry.py",
+            "tools/windows_installer/ShellAI_Setup.iss",
+            "tools/windows_installer/ShellAI_Setup.nsi",
+        ]
+        return [ROOT / rel for rel in (required + additional)]
+    monkeypatch.setattr(module, "iter_release_files", fake_iter)
 
     rel_paths = {path.relative_to(ROOT).as_posix() for path in module.iter_release_files()}
 

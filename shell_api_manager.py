@@ -77,13 +77,7 @@ _KNOWN_KEYS: dict[str, dict] = {
     "SHELL_TELEGRAM_ALLOW_TERMINAL":{"required": False, "section": "Communications", "desc": "0/1 — allow Telegram /cmd terminal execution. Dangerous; off by default."},
     "INSTAGRAM_USERNAME":     {"required": False, "section": "Communications",      "desc": "Instagram handle."},
     "INSTAGRAM_PASSWORD":     {"required": False, "section": "Communications",      "desc": "Instagram password (consider OAuth)."},
-    # Email SMTP
-    "SHELL_SMTP_SERVER":      {"required": False, "section": "Email",               "desc": "SMTP host (smtp.gmail.com)."},
-    "SHELL_SMTP_PORT":        {"required": False, "section": "Email",               "desc": "SMTP port (587/465)."},
-    "SHELL_SMTP_USE_SSL":     {"required": False, "section": "Email",               "desc": "true/false."},
-    "SHELL_SENDER_EMAIL":     {"required": False, "section": "Email",               "desc": "Your sender email."},
-    "SHELL_SENDER_PASSWORD":  {"required": False, "section": "Email",               "desc": "SMTP app password."},
-    "SHELL_SENDER_NAME":      {"required": False, "section": "Email",               "desc": "Display name on outgoing mail."},
+
     # Safety gates
     "SHELL_ALLOW_CODE_WRITE": {"required": False, "section": "Safety",              "desc": "0/1 — enables Shell core/runtime code mutation."},
     "SHELL_ALLOW_AGENT_PATCH":{"required": False, "section": "Safety",              "desc": "0/1 — enables agent.py patches."},

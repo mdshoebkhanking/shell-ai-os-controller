@@ -632,6 +632,56 @@ def _workspace_file_read_route(raw: str, lower: str) -> dict[str, Any] | None:
     return _route("shell_workspace_tools:read_workspace_file_tool", {"path": path}, confidence=0.92)
 
 
+def _research_and_email_route(raw: str, lower: str) -> dict[str, Any] | None:
+    """Detect 'research X and email to Y' compound commands."""
+    has_research = re.search(
+        r"\b(deep\s*research|deep\s*recerch|deep\s*reserch|research\s+kar|research\s+karke|research\s+kar\s+ke|"
+        r"research\s+kardo|deep\s+research|deep\s+reserch|recerch|reserch)\b",
+        lower,
+        flags=re.I,
+    )
+    if not has_research:
+        return None
+
+    has_recipient = re.search(_EMAIL_TOKEN, raw, flags=re.I)
+    if not has_recipient:
+        return None
+
+    has_email_intent = re.search(
+        r"\b(email\s+kar|mail\s+kar|bhejdo|bhejo|bhejna|bhej\s+do|bhej|email\s+kardo|send|email\s+karo)\b",
+        lower,
+        flags=re.I,
+    )
+    if not has_email_intent:
+        # If there's a recipient email in the message along with research, still treat as compound
+        if not has_recipient:
+            return None
+
+    recipient = has_recipient.group(0)
+
+    # Extract topic: remove the email address, research verbs, email send verbs
+    topic = raw
+    topic = re.sub(_EMAIL_TOKEN, " ", topic, flags=re.I)
+    topic = re.sub(
+        r"\b(deep\s*research|deep\s*recerch|deep\s*reserch|research|recerch|reserch|karke|kar\s+ke|kardo|kar\s+do|karo|"
+        r"email|mail|bhejdo|bhejo|bhej\s+do|bhej|send|pe|par|mujhe|mojhe|main|ko|ok|please|pls|"
+        r"shell|aur|aur\s+han|or\s+han|or|han)\b",
+        " ",
+        topic,
+        flags=re.I,
+    )
+    topic = _clean(topic)
+
+    if not topic or len(topic) < 2:
+        return None
+
+    return _route(
+        "shell_email_tool:research_and_email_tool",
+        {"topic": topic, "recipient": recipient},
+        confidence=0.93,
+    )
+
+
 def _email_route(raw: str, lower: str) -> dict[str, Any] | None:
     has_email_word = re.search(r"\b(email|mail|smtp)\b", lower, flags=re.I)
     has_recipient = re.search(_EMAIL_TOKEN, raw, flags=re.I)
@@ -644,7 +694,7 @@ def _email_route(raw: str, lower: str) -> dict[str, Any] | None:
         lower,
         flags=re.I,
     ):
-        return _route("shell_email_tool:email_smtp_login_test_tool", confidence=0.94)
+        return _route("shell_email_tool:email_setup_status_tool", confidence=0.94)
 
     if re.search(
         r"\b(status|setup|configure|config|working|kaise|kyun|why|nahi|nai|not\s+working|can\s+shell|send\s+nahi)\b",
@@ -658,7 +708,7 @@ def _email_route(raw: str, lower: str) -> dict[str, Any] | None:
 
     recipient_match = has_recipient
     if not recipient_match:
-        return _route("shell_email_tool:email_setup_status_tool", confidence=0.82)
+        return None
 
     attachments = []
     for quoted in re.finditer(r"[\"'`]([^\"'`]+?\.(?:" + _EMAIL_ATTACHMENT_EXTS + r"))[\"'`]", raw, flags=re.I):
@@ -701,6 +751,11 @@ def _email_route(raw: str, lower: str) -> dict[str, Any] | None:
         body = re.sub(r"^\s*(?:subject|sub)\b\s*[:=-]?\s*.+$", "", body, flags=re.I | re.S).strip()
     if not body and attachments:
         body = "Attached file."
+
+    if not subject_match and not body_match:
+        test_body = re.sub(r"\b(to|ko|par|pe|email|mail|send|bhejo|bhejna|kar|do|yaar|fast|please|pls|ko\s+mail|ko\s+email|bhej|bhejdo|bhejo|bhej\s+do)\b", "", body.lower()).strip()
+        if len(test_body) < 5:
+            return None
 
     return _route(
         "shell_email_tool:send_email_tool",
@@ -955,12 +1010,27 @@ def route_natural_command(text: str) -> dict[str, Any] | None:
     if telegram:
         return telegram
 
-    if re.search(r"\bgmail\b", lower) and re.search(
-        r"\b(status|setup|configured|connect|read|new|emails?|inbox|invoice|payment|attachments?|download|summary|summarize|summarise)\b",
+    # Only show Gmail status when user genuinely asks about setup/config/inbox reading
+    # NOT when they are trying to send an email (send/bhejo/email kar etc.)
+    # Also NOT when 'gmail' appears only as part of an email address like user@gmail.com
+    _gmail_standalone = re.search(r"(?<![\w@])gmail(?!\.com[^\s]|\s*\.com[^\s])", lower, flags=re.I)
+    _gmail_in_address = bool(re.search(r"[A-Za-z0-9._%+\-]+@gmail\.com", raw, flags=re.I))
+    _gmail_as_product = bool(_gmail_standalone) or (not _gmail_in_address and "gmail" in lower)
+    if _gmail_as_product and not _gmail_in_address and not re.search(
+        r"\b(send|bhejo|bhejna|bhejdo|bhej|email\s+kar|mail\s+kar|forward|compose)\b",
+        lower,
+        flags=re.I,
+    ) and re.search(
+        r"\b(status|setup|configured|configure|connect|inbox|read|monitor|imap|api|integration|kaise|working|new|emails?|download|summary|summarize|summarise|invoice|payment|attachments?)\b",
         lower,
         flags=re.I,
     ):
         return _route("shell_email_tool:email_setup_status_tool", {"gmail_request": raw}, confidence=0.9)
+
+    # Compound: research + email in one go (must check before plain email and research routes)
+    research_email = _research_and_email_route(raw, lower)
+    if research_email:
+        return research_email
 
     email = _email_route(raw, lower)
     if email:

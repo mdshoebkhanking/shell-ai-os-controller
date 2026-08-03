@@ -1,0 +1,566 @@
+Shell AI OS Controller - Codex Project Context
+Generated: 2026-06-08
+Repo root: /Users/m1/Documents/Codex/shell.v1.0-main-main/shell.v1.0-main-main/shell.v1.0-main-main/shell.v1.0-main-main
+GitHub repo: https://github.com/mdshoebkhanking/shell-ai-os-controller
+
+Purpose of this file
+--------------------
+This is a handoff file for any future LLM/Codex/Gemini session. It summarizes what this project is, how it works, what has already been fixed, what is on GitHub, how to build it, and what still needs work. Read this first, then run `git status` and verify GitHub/CI state before changing anything.
+
+Most important current status
+-----------------------------
+- Current public version in `VERSION` and root `package.json`: 1.0.15.
+- GitHub `main` is updated and merged.
+- Latest GitHub main commit: 1c448ad2eb375f3861f7f79036f2238883ebd99c.
+- Commit message: `Prepare Shell v1.0.15 rebuild fixes`.
+- PR #16 was merged into `main`: https://github.com/mdshoebkhanking/shell-ai-os-controller/pull/16
+- v1.0.15 release exists and includes the rebuilt Windows installer:
+  https://github.com/mdshoebkhanking/shell-ai-os-controller/releases/tag/v1.0.15
+- Release assets verified:
+  - public_release_package.json
+  - SHA256SUMS-WINDOWS.txt
+  - SHA256SUMS.txt
+  - shell-ai-os-controller-1.0.15.zip
+  - shell-ai-os-controller-setup-1.0.15.exe
+  - windows_installer_package.json
+- GitHub Actions after merge to `main` all completed successfully:
+  - CI: success
+  - Security: success
+  - Release: success
+  - Main branch Windows setup artifact build: success
+  - Windows packaged runtime acceptance: success
+
+Current local git state
+-----------------------
+- Local branch is `main`, fast-forwarded to `origin/main`.
+- `git status` currently has untracked local/scratch items. These were intentionally not pushed:
+  - .agents/
+  - .playwright-cli/
+  - .superdesign/
+  - output/
+  - site/
+  - tools/fix_local_v1_0_10_tag.command
+  - tools/push_v1_0_10_release.command
+  - tools/push_v1_0_9_release.command
+- Do not stage those scratch folders/files unless the user explicitly says they are needed.
+- Nested `site/` is a separate website project area and should not be included in Shell OS commits unless explicitly requested.
+- Do not push/build unless the user explicitly says to push/build. The user specifically clarified this earlier.
+
+What Shell AI OS Controller is
+------------------------------
+Shell AI OS Controller is a local-first Windows desktop assistant/OS-control layer. It is not a real operating system replacement. It is a Python backend plus Electron/React Web UI that routes natural language and voice requests into local tools, OS automation, file/document creation, AI providers, offline LLM/TTS/STT, and guarded workflows.
+
+Core product idea:
+- Normal desktop automation and basic make/build tasks should work offline.
+- Hard/creative/big tasks can use cloud LLMs only when the user has configured API keys and enabled online mode.
+- Actions should go through Shell's local action/tool layer. Cloud models can plan or generate content, but local Shell owns file writes and execution.
+
+Primary platform:
+- Windows 10/11 is the primary release target.
+- macOS/Linux can run some development paths, but many OS-control tools are Windows-only.
+
+Main architecture
+-----------------
+High-level flow:
+1. User uses Electron/React UI or voice.
+2. Electron main process talks to Python backend through `shell_electron_bridge.py`.
+3. Python backend host is `shell_web_ui/host.py`.
+4. Natural language routing happens in `shell_nl_router.py`.
+5. Tools execute through `shell_tool_gateway.py` and catalog metadata from `shell_tool_catalog.py`.
+6. Safety and policy checks live across `shell_safety_gate.py`, `shell_safe_executor.py`, `shell_production_guard.py`, and approval handling in `shell_web_ui/host.py`.
+7. Build/release tooling is in `tools/`, `.github/workflows/`, and Windows batch/command launchers.
+
+Key files and what they do
+--------------------------
+- `launch.py`: desktop app launch entry.
+- `shell_web_ui/host.py`: main Python backend bridge for chat, tools, voice, context, formatting, routing, and UI API.
+- `shell_web_ui/src/views/Dashboard.tsx`: main React dashboard transcript/voice/activity UI.
+- `shell_web_ui/electron/main.cjs`: Electron window, backend process, overlay mode, bridge calls, global shortcut.
+- `shell_web_ui/electron/preload.cjs`: safe renderer bridge for Electron IPC.
+- `shell_electron_bridge.py`: packaged Python bridge entry for Electron runtime.
+- `shell_nl_router.py`: natural-language command routing to tools.
+- `shell_tool_gateway.py`: guarded runtime tool execution.
+- `shell_tool_catalog.py`: static/dynamic catalog discovery for Shell tools, agents, Windows MCP actions.
+- `shell_agents.py`: specialist agent classes and agent tool wrappers.
+- `shell_agent_orchestrator.py`: orchestrates broad user goals into agent planning/execution decisions.
+- `shell_code_engine.py`: local/cloud app and website scaffolding.
+- `shell_make_modes.py`: local/basic vs cloud/pro make/build abstraction and local website/PDF generators.
+- `shell_task_mode.py`: task complexity classifier and cloud API readiness checks.
+- `shell_app_context.py`: active app/window/clipboard context capture and adapters for browser/code/terminal/generic context.
+- `shell_offline_model_catalog.py`: offline chat/coder GGUF model catalog and RAM metadata.
+- `shell_offline_llm.py`: local LLM runtime.
+- `shell_offline_tts.py`: offline TTS status/runtime.
+- `shell_local_stt.py`: local STT support.
+- `shell_windows_workflows.py`: Windows workflow tools such as Downloads cleanup, screenshots slideshow, screen comfort.
+- `shell_workspace_tools.py`: create/read/list user files and workspace files.
+- `tools/build_windows_installer.py`: Windows installer build script; requires Windows for final setup EXE.
+- `tools/windows_acceptance_probe.py`: validates packaged Windows runtime and checks routed tools.
+- `.github/workflows/ci.yml`: test matrix, Web UI build, release integrity.
+- `.github/workflows/security.yml`: CodeQL, secret guard, dependency audits.
+- `.github/workflows/release.yml`: public zip, Windows EXE build, release upload/artifacts.
+
+Current tool/agent catalog state
+--------------------------------
+On this machine, catalog discovery currently reports:
+- 481 decorated Shell tools/agents.
+- 441 decorated non-agent tools.
+- 40 decorated agent entries.
+- 17 Windows-MCP actions.
+- 498 total catalog entries when Windows-MCP actions are included.
+
+README still mentions older numbers like 460+ tools / 37 agents in places. Treat the live catalog numbers above as the current local discovery result as of 2026-06-08.
+
+Important categories include:
+- agent, agents
+- ai
+- browser
+- communication
+- developer
+- files
+- finance
+- games
+- general
+- knowledge
+- media
+- memory
+- productivity
+- system
+- voice
+- windows
+
+Offline and online task model
+-----------------------------
+Shell now has a two-level make/build capability model:
+
+1. Level 1 / offline / local basic
+   - No cloud API required.
+   - Handles simple PDFs, notes, summaries, checklists, Markdown/text, simple static websites, landing pages, simple HTML/CSS/JS, small Python/PowerShell helpers, and normal desktop automation.
+   - Implemented in `shell_task_mode.py`, `shell_make_modes.py`, `shell_code_engine.py`, `shell_web_ui/host.py`, and `shell_nl_router.py`.
+
+2. Level 2 / online / cloud pro
+   - Used for complex apps, production websites, large codebases, multi-page marketing sites, big documents, backend/auth/database work, and explicit "pro" requests.
+   - Requires a configured cloud API key plus online/provider mode.
+   - Cloud LLM should produce strategy/copy/code plans, but Shell still renders/writes/executes locally.
+   - Supported key names are checked without exposing values: GOOGLE_API_KEY/GEMINI_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, MISTRAL_API_KEY, TOGETHER_API_KEY, HF_API_KEY/HUGGINGFACE_API_KEY.
+
+Website generator status
+------------------------
+There is a new offline website generation system in `shell_make_modes.py` and `shell_code_engine.py`.
+
+Current offline website features:
+- Local-only generator.
+- At least 10 layout patterns:
+  - split_hero
+  - bento_command
+  - sidebar_story
+  - editorial_minimal
+  - dark_launch
+  - color_blocks
+  - proof_grid
+  - timeline_pitch
+  - showcase_cards
+  - calm_docs
+- 5 visual styles:
+  - ink_lime
+  - paper_cobalt
+  - night_pink
+  - clean_teal
+  - graphite_gold
+- It infers site type from prompt: SaaS/software, portfolio, blog, service, product.
+- It does not just echo the prompt; it creates derived headings/copy/cards.
+- It randomizes or variant-selects layout/style so repeated prompts do not always produce the same page.
+- Tests cover at least 5 distinct offline layouts.
+
+Online website plug-in:
+- `online_pro_website_blueprint(...)` accepts a cloud generator and optional web-context fetcher.
+- Cloud strategy comes back into the same local rendering pipeline.
+- The system preserves offline magic by keeping OFFLINE_BASIC separate from ONLINE_PRO.
+
+PDF / document generation status
+--------------------------------
+Level 1 local PDF text generation exists in `local_make_pdf(...)`.
+- Can produce simple title + paragraphs.
+- Summary mode extracts bullet-like points from source text.
+- Actual file rendering/writing still goes through workspace/user file tools.
+
+Cloud PDF path:
+- `cloud_make_pdf(...)` asks cloud for polished structure only when available/allowed.
+- Still returns text for local PDF rendering.
+
+Movie script behavior
+---------------------
+The chat backend was changed so "write a full movie script from start to end" no longer collapses to only a logline and a vague ending. Current behavior:
+- It produces Acts/scenes and writes as much as practical.
+- If it cannot fit a full feature script, it stops at a natural break and says it can continue with the next part.
+- Movie script PDF routing keeps topic and destination and generates script-like content before file creation.
+- Covered by tests in `tests/test_shell_web_ui_bridge.py` and `tests/test_nl_router.py`.
+
+Chat depth behavior
+-------------------
+Shell now tries to match answer length to user intent:
+- Simple/factual questions: short.
+- Design/plan/explain questions: medium structured.
+- Long artifact requests: fuller output with natural splitting.
+
+Relevant code:
+- `_chat_response_depth`
+- `_chat_reply_limit`
+- `_chat_depth_instruction`
+- `_offline_chat_reply_with_limit`
+- `_brain_chat_fallback`
+in `shell_web_ui/host.py`.
+
+Internet/research behavior
+--------------------------
+Shell can use internet/web research only when enabled by settings/env.
+- `.env.example` has `SHELL_ALLOW_INTERNET_RESEARCH=0`.
+- If internet research is disabled and the task needs current/external info, Shell should say it is offline and offer generic/offline help or ask to enable online research.
+- If enabled, Shell fetches/summarizes web context and injects that into the answer/design process.
+
+Relevant functions in `shell_web_ui/host.py`:
+- `_internet_research_allowed`
+- `_internet_research_needed`
+- `_internet_research_disabled_reply`
+- `_web_research_route`
+- `_web_research_summary`
+- `_fetch_web_page_excerpt`
+- `_prepare_internet_research_route`
+
+Human-facing tool/planner result layer
+--------------------------------------
+User complained Shell was showing raw JSON and tool names like:
+- `shell_workspace_tools:create_user_file_tool complete: {...}`
+- `Shell agent planner complete: {...}`
+
+This is fixed through a user-facing result layer in `shell_web_ui/host.py`.
+
+Current behavior:
+- Raw JSON/tool names should not be shown to normal users.
+- Successful file creation says things like: "I created notes.txt on your desktop."
+- If `ui_hint` is `open_file_location`, UI can show an "Open folder" button.
+- Planner blocks with `execution_allowed: false` become friendly explanations:
+  "I didn't run X because policy/settings do not allow it..."
+- Gmail/download mismatch is explained instead of pretending the wrong tool did the requested Gmail work.
+- Tool result formatting returns:
+  - `user_message`
+  - `ui_actions`
+
+Relevant functions:
+- `_coerce_tool_payload`
+- `_tool_result_user_layer`
+- `_format_chat_result_payload`
+- `_format_chat_result`
+
+React UI support:
+- `Dashboard.tsx` reads `uiActions` / `ui_actions`.
+- Supports action buttons such as `OPEN_FILE_LOCATION`, `APPROVE_ACTION`, and `OPEN_URL`.
+
+App context / overlay status
+----------------------------
+New app context system:
+- `shell_app_context.py` captures active app/window/clipboard and adapter-specific context.
+- Supports BrowserAdapter, CodeEditorAdapter, TerminalAdapter, GenericAdapter.
+- Browser adapter can mark YouTube context.
+- `context_prompt_block(...)` converts context into prompt text.
+
+Electron overlay:
+- `shell_web_ui/electron/main.cjs` now supports overlay mode, compact always-on-top window, global shortcut `CommandOrControl+Alt+S`, and `capture-app-context`.
+- `shell_web_ui/electron/preload.cjs` forwards overlay mode/context events.
+- `shell_web_ui/host.py` stores latest app context and injects it into chat processing when relevant.
+
+Important: this is a foundation. It still needs real installed-EXE UX testing on Windows by a human/user, especially with Chrome/YouTube/VS Code active.
+
+Recent user-reported problems and current fixes
+-----------------------------------------------
+User reported old EXE issues:
+- Local brains were failing or producing useless generic documents.
+- Shell showed errors like unknown tool:
+  - `shell_agent_orchestrator:orchestrate_shell_goal_tool`
+  - `shell_code_engine:create_fullstack_app_tool`
+  - `shell_browser_CTRL:play_youtube_video`
+- Basic HTML/login page output was useless text instead of a working page.
+- Movie script PDF requests produced weak/simple content.
+- Tool/planner raw JSON was visible to users.
+- Some desktop automation commands routed badly or policy-blocked without useful explanation.
+
+What was fixed in current main/release:
+- Tool catalog/packaged runtime acceptance now checks chat-routed tools.
+- Natural-language routing improved for YouTube song play, direct website build, standalone login HTML, movie script PDF, Downloads cleanup, dev terminal commands, Gmail status, screen comfort, and app/workflow routes.
+- Offline website generator creates actual HTML/CSS structure instead of generic echoed prompt.
+- Local/online make mode abstraction added.
+- Human result layer hides raw JSON from normal chat.
+- Permission UI flow added for Downloads cleanup and terminal commands.
+- Gmail inbox/status request now explains missing Gmail API integration instead of pretending a Downloads tool handled it.
+- Overlay/context foundation added.
+
+Offline model status
+--------------------
+Installer intentionally does not bundle GGUF chat/coding LLMs. Users install/download models from Settings.
+
+Current model catalog in `shell_offline_model_catalog.py`:
+- qwen2.5-1.5b-q4
+  - chat model
+  - min RAM 6 GB
+  - recommended RAM 8 GB
+- qwen2.5-3b-q4
+  - default chat/voice model
+  - min RAM 8 GB
+  - recommended RAM 12 GB
+- qwen2.5-coder-3b-q4
+  - default local coding model
+  - min RAM 8 GB
+  - recommended RAM 12 GB
+- qwen2.5-coder-7b-q3
+  - stronger high-RAM coding model
+  - min RAM 16 GB
+  - recommended RAM 24 GB
+
+The UI/settings should show size/RAM metadata from the catalog. If future work touches model UX, verify Settings model cards on Windows.
+
+Voice/STT/TTS status
+--------------------
+- Offline TTS uses Kokoro assets staged by `tools/stage_kokoro_tts_assets.py`.
+- Offline STT uses sherpa-onnx assets staged by `tools/stage_sherpa_stt_assets.py`.
+- Release workflow caches/stages those assets.
+- Wake word and VAD remain feature-flagged/off by default.
+- Text-originated chat should stay text-only unless user explicitly asks to speak; voice-originated responses may speak.
+
+Important flags
+---------------
+From project map/docs:
+- SHELL_LEGACY_UI
+- SHELL_PYQTGRAPH_ENABLED
+- SHELL_WAKE_WORD_ENABLED
+- SHELL_VAD_ENABLED
+- SHELL_PYWINAUTO_ENABLED
+- SHELL_MEMORY_V2_ENABLED
+- SHELL_LOCAL_STT_ENABLED
+- SHELL_PROJECT_RAG_ENABLED
+- SHELL_SECURE_SANDBOX_ENABLED
+- SHELL_WORKFLOW_CHECKPOINTS_ENABLED
+- SHELL_ALLOW_INTERNET_RESEARCH
+- SHELL_CHAT_PROVIDER_MODE / SHELL_WEB_CHAT_PROVIDER_MODE
+- SHELL_OFFLINE_LLM_MODEL_DIR
+
+Release/build commands
+----------------------
+Common local validation:
+- `PYTHONPYCACHEPREFIX=/private/tmp/shell_pycache ./.shellai_venv/bin/python -m pytest -q`
+- `npm --prefix shell_web_ui run build`
+- `npm run audit:repo`
+
+Focused recent validation that passed before PR:
+- `PYTHONPYCACHEPREFIX=/private/tmp/shell_pycache ./.shellai_venv/bin/python -m pytest -q tests/test_shell_web_ui_bridge.py tests/test_nl_router.py tests/test_shell_make_modes.py tests/test_hard_task_builders.py tests/test_shell_task_mode.py`
+- `npm --prefix shell_web_ui run build`
+- `npm run audit:repo`
+
+Full local suite result before push:
+- 840 passed, 8 warnings.
+
+Root `package.json` scripts:
+- `npm test`
+- `npm run audit:repo`
+- `npm run package`
+- `npm run validate:release`
+- `npm run validate:prepush`
+
+Web UI scripts:
+- `npm --prefix shell_web_ui run dev`
+- `npm --prefix shell_web_ui run build`
+- `npm --prefix shell_web_ui run electron`
+- `npm --prefix shell_web_ui run electron:dir`
+- `npm --prefix shell_web_ui run electron:pack`
+
+Windows installer:
+- Final Windows setup EXE must be built on Windows.
+- Use GitHub Actions `release.yml` or run on Windows:
+  `python tools/build_windows_installer.py --skip-release-check --installer-engine inno`
+- The GitHub workflow installs Inno Setup and builds:
+  `dist/shell-ai-os-controller-setup-1.0.15.exe`
+- macOS cannot compile the final Inno Windows installer directly.
+
+GitHub release workflow notes
+-----------------------------
+`.github/workflows/release.yml` has:
+- workflow_dispatch with `version` input.
+- tag release jobs for public zip and Windows EXE.
+- branch push job `windows-installer-branch-artifact` for `main` and `codex/**`.
+- workflow_dispatch with `version=1.0.15` attaches Windows setup to release `v1.0.15`.
+
+Last successful publish/rebuild flow
+------------------------------------
+1. Created branch `codex/rebuild-v1-0-15-current-shell-fixes`.
+2. Staged only intended files:
+   - .env.example
+   - shell_app_context.py
+   - shell_code_engine.py
+   - shell_make_modes.py
+   - shell_nl_router.py
+   - shell_web_ui/electron/main.cjs
+   - shell_web_ui/electron/preload.cjs
+   - shell_web_ui/host.py
+   - shell_web_ui/src/views/Dashboard.tsx
+   - tests/test_hard_task_builders.py
+   - tests/test_nl_router.py
+   - tests/test_shell_make_modes.py
+   - tests/test_shell_web_ui_bridge.py
+3. Commit: 476d963a2d21596d01a7640f0c07eeca705835e1.
+4. Pushed branch to GitHub.
+5. Opened PR #16.
+6. Triggered `release.yml` workflow_dispatch with version 1.0.15.
+7. Windows setup EXE built successfully and attached to v1.0.15 release.
+8. Merged PR #16 into `main`.
+9. Main commit became 1c448ad2eb375f3861f7f79036f2238883ebd99c.
+10. Main branch CI/Security/Release workflows completed successfully.
+
+Tests that specifically protect the recent fixes
+------------------------------------------------
+Important test files:
+- `tests/test_shell_web_ui_bridge.py`
+- `tests/test_nl_router.py`
+- `tests/test_shell_make_modes.py`
+- `tests/test_hard_task_builders.py`
+- `tests/test_shell_task_mode.py`
+- `tests/test_windows_acceptance_probe.py`
+
+Important recent tests include:
+- movie script local artifact split-limit behavior
+- unknown actionable chat command routes to agent orchestrator
+- research stays offline when internet research disabled
+- allowed research injects fetched web context
+- PDF summary local make mode
+- basic portfolio website local mode
+- movie script PDF content before file tool
+- file tool result user message and open folder action
+- tool result error human readable
+- known workflow tool results human readable
+- Gmail misroute explains limitation
+- Downloads audit asks permission then executes on approval
+- Gmail status explains missing inbox integration
+- app context capture and YouTube context adapter
+- blocked planner friendly policy explanation
+- offline website has distinct layouts
+- cloud website hook uses web context and local pipeline
+- YouTube song routes to player instead of terminal
+- login page saves standalone HTML
+- screen comfort routes to Windows workflow
+- Windows acceptance checks routed hard-task tools
+
+Known current gaps / remaining work
+-----------------------------------
+These are real known gaps from docs, audits, or current behavior. Do not claim they are complete until verified.
+
+1. Gmail inbox/search/download automation
+   - Current email feature is SMTP/status oriented with Gmail app-password diagnostics.
+   - Gmail inbox reading/search/download is not implemented as a full Gmail API integration.
+   - Shell should explain this limitation instead of misrouting to Downloads tools.
+
+2. Some Windows OS automations need installed-EXE human verification
+   - Screen comfort / brightness / Night Light has routing to `shell_windows_workflows:screen_comfort_tool`.
+   - Need real Windows machine confirmation after install.
+   - Focus Assist may still need first-class workflow support if not already implemented.
+
+3. Overlay/context needs real UX hardening
+   - Foundation exists, but real active app context quality should be tested with Chrome, YouTube, VS Code, terminal, and normal desktop apps.
+
+4. Local offline LLM quality depends on installed model
+   - Installer does not bundle GGUF chat models.
+   - If user has not downloaded a model, fallback/template paths should handle Level 1 tasks.
+   - Need Windows Settings model download/install UX verification.
+
+5. Voice end-to-end needs real device testing
+   - Offline TTS/STT assets are staged in release workflows.
+   - Microphone/speaker behavior can vary on Windows machines.
+   - Wake-word/VAD are feature flags and should remain off unless tested.
+
+6. Enterprise distribution is not fully complete
+   - Windows code signing is planned but not complete.
+   - macOS notarized DMG is planned but not complete.
+   - Auto-update is planned but not complete.
+
+7. Cloud/marketplace future work
+   - Remote authentication/RBAC/cloud secret storage are planned but not implemented.
+   - Public marketplace signing/review/moderation is planned but not complete.
+   - Vector DB/encrypted long-term memory adapters are planned but not complete.
+
+8. README version badge/content may lag
+   - Root `VERSION` and `package.json` are 1.0.15.
+   - README has older visible 1.0.0 references in places.
+   - If documentation polish is requested, update README version references carefully.
+
+How a future LLM should continue safely
+---------------------------------------
+Start every future session with:
+1. `pwd`
+2. `git status --short --branch`
+3. `git log --oneline --decorate -5`
+4. `gh run list --branch main --limit 5`
+5. `gh release view v1.0.15 --json tagName,url,assets`
+
+Before editing:
+- Read this file.
+- Read `SESSION_LOG.md` only for deeper historical details; it is huge.
+- Do not read or print `.env` values.
+- Do not stage generated/scratch dirs.
+- Do not force-push.
+- Do not delete files unless user explicitly requests.
+- Do not build/push unless user explicitly says to build/push.
+
+If publishing code:
+- Prefer a branch + PR unless user explicitly demands direct main.
+- Stage only intended source/test/doc files.
+- Run:
+  - pytest
+  - Web UI build
+  - repo audit
+  - relevant targeted tests
+- Check staged diff/stat.
+- Scan staged diff for secret-looking strings.
+- Check large files before commit.
+- Push and track CI/Release until complete.
+
+If rebuilding v1.0.15 or a future version:
+- Update `VERSION` and root `package.json` if changing version.
+- Build final Windows EXE via GitHub Actions Windows runner or a real Windows machine.
+- Manual GitHub workflow:
+  `gh workflow run release.yml --ref main -f version=<version>`
+- Track:
+  `gh run watch <run-id> --interval 30 --exit-status`
+- Verify release assets:
+  `gh release view v<version> --json tagName,url,assets`
+
+If working on local make/build commands:
+- Keep Level 1 local and Level 2 cloud separate.
+- For basic local artifacts, use deterministic local templates and file tools.
+- For hard tasks, ask for/require API key and online mode, but still write files locally.
+- Add/extend tests in:
+  - `tests/test_shell_make_modes.py`
+  - `tests/test_shell_task_mode.py`
+  - `tests/test_shell_web_ui_bridge.py`
+  - `tests/test_nl_router.py`
+  - `tests/test_hard_task_builders.py`
+
+If working on user-facing chat/tool output:
+- Never show raw tool JSON or raw tool names to normal users.
+- Convert tool/planner payloads to `user_message` plus optional `ui_actions`.
+- Keep developer/debug details out of normal transcript.
+
+If working on Windows automation:
+- Prefer dry-run/approval flow for risky actions.
+- Test real Windows packaged EXE, not only macOS dev mode.
+- Use `tools/windows_acceptance_probe.py` after build.
+
+Important user preferences
+--------------------------
+- User writes mostly Hinglish/Hindi and expects direct practical work.
+- User wants Shell to feel capable offline, not just say "local mode".
+- User does not want random pushes/builds; push/build only when explicitly requested.
+- User cares that GitHub repo page shows code on `main`, not only PR branch.
+- User wants EXE tracked until build completes.
+- User wants normal users to see friendly messages, not debug JSON.
+- User wants simple local tasks like "make login page and save to desktop" to create actual working files.
+- User wants local models to be good and RAM usage visible in UI.
+
+No-secret note
+--------------
+This context file intentionally mentions only environment variable names and release URLs. It does not include API key values, tokens, passwords, or `.env` contents.
