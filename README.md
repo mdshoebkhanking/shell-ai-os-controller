@@ -23,6 +23,18 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/mdshoebkhanking/shell-ai-os-controller/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/mdshoebkhanking/shell-ai-os-controller?style=social"></a>
+  <a href="https://github.com/mdshoebkhanking/shell-ai-os-controller/issues"><img alt="Issues" src="https://img.shields.io/github/issues/mdshoebkhanking/shell-ai-os-controller"></a>
+  <a href="https://github.com/mdshoebkhanking/shell-ai-os-controller/labels/good%20first%20issue"><img alt="PRs welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+  <a href="https://github.com/mdshoebkhanking/shell-ai-os-controller/labels/good%20first%20issue"><img alt="Good first issues" src="https://img.shields.io/github/issues/mdshoebkhanking/shell-ai-os-controller/good%20first%20issue?label=good%20first%20issues&color=7057ff"></a>
+</p>
+
+<p align="center">
+  ⭐ <strong>If Shell helps you, star the repo — it directly decides what gets built next.</strong>
+  New here? Grab a <a href="https://github.com/mdshoebkhanking/shell-ai-os-controller/labels/good%20first%20issue">good first issue</a> and make your first contribution today.
+</p>
+
+<p align="center">
   <strong>Version:</strong> 1.0.15 ·
   <strong>Creator:</strong> mdshoebking ·
   <strong>License:</strong> Apache-2.0 ·
