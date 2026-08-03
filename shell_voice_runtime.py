@@ -12,6 +12,7 @@ import importlib.util
 import logging
 import os
 import re
+import sys
 import time as _time
 from collections import deque
 
@@ -24,6 +25,32 @@ import time as _net_time
 
 _ONLINE_CACHE_TIME_VR = 0.0
 _ONLINE_CACHE_VAL_VR = False
+
+
+def _prioritize_active_venv_site_packages() -> None:
+    """Keep provider SDK imports bound to the Python environment running Shell."""
+    try:
+        active_prefix = os.path.normcase(os.path.abspath(sys.prefix))
+        active_site_packages = []
+        for entry in list(sys.path):
+            if not entry:
+                continue
+            normalized = os.path.normcase(os.path.abspath(entry))
+            if (
+                normalized.startswith(active_prefix)
+                and "site-packages" in normalized
+                and entry not in active_site_packages
+            ):
+                active_site_packages.append(entry)
+        if not active_site_packages:
+            return
+        remaining = [entry for entry in sys.path if entry not in active_site_packages]
+        sys.path[:] = remaining[:1] + active_site_packages + remaining[1:]
+    except Exception:
+        return
+
+
+_prioritize_active_venv_site_packages()
 
 def _is_network_online_vr() -> bool:
     import os

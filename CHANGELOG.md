@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fixed audit-blocking backend issues for streaming voice tests, early agent logging, version metadata, and packaging metadata.
+
 ## 1.0.15 - Packaged backend tool catalog rebuild
 
 - Fixed packaged Electron backend root detection so installed EXE builds scan

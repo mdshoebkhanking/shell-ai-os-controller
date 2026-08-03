@@ -16,14 +16,14 @@
 
 <p align="center">
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-111827.svg">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.0.15-111827.svg">
   <img alt="Python" src="https://img.shields.io/badge/python-3.10--3.13-3776AB.svg">
   <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-0F172A.svg">
   <img alt="Status" src="https://img.shields.io/badge/status-CI%20green%20%7C%20validation--gated-16A34A.svg">
 </p>
 
 <p align="center">
-  <strong>Version:</strong> 1.0.0 ·
+  <strong>Version:</strong> 1.0.15 ·
   <strong>Creator:</strong> mdshoebking ·
   <strong>License:</strong> Apache-2.0 ·
   <strong>Primary OS:</strong> Windows 10/11

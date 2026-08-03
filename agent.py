@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 print("AGENT PROCESS STARTED...")
+import logging
 import sys
+
+logger = logging.getLogger("agent")
 
 # ALWAYS force UTF-8 for Windows console (prevents emoji crashes during livekit logging)
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
@@ -26,7 +29,6 @@ try:
     load_dotenv() # Load Env Vars FIRST before any other imports
     import asyncio
     import time
-    import logging
     from datetime import datetime
     
     # Global Logger — prefer structured observability layer if available.
