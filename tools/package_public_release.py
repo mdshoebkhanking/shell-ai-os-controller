@@ -106,6 +106,7 @@ EXCLUDED_DIRS = {
     "shell_downloads",
     "shell_projects",
     "smoke",
+    "scratch",
     "ui_screenshots",
     "venv",
 }

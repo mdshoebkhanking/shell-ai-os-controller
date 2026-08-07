@@ -79,22 +79,10 @@ jobs:
           npm run build
         working-directory: shell_web_ui
 
-      - name: Syntax compile
+      - name: Compile tracked Python sources
         run: |
-          python -m py_compile \
-            agent.py \
-            shell_ui/shell_cinematic_full.py \
-            shell_tool_gateway.py \
-            shell_telegram.py \
-            tools/package_public_release.py \
-            tools/production_readiness.py \
-            tools/repo_audit.py \
-            tools/ui_ux_audit.py \
-            tools/cloud_readiness_audit.py \
-            tools/agent_ecosystem_audit.py \
-            tools/launch_readiness_audit.py \
-            tools/public_github_launch_audit.py \
-            tools/ecosystem_master_audit.py
+          set -o pipefail
+          git ls-files -z -- '*.py' | xargs -0 python -m py_compile
 
       - name: Run tests
         run: python -m pytest -q
