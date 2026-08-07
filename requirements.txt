@@ -14,7 +14,7 @@
 
 
 # ── Core runtime (REQUIRED) ──────────────────────────────────────────
-livekit-agents>=0.15.0
+livekit-agents>=1.5.8
 livekit-plugins-google>=0.10.0
 livekit-plugins-silero>=0.10.0
 google-genai>=1.0.0            # modern Gemini SDK; legacy google-generativeai remains optional fallback only
