@@ -73,7 +73,7 @@ silero-vad>=5.1.2             # optional streaming voice activity detection
 sherpa-onnx>=1.12.38          # optional offline streaming STT fallback
 kokoro-onnx>=0.5.0            # optional natural offline Kokoro-82M TTS runtime
 edge-tts>=6.1.0               # optional neural TTS; system TTS remains fastest fallback
-pyttsx3>=2.90                 # offline TTS fallback (shell_speech)
+pyttsx3>=2.99                 # offline TTS fallback (shell_speech)
 gtts>=2.4.0                   # Google TTS for save-to-mp3 (shell_speech)
 
 
