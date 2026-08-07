@@ -151,6 +151,32 @@ def test_public_release_validation_fails_when_web_ui_package_is_missing():
         module.validate_release_file_set(files)
 
 
+def test_public_release_required_files_exist():
+    module = load_public_package_module()
+    missing = sorted(rel for rel in module.REQUIRED_PACKAGE_FILES if not (ROOT / rel).is_file())
+
+    assert missing == []
+
+
+def test_public_release_excludes_scratch_without_disabling_secret_scan(monkeypatch, tmp_path):
+    module = load_public_package_module()
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+
+    token = "AIza" + ("A" * 20)
+    scratch_file = tmp_path / "scratch" / "probe.py"
+    scratch_file.parent.mkdir()
+    scratch_file.write_text(f'TOKEN = "{token}"\n', encoding="utf-8")
+
+    public_file = tmp_path / "public.py"
+    public_file.write_text("SAFE = True\n", encoding="utf-8")
+
+    assert module.iter_release_files() == [public_file]
+
+    public_file.write_text(f'TOKEN = "{token}"\n', encoding="utf-8")
+    with pytest.raises(RuntimeError, match=r"Potential secret detected in release file: public\.py"):
+        module.iter_release_files()
+
+
 def test_public_release_validation_rejects_generated_web_ui_outputs():
     module = load_public_package_module()
     files = [ROOT / rel for rel in module.REQUIRED_PACKAGE_FILES]

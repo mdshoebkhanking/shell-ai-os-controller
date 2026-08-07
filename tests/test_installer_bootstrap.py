@@ -480,6 +480,12 @@ def test_public_source_package_excludes_staged_model_binaries_but_keeps_readmes(
     assert package_public_release.excluded(ROOT / "models" / "stt" / "README.md") is False
 
 
+def test_public_source_package_excludes_scratch_development_files():
+    package_public_release = load_tool_module("package_public_release")
+
+    assert package_public_release.excluded(ROOT / "scratch" / "test_chat_network_modes.py") is True
+
+
 def test_release_workflow_stages_kokoro_assets_for_windows_installer():
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
 

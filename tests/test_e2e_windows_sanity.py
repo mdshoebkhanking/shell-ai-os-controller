@@ -15,6 +15,10 @@ if str(PROJECT_ROOT) not in sys.path:
 load_dotenv(PROJECT_ROOT / ".env")
 
 
+@pytest.mark.skipif(
+    os.environ.get("SHELL_RUN_LIVE_E2E") != "1",
+    reason="requires explicitly enabled live Google and LiveKit credentials",
+)
 def test_e2e_env_variables():
     """Verify that the key environment variables required by Shell AI are present."""
     # Google API Key is critical for Gemini brain

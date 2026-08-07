@@ -51,8 +51,10 @@ async def scan_system_health() -> str:
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
 
-        top_procs = sorted(procs, key=lambda x: x['cpu_percent'], reverse=True)[:3]
-        proc_str = ", ".join([f"{p['name']} ({p['cpu_percent']}%)" for p in top_procs])
+        top_procs = sorted(procs, key=lambda item: item.get("cpu_percent") or 0.0, reverse=True)[:3]
+        proc_str = ", ".join(
+            f"{item.get('name') or 'Unknown'} ({item.get('cpu_percent') or 0.0}%)" for item in top_procs
+        )
 
         # 6. Temperature Info
         temp_str = "N/A"
